@@ -1,0 +1,26 @@
+## ── Dev Profile ─────────────────────────────────────
+## Run with: ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+##
+## Uses mock JWT auth — pass X-User header to set identity:
+##   curl -H "X-User: aragorn" http://localhost:8080/api/sessions
+##
+## For WebSocket STOMP, send in CONNECT headers:
+##   Authorization: Bearer aragorn
+## The mock JwtDecoder uses the token value as the username.
+
+spring:
+  jpa:
+    show-sql: true
+
+  # Override issuer-uri to prevent auto-config from contacting Keycloak
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8180/realms/dnd-ai
+
+logging:
+  level:
+    com.dungeon.master: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.messaging: DEBUG
