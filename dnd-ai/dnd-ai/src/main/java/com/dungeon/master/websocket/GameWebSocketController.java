@@ -43,7 +43,7 @@ public class GameWebSocketController {
                     sessionId, username, e);
             messagingTemplate.convertAndSendToUser(
                     username, "/queue/errors",
-                    Map.of("error", e.getMessage()));
+                    (Object) Map.of("error", e.getMessage()));
         }
     }
 
@@ -61,14 +61,14 @@ public class GameWebSocketController {
 
             messagingTemplate.convertAndSendToUser(
                     username, "/queue/joined",
-                    Map.of("player", player, "gameState", state));
+                    (Object) Map.of("player", player, "gameState", state));
 
         } catch (Exception e) {
             log.error("Error joining session via WebSocket: session={}, player={}",
                     sessionId, username, e);
             messagingTemplate.convertAndSendToUser(
                     username, "/queue/errors",
-                    Map.of("error", e.getMessage()));
+                    (Object) Map.of("error", e.getMessage()));
         }
     }
 }

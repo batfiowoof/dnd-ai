@@ -36,10 +36,10 @@ public class DmResponseConsumer {
                 event.turnNumber());
 
         messagingTemplate.convertAndSend(
-                "/topic/game/" + event.sessionId(), responseDto);
+                "/topic/game/" + event.sessionId(), (Object) responseDto);
 
         messagingTemplate.convertAndSend(
-                "/topic/game/" + event.sessionId() + "/dm", responseDto);
+                "/topic/game/" + event.sessionId() + "/dm", (Object) responseDto);
 
         log.info("DM response broadcast complete: session={}", event.sessionId());
     }

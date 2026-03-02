@@ -28,13 +28,13 @@ public class SessionEventConsumer {
                 var gameState = gameSessionService.getGameState(event.sessionId());
                 messagingTemplate.convertAndSend(
                         "/topic/game/" + event.sessionId(),
-                        Map.of("type", "PLAYER_JOINED", "gameState", gameState));
+                        (Object) Map.of("type", "PLAYER_JOINED", "gameState", gameState));
             }
             case PLAYER_LEFT -> {
                 var gameState = gameSessionService.getGameState(event.sessionId());
                 messagingTemplate.convertAndSend(
                         "/topic/game/" + event.sessionId(),
-                        Map.of("type", "PLAYER_LEFT",
+                        (Object) Map.of("type", "PLAYER_LEFT",
                                 "playerId", event.playerId().toString(),
                                 "gameState", gameState));
             }
@@ -42,11 +42,11 @@ public class SessionEventConsumer {
                 var gameState = gameSessionService.getGameState(event.sessionId());
                 messagingTemplate.convertAndSend(
                         "/topic/game/" + event.sessionId(),
-                        Map.of("type", "GAME_STARTED", "gameState", gameState));
+                        (Object) Map.of("type", "GAME_STARTED", "gameState", gameState));
             }
             case GAME_ENDED -> messagingTemplate.convertAndSend(
                     "/topic/game/" + event.sessionId(),
-                    Map.of("type", "GAME_ENDED",
+                    (Object) Map.of("type", "GAME_ENDED",
                             "sessionId", event.sessionId().toString()));
         }
     }

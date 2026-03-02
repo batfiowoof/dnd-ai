@@ -26,10 +26,10 @@ public class TurnNextConsumer {
 
         messagingTemplate.convertAndSend(
                 "/topic/game/" + event.sessionId(),
-                Map.of(
+                (Object) Map.of(
                         "type", "TURN_CHANGE",
                         "nextPlayerId", event.nextPlayerId().toString(),
-                        "turnNumber", event.turnNumber()));
+                        "turnNumber", String.valueOf(event.turnNumber())));
 
         if (event.turnNumber() > 0 && event.turnNumber() % 10 == 0) {
             ragService.indexSessionHistory(event.sessionId());

@@ -7,7 +7,7 @@ spring:
 
   # ── PostgreSQL ──────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://localhost:5432/dndai
+    url: jdbc:postgresql://localhost:5555/dndai
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
