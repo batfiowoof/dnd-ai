@@ -8,7 +8,7 @@
 		<version>4.0.3</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.example</groupId>
+	<groupId>com.dungeon.master</groupId>
 	<artifactId>dnd-ai</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>dnd-ai</name>
@@ -27,7 +27,7 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>17</java.version>
+		<java.version>21</java.version>
 		<spring-ai.version>2.0.0-M2</spring-ai.version>
 		<spring-cloud.version>2025.1.0</spring-cloud.version>
 	</properties>
