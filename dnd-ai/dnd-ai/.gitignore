@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Frontend (Next.js) ###
+node_modules/
+.next/
+out/
+.env*.local
+tsconfig.tsbuildinfo
