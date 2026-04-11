@@ -77,6 +77,12 @@ public class GameSessionController {
         return ResponseEntity.ok(state);
     }
 
+    @GetMapping("/{sessionId}/state")
+    public ResponseEntity<GameStateDto> getGameState(@PathVariable UUID sessionId) {
+        GameStateDto state = gameSessionService.getGameState(sessionId);
+        return ResponseEntity.ok(state);
+    }
+
     @GetMapping("/{sessionId}/history")
     public ResponseEntity<List<TurnEventDto>> getSessionHistory(@PathVariable UUID sessionId) {
         List<TurnEvent> events = turnService.getSessionHistory(sessionId);
