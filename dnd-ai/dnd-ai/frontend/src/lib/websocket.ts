@@ -4,14 +4,14 @@ import SockJS from "sockjs-client";
 const WS_URL = "http://localhost:8080/ws";
 
 export function createStompClient(
-  username: string,
+  token: string,
   onConnect: () => void,
   onError?: (frame: IFrame) => void
 ): Client {
   const client = new Client({
     webSocketFactory: () => new SockJS(WS_URL) as unknown as WebSocket,
     connectHeaders: {
-      Authorization: `Bearer ${username}`,
+      Authorization: `Bearer ${token}`,
     },
     reconnectDelay: 5000,
     heartbeatIncoming: 10000,

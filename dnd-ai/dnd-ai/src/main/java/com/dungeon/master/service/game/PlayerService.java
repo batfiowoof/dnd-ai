@@ -52,6 +52,8 @@ public class PlayerService {
                 player.getUsername(),
                 player.getCharacterName(),
                 player.getRole(),
-                player.getTurnIndex());
+                player.getTurnIndex(),
+                player.getCharacterId(),
+                player.getCharacterSheet());
     }
 }

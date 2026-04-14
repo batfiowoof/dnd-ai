@@ -1,32 +1,71 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createSession, getSessionByCode, joinSession } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import RequireAuth from "@/components/RequireAuth";
+import {
+  createSession,
+  getSessionByCode,
+  joinSession,
+  getMyCharacters,
+} from "@/lib/api";
+import type { CharacterDto } from "@/types";
 
 export default function LandingPage() {
+  return (
+    <RequireAuth>
+      <LandingContent />
+    </RequireAuth>
+  );
+}
+
+function LandingContent() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [characterName, setCharacterName] = useState("");
+  const { username, logout, getToken } = useAuth();
+
   const [joinCode, setJoinCode] = useState("");
   const [mode, setMode] = useState<"idle" | "create" | "join">("idle");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Characters
+  const [characters, setCharacters] = useState<CharacterDto[]>([]);
+  const [selectedCharId, setSelectedCharId] = useState<string>("");
+  const [charsLoading, setCharsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!username) return;
+    setCharsLoading(true);
+    getToken()
+      .then((t) => {
+        if (!t) return Promise.resolve([]);
+        return getMyCharacters(t);
+      })
+      .then((chars) => {
+        setCharacters(chars);
+        if (chars.length > 0) setSelectedCharId(chars[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setCharsLoading(false));
+  }, [username, getToken]);
+
+  const selectedChar = characters.find((c) => c.id === selectedCharId);
+
   async function handleCreate() {
-    if (!username.trim() || !characterName.trim()) {
-      setError("Username and character name are required.");
+    if (!username || !selectedCharId) {
+      setError("Please select a character.");
       return;
     }
     setError("");
     setLoading(true);
     try {
-      const res = await createSession(username, {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      const res = await createSession(token, {
         playerName: username,
-        characterName,
+        characterId: selectedCharId,
       });
-      localStorage.setItem("dnd-username", username);
-      localStorage.setItem("dnd-characterName", characterName);
       localStorage.setItem(`dnd-playerId-${res.sessionId}`, res.playerId);
       localStorage.setItem(`dnd-joinCode-${res.sessionId}`, res.joinCode);
       router.push(`/lobby/${res.sessionId}`);
@@ -38,20 +77,20 @@ export default function LandingPage() {
   }
 
   async function handleJoin() {
-    if (!username.trim() || !characterName.trim() || !joinCode.trim()) {
-      setError("All fields are required.");
+    if (!username || !selectedCharId || !joinCode.trim()) {
+      setError("Please select a character and enter a join code.");
       return;
     }
     setError("");
     setLoading(true);
     try {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
       const gameState = await getSessionByCode(joinCode.toUpperCase());
-      const player = await joinSession(username, gameState.sessionId, {
+      const player = await joinSession(token, gameState.sessionId, {
         playerName: username,
-        characterName,
+        characterId: selectedCharId,
       });
-      localStorage.setItem("dnd-username", username);
-      localStorage.setItem("dnd-characterName", characterName);
       localStorage.setItem(
         `dnd-playerId-${gameState.sessionId}`,
         player.id
@@ -74,30 +113,72 @@ export default function LandingPage() {
         <h1 className="mb-2 text-center text-4xl font-bold tracking-wider text-accent">
           D&D AI
         </h1>
-        <p className="mb-8 text-center text-sm text-text-muted">
+        <p className="mb-2 text-center text-sm text-text-muted">
           AI Dungeon Master
         </p>
+        <p className="mb-6 text-center text-xs text-text-muted">
+          Logged in as <span className="text-text">{username}</span>
+          <button
+            onClick={logout}
+            className="ml-2 text-accent hover:underline"
+          >
+            logout
+          </button>
+        </p>
 
-        {/* Username & Character */}
-        <div className="mb-6 space-y-3">
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-          />
-          <input
-            type="text"
-            placeholder="Character Name"
-            value={characterName}
-            onChange={(e) => setCharacterName(e.target.value)}
-            className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-          />
+        {/* Character Selection */}
+        <div className="mb-6">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Select Character
+          </label>
+          {charsLoading ? (
+            <p className="text-sm text-text-muted">Loading characters...</p>
+          ) : characters.length === 0 ? (
+            <div className="rounded-lg border border-border bg-bg p-4 text-center">
+              <p className="mb-2 text-sm text-text-muted">
+                No characters found
+              </p>
+              <button
+                onClick={() => router.push("/characters/new")}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark"
+              >
+                Create Your First Character
+              </button>
+            </div>
+          ) : (
+            <>
+              <select
+                value={selectedCharId}
+                onChange={(e) => setSelectedCharId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              >
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} — Lv{c.level} {c.race} {c.characterClass}
+                  </option>
+                ))}
+              </select>
+              {selectedChar && (
+                <div className="mt-2 flex items-center justify-between rounded-lg border border-border bg-bg px-3 py-2">
+                  <div className="text-xs text-text-muted">
+                    HP {selectedChar.hitPoints} | AC{" "}
+                    {selectedChar.armorClass} | Speed{" "}
+                    {selectedChar.speed}
+                  </div>
+                  <button
+                    onClick={() => router.push("/characters")}
+                    className="text-xs text-accent hover:underline"
+                  >
+                    Manage
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Mode selection */}
-        {mode === "idle" && (
+        {mode === "idle" && characters.length > 0 && (
           <div className="flex gap-3">
             <button
               onClick={() => setMode("create")}
@@ -119,7 +200,7 @@ export default function LandingPage() {
           <div className="space-y-3">
             <button
               onClick={handleCreate}
-              disabled={loading}
+              disabled={loading || !selectedCharId}
               className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
             >
               {loading ? "Creating..." : "Create New Session"}
@@ -149,7 +230,7 @@ export default function LandingPage() {
             />
             <button
               onClick={handleJoin}
-              disabled={loading}
+              disabled={loading || !selectedCharId}
               className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
             >
               {loading ? "Joining..." : "Join Session"}

@@ -11,6 +11,7 @@ public record GameStateDto(
         GameStatus status,
         List<PlayerDto> players,
         UUID currentTurnPlayerId,
-        int turnNumber
+        int turnNumber,
+        String createdBy
 ) {
 }

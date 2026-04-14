@@ -55,6 +55,9 @@ public class GameSession {
     @Builder.Default
     private List<UUID> turnOrder = new ArrayList<>();
 
+    @Column(name = "created_by")
+    private String createdBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

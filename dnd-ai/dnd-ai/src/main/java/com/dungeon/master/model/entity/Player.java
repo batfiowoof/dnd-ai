@@ -51,6 +51,9 @@ public class Player {
     @Column(name = "session_id", nullable = false)
     private UUID sessionId;
 
+    @Column(name = "character_id")
+    private UUID characterId;
+
     @Column(name = "turn_index", nullable = false)
     @Builder.Default
     private int turnIndex = 0;

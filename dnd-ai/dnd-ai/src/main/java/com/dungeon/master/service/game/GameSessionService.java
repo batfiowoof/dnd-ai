@@ -1,5 +1,6 @@
 package com.dungeon.master.service.game;
 
+import com.dungeon.master.exception.PlayerNotFoundException;
 import com.dungeon.master.exception.SessionFullException;
 import com.dungeon.master.exception.SessionNotFoundException;
 import com.dungeon.master.kafka.event.SessionEvent;
@@ -14,6 +15,8 @@ import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.TurnEvent;
 import com.dungeon.master.model.enums.GameStatus;
 import com.dungeon.master.model.enums.PlayerRole;
+import com.dungeon.master.model.entity.Character;
+import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
@@ -35,6 +38,7 @@ public class GameSessionService {
     private final GameSessionRepository sessionRepository;
     private final PlayerRepository playerRepository;
     private final TurnEventRepository turnEventRepository;
+    private final CharacterRepository characterRepository;
     private final GameEventProducer eventProducer;
 
     @Transactional
@@ -45,12 +49,17 @@ public class GameSessionService {
         GameSession session = GameSession.builder()
                 .code(code)
                 .status(GameStatus.WAITING)
+                .createdBy(username)
                 .build();
         session = sessionRepository.save(session);
 
+        Character character = characterRepository.findByIdAndOwnerUsername(request.characterId(), username)
+                .orElseThrow(() -> new IllegalArgumentException("Character not found or not owned by you"));
+
         Player player = Player.builder()
                 .username(username)
-                .characterName(request.characterName())
+                .characterName(character.getName())
+                .characterId(character.getId())
                 .sessionId(session.getId())
                 .role(PlayerRole.PLAYER)
                 .turnIndex(0)
@@ -96,9 +105,13 @@ public class GameSessionService {
             throw new IllegalStateException("Player already in session");
         }
 
+        Character character = characterRepository.findByIdAndOwnerUsername(request.characterId(), username)
+                .orElseThrow(() -> new IllegalArgumentException("Character not found or not owned by you"));
+
         Player player = Player.builder()
                 .username(username)
-                .characterName(request.characterName())
+                .characterName(character.getName())
+                .characterId(character.getId())
                 .sessionId(sessionId)
                 .role(PlayerRole.PLAYER)
                 .turnIndex(session.getTurnOrder().size())
@@ -176,7 +189,8 @@ public class GameSessionService {
                 session.getStatus(),
                 playerDtos,
                 session.getCurrentTurnPlayerId(),
-                turnNumber);
+                turnNumber,
+                session.getCreatedBy());
     }
 
     public List<PlayerDto> getPlayers(UUID sessionId) {
@@ -184,6 +198,51 @@ public class GameSessionService {
         return playerRepository.findBySessionId(sessionId).stream()
                 .map(this::toPlayerDto)
                 .toList();
+    }
+
+    @Transactional
+    public void removePlayer(UUID sessionId, UUID playerId, String requestingUsername) {
+        GameSession session = getSession(sessionId);
+
+        if (!requestingUsername.equals(session.getCreatedBy())) {
+            throw new IllegalStateException("Only the session creator can remove players");
+        }
+
+        if (session.getStatus() != GameStatus.WAITING) {
+            throw new IllegalStateException("Cannot remove players after the session has started");
+        }
+
+        Player player = playerRepository.findById(playerId)
+                .orElseThrow(() -> new PlayerNotFoundException("Player not found: " + playerId));
+
+        if (!player.getSessionId().equals(sessionId)) {
+            throw new IllegalStateException("Player does not belong to this session");
+        }
+
+        if (player.getRole() == PlayerRole.DM_AI) {
+            throw new IllegalStateException("Cannot remove the AI Dungeon Master");
+        }
+
+        if (player.getUsername().equals(requestingUsername)) {
+            throw new IllegalStateException("Cannot remove yourself from the session");
+        }
+
+        session.getTurnOrder().remove(playerId);
+        // Re-index remaining players
+        List<Player> remainingPlayers = playerRepository.findBySessionId(sessionId).stream()
+                .filter(p -> !p.getId().equals(playerId) && p.getRole() == PlayerRole.PLAYER)
+                .toList();
+        for (int i = 0; i < remainingPlayers.size(); i++) {
+            remainingPlayers.get(i).setTurnIndex(i);
+            playerRepository.save(remainingPlayers.get(i));
+        }
+        sessionRepository.save(session);
+        playerRepository.delete(player);
+
+        eventProducer.sendSessionEvent(new SessionEvent(
+                sessionId, playerId, SessionEvent.Type.PLAYER_LEFT));
+
+        log.info("Player {} removed from session {} by {}", playerId, sessionId, requestingUsername);
     }
 
     private String generateJoinCode() {
@@ -202,6 +261,8 @@ public class GameSessionService {
                 player.getUsername(),
                 player.getCharacterName(),
                 player.getRole(),
-                player.getTurnIndex());
+                player.getTurnIndex(),
+                player.getCharacterId(),
+                player.getCharacterSheet());
     }
 }

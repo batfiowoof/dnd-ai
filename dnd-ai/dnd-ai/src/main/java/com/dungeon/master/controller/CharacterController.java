@@ -1,8 +1,8 @@
 package com.dungeon.master.controller;
 
-import com.dungeon.master.model.dto.CharacterCreateRequest;
-import com.dungeon.master.model.dto.PlayerDto;
-import com.dungeon.master.service.game.PlayerService;
+import com.dungeon.master.model.dto.CharacterCreateUpdateRequest;
+import com.dungeon.master.model.dto.CharacterDto;
+import com.dungeon.master.service.game.CharacterService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,10 +10,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/characters")
@@ -21,14 +28,46 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class CharacterController {
 
-    private final PlayerService playerService;
+    private final CharacterService characterService;
 
-    @PostMapping
-    public ResponseEntity<PlayerDto> createOrUpdateCharacter(
-            @Valid @RequestBody CharacterCreateRequest request,
+    @GetMapping
+    public ResponseEntity<List<CharacterDto>> getMyCharacters(@AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getSubject();
+        return ResponseEntity.ok(characterService.getCharactersByOwner(username));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CharacterDto> getCharacter(
+            @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
         String username = jwt.getSubject();
-        PlayerDto player = playerService.updateCharacter(request, username);
-        return ResponseEntity.status(HttpStatus.CREATED).body(player);
+        return ResponseEntity.ok(characterService.getCharacter(id, username));
+    }
+
+    @PostMapping
+    public ResponseEntity<CharacterDto> createCharacter(
+            @Valid @RequestBody CharacterCreateUpdateRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getSubject();
+        CharacterDto character = characterService.createCharacter(request, username);
+        return ResponseEntity.status(HttpStatus.CREATED).body(character);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<CharacterDto> updateCharacter(
+            @PathVariable UUID id,
+            @Valid @RequestBody CharacterCreateUpdateRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getSubject();
+        return ResponseEntity.ok(characterService.updateCharacter(id, request, username));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCharacter(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getSubject();
+        characterService.deleteCharacter(id, username);
+        return ResponseEntity.noContent().build();
     }
 }

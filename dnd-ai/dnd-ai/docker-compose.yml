@@ -49,9 +49,11 @@ services:
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-    command: start-dev --http-port=8180
+    command: start-dev --http-port=8180 --import-realm
     ports:
       - "8180:8180"
+    volumes:
+      - ./keycloak/dnd-ai-realm.json:/opt/keycloak/data/import/dnd-ai-realm.json:ro
 
   # ── Ollama (LLM inference) ────────────────────────
   # After first start, pull the model:
@@ -81,7 +83,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/dnd-ai
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/dnd-ai/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:8180/realms/dnd-ai
     ports:
       - "8080:8080"
     depends_on:
@@ -97,9 +100,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        BACKEND_URL: http://backend:8080
+        NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8180
     container_name: dnd-frontend
     environment:
       BACKEND_URL: http://backend:8080
+      NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8180
     ports:
       - "3000:3000"
     depends_on:

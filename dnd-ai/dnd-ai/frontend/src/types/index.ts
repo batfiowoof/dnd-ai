@@ -7,6 +7,8 @@ export interface PlayerDto {
   characterName: string;
   role: PlayerRole;
   turnIndex: number;
+  characterId: string | null;
+  characterSheet: Record<string, unknown> | null;
 }
 
 export interface GameStateDto {
@@ -16,11 +18,12 @@ export interface GameStateDto {
   players: PlayerDto[];
   currentTurnPlayerId: string | null;
   turnNumber: number;
+  createdBy: string | null;
 }
 
 export interface CreateSessionRequest {
   playerName: string;
-  characterName: string;
+  characterId: string;
 }
 
 export interface CreateSessionResponse {
@@ -31,7 +34,7 @@ export interface CreateSessionResponse {
 
 export interface JoinSessionRequest {
   playerName: string;
-  characterName: string;
+  characterId: string;
 }
 
 export interface TurnEventDto {
@@ -73,3 +76,53 @@ export interface TurnChangeEvent {
 }
 
 export type WebSocketMessage = DmResponseDto | SessionEvent | TurnChangeEvent;
+
+/* ── Character types ──────────────────────────────────────────── */
+
+export interface CharacterDto {
+  id: string;
+  name: string;
+  race: string;
+  characterClass: string;
+  level: number;
+  background: string | null;
+  alignment: string | null;
+  strength: number;
+  dexterity: number;
+  constitution: number;
+  intelligence: number;
+  wisdom: number;
+  charisma: number;
+  hitPoints: number;
+  armorClass: number;
+  speed: number;
+  proficiencyBonus: number;
+  equipment: string[];
+  proficiencies: string[];
+  features: string[];
+  backstory: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CharacterCreateUpdateRequest {
+  name: string;
+  race: string;
+  characterClass: string;
+  level: number;
+  background: string;
+  alignment: string;
+  strength: number;
+  dexterity: number;
+  constitution: number;
+  intelligence: number;
+  wisdom: number;
+  charisma: number;
+  hitPoints: number;
+  armorClass: number;
+  speed: number;
+  equipment: string[];
+  proficiencies: string[];
+  features: string[];
+  backstory: string;
+}

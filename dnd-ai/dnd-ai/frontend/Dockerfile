@@ -6,6 +6,13 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+
+ARG BACKEND_URL=http://localhost:8080
+ENV BACKEND_URL=${BACKEND_URL}
+
+ARG NEXT_PUBLIC_KEYCLOAK_URL=http://localhost:8180
+ENV NEXT_PUBLIC_KEYCLOAK_URL=${NEXT_PUBLIC_KEYCLOAK_URL}
+
 RUN npm run build
 
 # ── Runtime stage ────────────────────────────────────

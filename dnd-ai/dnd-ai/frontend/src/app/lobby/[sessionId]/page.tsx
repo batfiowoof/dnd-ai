@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import RequireAuth from "@/components/RequireAuth";
 import type {
   DmResponseDto,
   GameStateDto,
@@ -13,6 +15,7 @@ import {
   getSessionHistory,
   getSessionPlayers,
   startSession,
+  kickPlayer,
 } from "@/lib/api";
 import {
   createStompClient,
@@ -43,11 +46,21 @@ export default function LobbyPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = use(params);
+  return (
+    <RequireAuth>
+      <LobbyContent sessionId={sessionId} />
+    </RequireAuth>
+  );
+}
+
+function LobbyContent({ sessionId }: { sessionId: string }) {
   const router = useRouter();
+  const { username, getToken } = useAuth();
 
   /* ── shared state ───────────────────────────────────────────── */
   const [players, setPlayers] = useState<PlayerDto[]>([]);
   const [status, setStatus] = useState<string>("WAITING");
+  const [createdBy, setCreatedBy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
 
@@ -66,11 +79,6 @@ export default function LobbyPage({
   const scrollRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Client | null>(null);
 
-  const username =
-    typeof window !== "undefined"
-      ? localStorage.getItem("dnd-username") ?? ""
-      : "";
-
   const playerId =
     typeof window !== "undefined"
       ? localStorage.getItem(`dnd-playerId-${sessionId}`) ?? ""
@@ -82,6 +90,7 @@ export default function LobbyPage({
       : "";
 
   const isMyTurn = currentTurnPlayerId === playerId;
+  const isCreator = username === createdBy;
 
   /* ── helpers ────────────────────────────────────────────────── */
   const scrollToBottom = useCallback(() => {
@@ -100,6 +109,7 @@ export default function LobbyPage({
         const state = await getGameState(sessionId);
         setPlayers(state.players);
         setStatus(state.status);
+        setCreatedBy(state.createdBy);
         setCurrentTurnPlayerId(state.currentTurnPlayerId);
         setTurnNumber(state.turnNumber);
 
@@ -137,12 +147,18 @@ export default function LobbyPage({
   useEffect(() => {
     if (!username) return;
 
-    const client = createStompClient(
-      username,
+    let client: Client | null = null;
+    let cancelled = false;
+
+    getToken().then((token) => {
+      if (cancelled || !token) return;
+
+      client = createStompClient(
+        token,
       () => {
         setConnected(true);
 
-        subscribeToSession(client, sessionId, (msg: unknown) => {
+        subscribeToSession(client!, sessionId, (msg: unknown) => {
           const data = msg as Record<string, unknown>;
 
           /* DM response (has dmNarration field) */
@@ -193,6 +209,7 @@ export default function LobbyPage({
             if (gs) {
               setPlayers(gs.players);
               setStatus(gs.status);
+              setCreatedBy(gs.createdBy);
             }
           }
 
@@ -202,6 +219,7 @@ export default function LobbyPage({
               setPlayers(gs.players);
               setCurrentTurnPlayerId(gs.currentTurnPlayerId);
               setTurnNumber(gs.turnNumber);
+              setCreatedBy(gs.createdBy);
               setStatus("ACTIVE");
               setLogs((prev) => [
                 ...prev,
@@ -231,7 +249,7 @@ export default function LobbyPage({
           }
         });
 
-        subscribeToErrors(client, (err) => {
+        subscribeToErrors(client!, (err) => {
           setError(err);
           setTimeout(() => setError(""), 5000);
         });
@@ -241,13 +259,17 @@ export default function LobbyPage({
       }
     );
 
-    clientRef.current = client;
+      clientRef.current = client;
+    });
 
     return () => {
-      client.deactivate();
+      cancelled = true;
+      if (client) {
+        client.deactivate();
+      }
       clientRef.current = null;
     };
-  }, [sessionId, username, scrollToBottom]);
+  }, [sessionId, username, getToken, scrollToBottom]);
 
   /* ── polling fallback (lobby only) ──────────────────────────── */
   useEffect(() => {
@@ -269,7 +291,9 @@ export default function LobbyPage({
     setLoading(true);
     setError("");
     try {
-      const gs = await startSession(username, sessionId);
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      const gs = await startSession(token, sessionId);
       setStatus(gs.status);
       setPlayers(gs.players);
       setCurrentTurnPlayerId(gs.currentTurnPlayerId);
@@ -278,6 +302,24 @@ export default function LobbyPage({
       setError(e instanceof Error ? e.message : "Failed to start session");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleKick(targetPlayerId: string) {
+    if (!username) return;
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      await kickPlayer(token, sessionId, targetPlayerId);
+      // The player list will update via WebSocket PLAYER_LEFT event,
+      // but also refetch to be safe
+      const list = await getSessionPlayers(sessionId);
+      setPlayers(list);
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error ? e.message : "Failed to remove player"
+      );
+      setTimeout(() => setError(""), 5000);
     }
   }
 
@@ -300,7 +342,7 @@ export default function LobbyPage({
       {
         id: `local-${Date.now()}`,
         type: "action",
-        playerName: username,
+        playerName: username ?? "You",
         text: actionText.trim(),
         turnNumber,
       },
@@ -351,6 +393,14 @@ export default function LobbyPage({
             <p className="text-xs text-text-muted">
               Status: <span className="text-accent">{status}</span>
             </p>
+            {createdBy && (
+              <p className="text-xs text-text-muted">
+                Created by: <span className="text-text">{createdBy}</span>
+                {isCreator && (
+                  <span className="ml-1 text-accent">(you)</span>
+                )}
+              </p>
+            )}
             <div className="mt-1 flex items-center justify-center gap-2">
               <span
                 className={`h-2 w-2 rounded-full ${
@@ -374,10 +424,28 @@ export default function LobbyPage({
                   key={p.id}
                   className="flex items-center justify-between rounded-lg border border-border bg-bg px-4 py-2.5"
                 >
-                  <span className="text-sm font-medium">{p.username}</span>
-                  <span className="text-sm text-text-muted">
-                    {p.characterName}
-                  </span>
+                  <div>
+                    <span className="text-sm font-medium">{p.username}</span>
+                    <span className="ml-2 text-sm text-text-muted">
+                      {p.characterName}
+                    </span>
+                    {p.username === createdBy && (
+                      <span className="ml-2 rounded bg-accent-dark/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-accent">
+                        Host
+                      </span>
+                    )}
+                  </div>
+                  {isCreator &&
+                    p.username !== username &&
+                    p.role === "PLAYER" && (
+                      <button
+                        onClick={() => handleKick(p.id)}
+                        className="rounded px-2 py-1 text-xs text-text-muted transition hover:bg-accent-dark/30 hover:text-accent"
+                        title="Remove player"
+                      >
+                        Kick
+                      </button>
+                    )}
                 </div>
               ))}
               {humanPlayers.length === 0 && (
@@ -401,14 +469,22 @@ export default function LobbyPage({
             </div>
           </div>
 
-          {/* Start Button */}
-          <button
-            onClick={handleStart}
-            disabled={loading || humanPlayers.length < 1}
-            className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
-          >
-            {loading ? "Starting..." : "Start Adventure"}
-          </button>
+          {/* Start Button — only the creator can start */}
+          {isCreator && (
+            <button
+              onClick={handleStart}
+              disabled={loading || humanPlayers.length < 1}
+              className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
+            >
+              {loading ? "Starting..." : "Start Adventure"}
+            </button>
+          )}
+
+          {!isCreator && (
+            <p className="text-center text-sm text-text-muted">
+              Waiting for the host to start the adventure...
+            </p>
+          )}
 
           {error && (
             <p className="mt-4 rounded-lg bg-accent-dark/20 px-3 py-2 text-center text-sm text-accent">
@@ -467,7 +543,10 @@ export default function LobbyPage({
                 }`}
               >
                 <div className="font-medium">{p.characterName}</div>
-                <div className="text-[10px] opacity-60">{p.username}</div>
+                <div className="text-[10px] opacity-60">
+                  {p.username}
+                  {p.username === createdBy && " (host)"}
+                </div>
               </div>
             ))}
           </div>

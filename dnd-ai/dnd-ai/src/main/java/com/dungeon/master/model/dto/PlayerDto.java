@@ -2,6 +2,7 @@ package com.dungeon.master.model.dto;
 
 import com.dungeon.master.model.enums.PlayerRole;
 
+import java.util.Map;
 import java.util.UUID;
 
 public record PlayerDto(
@@ -9,6 +10,8 @@ public record PlayerDto(
         String username,
         String characterName,
         PlayerRole role,
-        int turnIndex
+        int turnIndex,
+        UUID characterId,
+        Map<String, Object> characterSheet
 ) {
 }

@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -116,5 +117,15 @@ public class GameSessionController {
     public ResponseEntity<List<PlayerDto>> getPlayers(@PathVariable UUID sessionId) {
         List<PlayerDto> players = gameSessionService.getPlayers(sessionId);
         return ResponseEntity.ok(players);
+    }
+
+    @DeleteMapping("/{sessionId}/players/{playerId}")
+    public ResponseEntity<Void> removePlayer(
+            @PathVariable UUID sessionId,
+            @PathVariable UUID playerId,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getSubject();
+        gameSessionService.removePlayer(sessionId, playerId, username);
+        return ResponseEntity.noContent().build();
     }
 }
