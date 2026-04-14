@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record CreateSessionRequest(
         @NotBlank(message = "Player name is required") String playerName,
-        @NotNull(message = "Character ID is required") UUID characterId
+        @NotNull(message = "Character ID is required") UUID characterId,
+        String worldSetting
 ) {
 }

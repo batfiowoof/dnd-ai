@@ -55,6 +55,9 @@ public class GameSession {
     @Builder.Default
     private List<UUID> turnOrder = new ArrayList<>();
 
+    @Column(name = "world_setting", columnDefinition = "text")
+    private String worldSetting;
+
     @Column(name = "created_by")
     private String createdBy;
 

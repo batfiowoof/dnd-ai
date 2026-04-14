@@ -1,7 +1,9 @@
 package com.dungeon.master.service.ai;
 
+import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.TurnEvent;
 import com.dungeon.master.model.entity.WorldDocument;
+import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.TurnEventRepository;
 import com.dungeon.master.repository.WorldDocumentRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,10 +25,20 @@ public class RagService {
 
     private final WorldDocumentRepository worldDocumentRepository;
     private final TurnEventRepository turnEventRepository;
+    private final GameSessionRepository gameSessionRepository;
     private final EmbeddingService embeddingService;
 
     public String buildContext(UUID sessionId, String playerAction) {
         StringBuilder context = new StringBuilder();
+
+        // Include session's world setting if present
+        gameSessionRepository.findById(sessionId).ifPresent(session -> {
+            if (session.getWorldSetting() != null && !session.getWorldSetting().isBlank()) {
+                context.append("=== World Setting ===\n");
+                context.append(session.getWorldSetting());
+                context.append("\n\n");
+            }
+        });
 
         List<WorldDocument> relevantDocs = retrieveRelevantDocuments(playerAction);
         if (!relevantDocs.isEmpty()) {

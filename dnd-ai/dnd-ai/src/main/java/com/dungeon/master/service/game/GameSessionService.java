@@ -50,6 +50,7 @@ public class GameSessionService {
                 .code(code)
                 .status(GameStatus.WAITING)
                 .createdBy(username)
+                .worldSetting(request.worldSetting())
                 .build();
         session = sessionRepository.save(session);
 
@@ -190,7 +191,8 @@ public class GameSessionService {
                 playerDtos,
                 session.getCurrentTurnPlayerId(),
                 turnNumber,
-                session.getCreatedBy());
+                session.getCreatedBy(),
+                session.getWorldSetting());
     }
 
     public List<PlayerDto> getPlayers(UUID sessionId) {

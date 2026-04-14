@@ -19,11 +19,13 @@ export interface GameStateDto {
   currentTurnPlayerId: string | null;
   turnNumber: number;
   createdBy: string | null;
+  worldSetting: string | null;
 }
 
 export interface CreateSessionRequest {
   playerName: string;
   characterId: string;
+  worldSetting?: string;
 }
 
 export interface CreateSessionResponse {

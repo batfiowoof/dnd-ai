@@ -12,6 +12,7 @@ public record GameStateDto(
         List<PlayerDto> players,
         UUID currentTurnPlayerId,
         int turnNumber,
-        String createdBy
+        String createdBy,
+        String worldSetting
 ) {
 }
