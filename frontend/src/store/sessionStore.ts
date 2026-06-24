@@ -22,6 +22,7 @@ interface SessionState {
   currentTurnPlayerId: string | null;
   turnNumber: number;
   logs: LogEntry[];
+  dmThinking: boolean;
   connected: boolean;
   error: string;
 
@@ -34,6 +35,22 @@ interface SessionState {
   addLog: (entry: LogEntry) => void;
 
   /* WebSocket-driven live updates */
+  beginDmTurn: (args: {
+    turnNumber: number;
+    playerId: string;
+    playerName?: string;
+    action?: string;
+  }) => void;
+  appendDmChunk: (args: {
+    turnNumber: number;
+    playerId: string;
+    delta: string;
+  }) => void;
+  applyDmNarration: (args: {
+    turnNumber: number;
+    playerId: string;
+    dmNarration: string;
+  }) => void;
   applyDmResponse: (dm: DmResponseDto, playerName?: string) => void;
   setTurnChange: (nextPlayerId: string | null, turnNumber: number) => void;
   applyPlayerEvent: (gs: GameStateDto) => void;
@@ -52,6 +69,7 @@ const initialState = {
   currentTurnPlayerId: null as string | null,
   turnNumber: 0,
   logs: [] as LogEntry[],
+  dmThinking: false,
   connected: false,
   error: "",
 };
@@ -95,6 +113,62 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   addLog: (entry) => set((state) => ({ logs: [...state.logs, entry] })),
 
+  /* DM_THINKING — show the typing indicator and (for player turns) render the
+     action line first, so order is consistent across all clients. */
+  beginDmTurn: ({ turnNumber, playerId, playerName, action }) =>
+    set((state) => {
+      if (!action) return { dmThinking: true };
+      const actionId = `ws-action-${turnNumber}-${playerId}`;
+      if (state.logs.some((e) => e.id === actionId)) return { dmThinking: true };
+      const entry: LogEntry = {
+        id: actionId,
+        type: "action",
+        playerName: playerName ?? "Player",
+        text: action,
+        turnNumber,
+      };
+      return { dmThinking: true, logs: [...state.logs, entry] };
+    }),
+
+  /* DM_CHUNK — append a streamed token to the live DM entry (create on first chunk). */
+  appendDmChunk: ({ turnNumber, playerId, delta }) =>
+    set((state) => {
+      const dmId = `ws-dm-${turnNumber}-${playerId}`;
+      if (state.logs.some((e) => e.id === dmId)) {
+        return {
+          dmThinking: false,
+          logs: state.logs.map((e) =>
+            e.id === dmId ? { ...e, text: e.text + delta } : e
+          ),
+        };
+      }
+      const entry: LogEntry = { id: dmId, type: "dm", text: delta, turnNumber };
+      return { dmThinking: false, logs: [...state.logs, entry] };
+    }),
+
+  /* DM_NARRATION — finalize the opening narration text (turn 0, no turn advance). */
+  applyDmNarration: ({ turnNumber, playerId, dmNarration }) =>
+    set((state) => {
+      const dmId = `ws-dm-${turnNumber}-${playerId}`;
+      if (state.logs.some((e) => e.id === dmId)) {
+        return {
+          dmThinking: false,
+          logs: state.logs.map((e) =>
+            e.id === dmId ? { ...e, text: dmNarration } : e
+          ),
+        };
+      }
+      const entry: LogEntry = {
+        id: dmId,
+        type: "dm",
+        text: dmNarration,
+        turnNumber,
+      };
+      return { dmThinking: false, logs: [...state.logs, entry] };
+    }),
+
+  /* DmResponseDto — the canonical, persisted DM response. Reconciles the streamed
+     entry with the authoritative text and advances the turn. */
   applyDmResponse: (dm, playerName) =>
     set((state) => {
       const actionId = `ws-action-${dm.turnNumber}-${dm.playerId}`;
@@ -103,31 +177,39 @@ export const useSessionStore = create<SessionState>((set) => ({
       const turnFields = {
         currentTurnPlayerId: dm.nextTurnPlayerId,
         turnNumber: dm.turnNumber + 1,
+        dmThinking: false,
       };
 
-      // Already recorded this DM response — only advance the turn.
-      if (state.logs.some((e) => e.id === dmId)) {
-        return turnFields;
-      }
+      let logs = state.logs;
 
-      const newEntries: LogEntry[] = [];
-      if (!state.logs.some((e) => e.id === actionId)) {
-        newEntries.push({
+      // Ensure the action line exists (DM_THINKING usually added it already).
+      if (!logs.some((e) => e.id === actionId)) {
+        const action: LogEntry = {
           id: actionId,
           type: "action",
           playerName: playerName ?? "Player",
           text: dm.playerAction,
           turnNumber: dm.turnNumber,
-        });
+        };
+        logs = [...logs, action];
       }
-      newEntries.push({
-        id: dmId,
-        type: "dm",
-        text: dm.dmNarration,
-        turnNumber: dm.turnNumber,
-      });
 
-      return { logs: [...state.logs, ...newEntries], ...turnFields };
+      // Upsert the DM narration with the final, authoritative text.
+      if (logs.some((e) => e.id === dmId)) {
+        logs = logs.map((e) =>
+          e.id === dmId ? { ...e, text: dm.dmNarration } : e
+        );
+      } else {
+        const narration: LogEntry = {
+          id: dmId,
+          type: "dm",
+          text: dm.dmNarration,
+          turnNumber: dm.turnNumber,
+        };
+        logs = [...logs, narration];
+      }
+
+      return { logs, ...turnFields };
     }),
 
   setTurnChange: (nextPlayerId, turnNumber) =>
@@ -148,7 +230,7 @@ export const useSessionStore = create<SessionState>((set) => ({
         {
           id: "system-start",
           type: "system",
-          text: "The adventure begins... The Dungeon Master awaits your actions.",
+          text: "The adventure begins...",
           turnNumber: 0,
         },
       ],
@@ -157,6 +239,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   applyGameEnded: () =>
     set((state) => ({
       status: "FINISHED",
+      dmThinking: false,
       logs: [
         ...state.logs,
         {

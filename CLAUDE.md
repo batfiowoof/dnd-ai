@@ -37,9 +37,9 @@ Run from the repo root unless noted.
 | Backend tests | `./mvnw test` |
 | Frontend dev (port 3000) | `cd frontend && npm install && npm run dev` |
 | Frontend build / lint | `npm run build` · `npm run lint` |
-| Infra only | `docker compose up postgres kafka keycloak ollama` |
+| Infra only | `docker compose up postgres kafka keycloak` |
 | Full stack | `docker compose up --build` |
-| First-run model pull | `docker exec -it dnd-ollama ollama pull qwen3.5:4b` |
+| First-run model pull (on the **host**) | `ollama pull qwen3.5:4b && ollama pull bge-m3` |
 
 `docker-compose.yml` lives at the repo root. The **dev** profile uses mock auth — no
 Keycloak setup needed.
@@ -88,8 +88,12 @@ data model.
 
 ## AI / LLM
 
+- **Inference runs on the host's Ollama**, not a container. In Docker the backend reaches it
+  via `host.docker.internal:11434` (set in `docker-compose.yml`); for local `mvnw` runs it
+  uses `localhost:11434`. Make sure host Ollama listens on `0.0.0.0` (`OLLAMA_HOST=0.0.0.0`).
 - **Chat model:** `qwen3.5:4b` via Ollama, configured in `application.yml`
   (`spring.ai.ollama.chat.options.model`).
-- **Embedding model:** `qwen2.5:7b` with **1536-dim** pgvector. Do **not** change the
-  embedding model casually — a different model can change vector dimensionality and break
-  the pgvector schema and stored embeddings.
+- **Embedding model:** `bge-m3` with **1024-dim** pgvector. Do **not** change the embedding
+  model casually — a different model can change vector dimensionality and break the pgvector
+  schema and stored embeddings (the dimension lives in both `application.yml` and the
+  `world_documents.embedding` column; changing it needs a new Flyway migration).

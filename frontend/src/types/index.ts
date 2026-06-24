@@ -77,7 +77,36 @@ export interface TurnChangeEvent {
   turnNumber: string;
 }
 
-export type WebSocketMessage = DmResponseDto | SessionEvent | TurnChangeEvent;
+/* ── Streaming DM messages ────────────────────────────────────── */
+export interface DmThinkingEvent {
+  type: "DM_THINKING";
+  turnNumber: string;
+  playerId?: string;
+  playerName?: string;
+  action?: string;
+}
+
+export interface DmChunkEvent {
+  type: "DM_CHUNK";
+  turnNumber: string;
+  playerId: string;
+  delta: string;
+}
+
+export interface DmNarrationEvent {
+  type: "DM_NARRATION";
+  turnNumber: string;
+  playerId: string;
+  dmNarration: string;
+}
+
+export type WebSocketMessage =
+  | DmResponseDto
+  | SessionEvent
+  | TurnChangeEvent
+  | DmThinkingEvent
+  | DmChunkEvent
+  | DmNarrationEvent;
 
 /* ── Character types ──────────────────────────────────────────── */
 

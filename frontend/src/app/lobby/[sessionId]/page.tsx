@@ -52,6 +52,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const error = useSessionStore((s) => s.error);
   const connected = useSessionStore((s) => s.connected);
   const logs = useSessionStore((s) => s.logs);
+  const dmThinking = useSessionStore((s) => s.dmThinking);
   const currentTurnPlayerId = useSessionStore((s) => s.currentTurnPlayerId);
   const turnNumber = useSessionStore((s) => s.turnNumber);
   const setError = useSessionStore((s) => s.setError);
@@ -153,9 +154,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         subscribeToSession(client!, sessionId, (msg: unknown) => {
           const data = msg as Record<string, unknown>;
           const s = useSessionStore.getState();
+          const type = data.type as string | undefined;
 
-          /* DM response (has dmNarration field) */
-          if ("dmNarration" in data) {
+          /* Canonical DM response — untyped, carries dmNarration + nextTurnPlayerId.
+             Checked before the switch (DM_NARRATION also has a dmNarration field). */
+          if (!type && "dmNarration" in data) {
             const dm = data as unknown as DmResponseDto;
             const playerName = data.playerName as string | undefined;
             s.applyDmResponse(dm, playerName);
@@ -163,30 +166,56 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             return;
           }
 
-          /* Session lifecycle events */
-          if (data.type === "TURN_CHANGE") {
-            s.setTurnChange(
-              data.nextPlayerId as string,
-              Number(data.turnNumber)
-            );
-          }
-
-          if (data.type === "PLAYER_JOINED" || data.type === "PLAYER_LEFT") {
-            const gs = data.gameState as GameStateDto | undefined;
-            if (gs) s.applyPlayerEvent(gs);
-          }
-
-          if (data.type === "GAME_STARTED") {
-            const gs = data.gameState as GameStateDto | undefined;
-            if (gs) {
-              s.applyGameStarted(gs);
+          switch (type) {
+            case "DM_THINKING":
+              s.beginDmTurn({
+                turnNumber: Number(data.turnNumber),
+                playerId: String(data.playerId ?? "dm"),
+                playerName: data.playerName as string | undefined,
+                action: data.action as string | undefined,
+              });
               scrollToBottom();
+              break;
+            case "DM_CHUNK":
+              s.appendDmChunk({
+                turnNumber: Number(data.turnNumber),
+                playerId: String(data.playerId),
+                delta: String(data.delta),
+              });
+              scrollToBottom();
+              break;
+            case "DM_NARRATION":
+              s.applyDmNarration({
+                turnNumber: Number(data.turnNumber),
+                playerId: String(data.playerId),
+                dmNarration: String(data.dmNarration),
+              });
+              scrollToBottom();
+              break;
+            case "TURN_CHANGE":
+              s.setTurnChange(
+                data.nextPlayerId as string,
+                Number(data.turnNumber)
+              );
+              break;
+            case "PLAYER_JOINED":
+            case "PLAYER_LEFT": {
+              const gs = data.gameState as GameStateDto | undefined;
+              if (gs) s.applyPlayerEvent(gs);
+              break;
             }
-          }
-
-          if (data.type === "GAME_ENDED") {
-            s.applyGameEnded();
-            scrollToBottom();
+            case "GAME_STARTED": {
+              const gs = data.gameState as GameStateDto | undefined;
+              if (gs) {
+                s.applyGameStarted(gs);
+                scrollToBottom();
+              }
+              break;
+            }
+            case "GAME_ENDED":
+              s.applyGameEnded();
+              scrollToBottom();
+              break;
           }
         });
 
@@ -250,13 +279,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
     sendAction(clientRef.current, sessionId, actionText.trim());
 
-    useSessionStore.getState().addLog({
-      id: `local-${Date.now()}`,
-      type: "action",
-      playerName: username ?? "You",
-      text: actionText.trim(),
-      turnNumber,
-    });
+    // No optimistic local entry: the server echoes the action via DM_THINKING,
+    // so every client (including this one) renders it once, in order.
     setActionText("");
     scrollToBottom();
   }
@@ -508,7 +532,18 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                 )}
               </div>
             ))}
-            {logs.length === 0 && (
+            {dmThinking && (
+              <div className="ml-4 flex items-center gap-2 text-xs text-accent animate-rise">
+                <D20Mark className="h-3.5 w-3.5 animate-spin" />
+                <span className="italic">The Dungeon Master is weaving the tale</span>
+                <span className="inline-flex gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:-0.3s]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:-0.15s]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-accent" />
+                </span>
+              </div>
+            )}
+            {logs.length === 0 && !dmThinking && (
               <p className="text-center text-sm text-text-muted">
                 Waiting for the adventure to begin...
               </p>

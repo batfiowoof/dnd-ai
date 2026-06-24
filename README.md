@@ -76,10 +76,12 @@ This starts all services:
 | PostgreSQL | localhost:5555 |
 | Kafka | localhost:9092 |
 
-After the first start, pull the LLM model:
+Inference uses the **host's** Ollama (not a container). Make sure it's installed, listening
+on `0.0.0.0:11434` (`OLLAMA_HOST=0.0.0.0`), and the models are pulled:
 
 ```bash
-docker exec -it dnd-ollama ollama pull qwen3.5:4b
+ollama pull qwen3.5:4b   # chat / DM narration
+ollama pull bge-m3       # embeddings (1024-dim) for RAG
 ```
 
 ### Local Development

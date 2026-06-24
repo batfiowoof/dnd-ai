@@ -1,3 +1,8 @@
+# Pin the project name so it no longer depends on the folder name.
+# (The repo was moved to a new directory; without this, Compose would rename
+# the project, orphan the old containers, and create empty data volumes.)
+name: dnd-ai
+
 services:
 
   # ── PostgreSQL + pgvector ─────────────────────────
@@ -37,7 +42,7 @@ services:
     ports:
       - "9092:9092"
     healthcheck:
-      test: [ "CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1" ]
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -57,20 +62,12 @@ services:
       - ./keycloak/themes:/opt/keycloak/themes:ro
 
   # ── Ollama (LLM inference) ────────────────────────
-  # After first start, pull the model:
-  #   docker exec -it dnd-ollama ollama pull qwen3.5:4b
-  ollama:
-    image: ollama/ollama:latest
-    container_name: dnd-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:11434/ || exit 1" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # Inference runs on the HOST's Ollama (not a container), so models you've
+  # already pulled on your machine are used directly. The backend reaches it
+  # via host.docker.internal. First-run, on the HOST:
+  #   ollama pull qwen3.5:4b
+  #   ollama pull bge-m3
+  # (Ensure host Ollama listens on 0.0.0.0 — set OLLAMA_HOST=0.0.0.0 if needed.)
 
   # ── Backend (Spring Boot) ─────────────────────────
   backend:
@@ -83,17 +80,17 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/dnd-ai/protocol/openid-connect/certs
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:8180/realms/dnd-ai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_healthy
-      ollama:
         condition: service_healthy
 
   # ── Frontend (Next.js) ────────────────────────────
@@ -115,4 +112,3 @@ services:
 
 volumes:
   postgres_data:
-  ollama_data:

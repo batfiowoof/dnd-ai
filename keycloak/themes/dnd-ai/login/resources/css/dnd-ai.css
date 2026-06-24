@@ -167,6 +167,24 @@ body.login-pf,
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
+/* PatternFly v4 draws form-control borders from per-side custom properties
+   whose defaults are near-white (#f0f0f0) on top/right/left — that's the
+   broken white L-border on the password field. Reset all sides to the dark
+   token so the `border` shorthand above can't be undercut by them, and kill
+   the base inset bottom-border box-shadow. */
+.login-pf-page .pf-c-form-control {
+  --pf-c-form-control--BorderTopColor: var(--dnd-border);
+  --pf-c-form-control--BorderRightColor: var(--dnd-border);
+  --pf-c-form-control--BorderBottomColor: var(--dnd-border);
+  --pf-c-form-control--BorderLeftColor: var(--dnd-border);
+  --pf-c-form-control--BackgroundColor: var(--dnd-surface-light);
+  --pf-c-form-control--Color: var(--dnd-text);
+  --pf-c-form-control--hover--BorderBottomColor: var(--dnd-accent);
+  --pf-c-form-control--focus--BorderBottomColor: var(--dnd-accent);
+  border-color: var(--dnd-border);
+  box-shadow: none;
+}
+
 .login-pf-page input::placeholder {
   color: var(--dnd-muted);
   opacity: 0.7;
@@ -183,12 +201,38 @@ body.login-pf,
   box-shadow: 0 0 0 1px var(--dnd-accent), 0 0 16px var(--dnd-accent-glow);
 }
 
-/* Password show/hide toggle */
+/* Password input group: keep the wrapper transparent, square off the field's
+   right edge, and weld the show/hide toggle onto it as one continuous control
+   (the base theme leaves a light gap + white borders between the two). */
+.login-pf-page .pf-c-input-group {
+  background: transparent;
+}
+.login-pf-page .pf-c-input-group > .pf-c-form-control,
+.login-pf-page .pf-c-input-group > input {
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
 .login-pf-page .pf-c-button.pf-m-control,
-.login-pf-page .pf-c-input-group__text {
+.login-pf-page .pf-c-input-group__text,
+.login-pf-page .kc-login-tooltip {
+  min-height: 44px;
   background: var(--dnd-surface-light);
   border: 1px solid var(--dnd-border);
+  border-left: 0;
+  border-top-right-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
   color: var(--dnd-muted);
+  box-shadow: none;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.login-pf-page .pf-c-button.pf-m-control:hover {
+  background: var(--dnd-surface);
+  color: var(--dnd-text);
+}
+.login-pf-page .pf-c-button.pf-m-control::before,
+.login-pf-page .pf-c-button.pf-m-control::after {
+  border: 0;
 }
 
 /* ── Primary button ───────────────────────────────────────────── */
@@ -249,6 +293,34 @@ body.login-pf,
 .login-pf-page .pf-c-button.pf-m-link:hover {
   color: #e0bf4a;
   text-decoration: underline;
+}
+
+/* ── Registration / info footer band ──────────────────────────── */
+/* The base theme gives #kc-info-wrapper / .login-pf-signup a hardcoded light
+   (#f0f0f0) background — the white band under the form. Strip it and replace
+   with a quiet top-divider so "New user? Register" blends into the dark card. */
+.login-pf-page #kc-info,
+.login-pf-page #kc-info-wrapper,
+.login-pf-page #kc-registration-container,
+.login-pf-page #kc-registration,
+.login-pf-page .login-pf-signup,
+.login-pf-page .pf-c-login__main-footer-band {
+  background: transparent !important;
+  border: 0;
+  box-shadow: none;
+  color: var(--dnd-muted);
+}
+.login-pf-page #kc-info-wrapper {
+  margin: 1.5rem -2rem -2.25rem;
+  padding: 1rem 2rem;
+  border-top: 1px solid var(--dnd-border);
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+.login-pf-page #kc-info-wrapper,
+.login-pf-page #kc-registration,
+.login-pf-page .login-pf-signup span {
+  color: var(--dnd-muted);
 }
 
 /* ── Checkbox accent (remember me) ────────────────────────────── */

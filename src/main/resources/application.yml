@@ -52,10 +52,10 @@ spring:
           top-p: 0.9
       embedding:
         options:
-          model: qwen2.5:7b
+          model: bge-m3
     vectorstore:
       pgvector:
-        dimensions: 1536
+        dimensions: 1024
         index-type: ivfflat
         distance-type: cosine_distance
 
@@ -80,7 +80,8 @@ resilience4j:
   timelimiter:
     instances:
       aiService:
-        timeout-duration: 60s
+        # Applies to the reactive/streaming path; local models can run long.
+        timeout-duration: 120s
 
 # ── Actuator ────────────────────────────────────────
 management:
