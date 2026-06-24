@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Operating guide for this repo. For the full architecture diagram, Kafka topics, data
-model, and API reference, see **`dnd-ai/dnd-ai/README.md`** — this file is the quick map.
+model, and API reference, see **`README.md`** — this file is the quick map.
 
 ## Project
 
@@ -10,10 +10,8 @@ Master. Players join sessions by invite code, take turns describing actions over
 WebSocket, and an Ollama-backed DM narrates responses while keeping world consistency via
 RAG (pgvector).
 
-> **Path note:** the actual project lives in **`dnd-ai/dnd-ai/`** — the Spring Boot
-> backend is at the root of that folder, the Next.js frontend in `dnd-ai/dnd-ai/frontend/`.
-> Ignore the stray `dnd-ai/untitled/` scaffold and the `python-3.10.6-amd64.exe` installer
-> at the repo root; they are not part of the app.
+> **Layout note:** the project lives at the repo root — the Spring Boot backend is at the
+> root (`pom.xml`, `src/`), and the Next.js frontend is in `frontend/`.
 
 ## ⚠️ Frontend work directive (read first)
 
@@ -31,7 +29,7 @@ design guidance *before* writing UI code. Then:
 
 ## Run / dev commands
 
-Run from `dnd-ai/dnd-ai/` unless noted.
+Run from the repo root unless noted.
 
 | Task | Command |
 |---|---|
@@ -43,7 +41,7 @@ Run from `dnd-ai/dnd-ai/` unless noted.
 | Full stack | `docker compose up --build` |
 | First-run model pull | `docker exec -it dnd-ollama ollama pull qwen3.5:4b` |
 
-`docker-compose.yml` lives in `dnd-ai/dnd-ai/`. The **dev** profile uses mock auth — no
+`docker-compose.yml` lives at the repo root. The **dev** profile uses mock auth — no
 Keycloak setup needed.
 
 ## Architecture map
@@ -58,7 +56,7 @@ Next.js frontend  ⇄  Spring Boot backend  ⇄  Kafka (KRaft)
 See `README.md` for the full diagram, the four `game.*` Kafka topics, and the table-level
 data model.
 
-## Backend layout — `dnd-ai/dnd-ai/src/main/java/com/dungeon/master/`
+## Backend layout — `src/main/java/com/dungeon/master/`
 
 - `controller/` + `websocket/` — REST and STOMP entry points (+ JWT channel interceptor)
 - `service/ai/` — `DmAiService`, `RagService`, `EmbeddingService`
@@ -68,7 +66,7 @@ data model.
 - Flyway migrations: `src/main/resources/db/migration` (V1–V3). **Add a new
   `V{n}__*.sql`; never edit an already-applied migration.**
 
-## Frontend layout — `dnd-ai/dnd-ai/frontend/src/`
+## Frontend layout — `frontend/src/`
 
 - `app/` — App Router pages (`login`, `/` landing, `characters`, `characters/new`,
   `characters/[id]/edit`, `lobby/[sessionId]`, `game/[sessionId]`)
