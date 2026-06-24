@@ -7,7 +7,10 @@ import type {
   PlayerDto,
   TurnEventDto,
 } from "@/types";
-import { getSessionHistory, getSessionPlayers } from "@/lib/api";
+import {
+  useSessionHistory,
+  useSessionPlayers,
+} from "@/hooks/useSessionQueries";
 import {
   createStompClient,
   subscribeToSession,
@@ -15,6 +18,7 @@ import {
   sendAction,
 } from "@/lib/websocket";
 import type { Client } from "@stomp/stompjs";
+import { Button, Brand, D20Mark, cn } from "@/components/ui";
 
 interface LogEntry {
   id: string;
@@ -62,42 +66,43 @@ export default function GamePage({
     }, 50);
   }, []);
 
-  // Load history on mount
-  useEffect(() => {
-    async function loadInitial() {
-      try {
-        const [history, playerList] = await Promise.all([
-          getSessionHistory(sessionId),
-          getSessionPlayers(sessionId),
-        ]);
-        setPlayers(playerList);
+  // Load history + players on mount (React Query)
+  const historyQuery = useSessionHistory(sessionId, true);
+  const playersQuery = useSessionPlayers(sessionId);
 
-        const entries: LogEntry[] = [];
-        history.forEach((h: TurnEventDto) => {
-          entries.push({
-            id: `${h.id}-action`,
-            type: "action",
-            playerName: h.playerName,
-            text: h.action,
-            turnNumber: h.turnNumber,
-          });
-          if (h.dmResponse) {
-            entries.push({
-              id: `${h.id}-dm`,
-              type: "dm",
-              text: h.dmResponse,
-              turnNumber: h.turnNumber,
-            });
-          }
+  useEffect(() => {
+    if (playersQuery.data) setPlayers(playersQuery.data);
+  }, [playersQuery.data]);
+
+  useEffect(() => {
+    if (!historyQuery.data) return;
+    const entries: LogEntry[] = [];
+    historyQuery.data.forEach((h: TurnEventDto) => {
+      entries.push({
+        id: `${h.id}-action`,
+        type: "action",
+        playerName: h.playerName,
+        text: h.action,
+        turnNumber: h.turnNumber,
+      });
+      if (h.dmResponse) {
+        entries.push({
+          id: `${h.id}-dm`,
+          type: "dm",
+          text: h.dmResponse,
+          turnNumber: h.turnNumber,
         });
-        setLogs(entries);
-        scrollToBottom();
-      } catch {
-        setError("Failed to load game history");
       }
+    });
+    setLogs(entries);
+    scrollToBottom();
+  }, [historyQuery.data, scrollToBottom]);
+
+  useEffect(() => {
+    if (historyQuery.isError || playersQuery.isError) {
+      setError("Failed to load game history");
     }
-    loadInitial();
-  }, [sessionId, scrollToBottom]);
+  }, [historyQuery.isError, playersQuery.isError]);
 
   // WebSocket connection
   useEffect(() => {
@@ -221,28 +226,30 @@ export default function GamePage({
   );
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
-        <h1 className="text-lg font-bold text-accent">D&D AI</h1>
+      <header className="flex items-center justify-between border-b border-border bg-surface/80 px-4 py-3 backdrop-blur-sm">
+        <Brand size="sm" />
         <div className="flex items-center gap-4">
           <span className="text-xs text-text-muted">
-            Turn {turnNumber}
+            <span className="tabular text-gold">Turn {turnNumber}</span>
             {currentPlayer && (
               <> &middot; {currentPlayer.characterName}&apos;s turn</>
             )}
           </span>
           <span
-            className={`h-2 w-2 rounded-full ${
-              connected ? "bg-green-500" : "bg-red-500"
-            }`}
+            className={cn(
+              "h-2 w-2 rounded-full",
+              connected ? "bg-success" : "bg-danger"
+            )}
+            title={connected ? "Connected" : "Disconnected"}
           />
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="hidden w-48 flex-shrink-0 border-r border-border bg-surface p-4 md:block">
+        <aside className="hidden w-48 flex-shrink-0 border-r border-border bg-surface/60 p-4 md:block">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Players
           </h2>
@@ -250,11 +257,12 @@ export default function GamePage({
             {humanPlayers.map((p) => (
               <div
                 key={p.id}
-                className={`rounded px-2 py-1.5 text-xs ${
+                className={cn(
+                  "rounded-lg px-2.5 py-1.5 text-xs transition",
                   p.id === currentTurnPlayerId
-                    ? "border border-accent bg-accent-glow text-accent"
-                    : "text-text-muted"
-                }`}
+                    ? "border border-gold/60 bg-gold-muted text-gold"
+                    : "border border-transparent text-text-muted"
+                )}
               >
                 <div className="font-medium">{p.characterName}</div>
                 <div className="text-[10px] opacity-60">{p.username}</div>
@@ -271,18 +279,19 @@ export default function GamePage({
             className="flex-1 overflow-y-auto p-4 space-y-3"
           >
             {logs.map((entry) => (
-              <div key={entry.id}>
+              <div key={entry.id} className="animate-rise">
                 {entry.type === "action" && (
                   <div className="flex gap-2">
-                    <span className="text-xs font-semibold text-accent">
+                    <span className="text-xs font-semibold text-gold">
                       {entry.playerName}:
                     </span>
                     <span className="text-sm text-text">{entry.text}</span>
                   </div>
                 )}
                 {entry.type === "dm" && (
-                  <div className="ml-4 rounded-lg border border-border-accent bg-accent-glow px-4 py-3">
-                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-accent">
+                  <div className="ml-4 rounded-lg border border-border-accent bg-accent-glow px-4 py-3 shadow-[0_0_24px_var(--color-accent-glow)]">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+                      <D20Mark className="h-3.5 w-3.5" />
                       Dungeon Master
                     </span>
                     <p className="text-sm leading-relaxed text-text">
@@ -306,7 +315,7 @@ export default function GamePage({
 
           {/* Error */}
           {error && (
-            <div className="mx-4 mb-2 rounded-lg bg-accent-dark/20 px-3 py-2 text-center text-xs text-accent">
+            <div className="mx-4 mb-2 rounded-lg border border-accent-dark/40 bg-accent-dark/20 px-3 py-2 text-center text-xs text-accent-light">
               {error}
             </div>
           )}
@@ -314,7 +323,7 @@ export default function GamePage({
           {/* Input */}
           <form
             onSubmit={handleSubmit}
-            className="border-t border-border bg-surface p-4"
+            className="border-t border-border bg-surface/80 p-4 backdrop-blur-sm"
           >
             <div className="flex gap-2">
               <input
@@ -327,18 +336,20 @@ export default function GamePage({
                     : "Waiting for your turn..."
                 }
                 disabled={!isMyTurn || !connected}
-                className="flex-1 rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-40"
+                className="flex-1 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-40"
               />
-              <button
+              <Button
                 type="submit"
                 disabled={!isMyTurn || !connected || !actionText.trim()}
-                className="rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-40"
+                size="lg"
               >
                 Send
-              </button>
+              </Button>
             </div>
             {isMyTurn && (
-              <p className="mt-1 text-xs text-accent">It&apos;s your turn!</p>
+              <p className="mt-1.5 text-xs font-medium text-gold">
+                It&apos;s your turn!
+              </p>
             )}
           </form>
         </div>

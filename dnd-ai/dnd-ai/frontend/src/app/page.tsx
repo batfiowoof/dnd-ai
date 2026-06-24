@@ -4,13 +4,18 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
+import { useMyCharacters } from "@/hooks/useCharacterQueries";
+import { useCreateSession, useJoinByCode } from "@/hooks/useSessionQueries";
 import {
-  createSession,
-  getSessionByCode,
-  joinSession,
-  getMyCharacters,
-} from "@/lib/api";
-import type { CharacterDto } from "@/types";
+  Button,
+  Panel,
+  Brand,
+  Field,
+  Alert,
+  Spinner,
+  controlClass,
+  cn,
+} from "@/components/ui";
 
 export default function LandingPage() {
   return (
@@ -94,17 +99,22 @@ Fairy-tale logic, moral ambiguity, deals and consequences, shifting landscapes, 
 
 function LandingContent() {
   const router = useRouter();
-  const { username, logout, getToken } = useAuth();
+  const { username, logout } = useAuth();
 
   const [joinCode, setJoinCode] = useState("");
   const [mode, setMode] = useState<"idle" | "create" | "join">("idle");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  // Characters
-  const [characters, setCharacters] = useState<CharacterDto[]>([]);
+  // Characters (React Query)
+  const charactersQuery = useMyCharacters(!!username);
+  const characters = charactersQuery.data ?? [];
+  const charsLoading = charactersQuery.isLoading;
   const [selectedCharId, setSelectedCharId] = useState<string>("");
-  const [charsLoading, setCharsLoading] = useState(true);
+
+  // Session mutations
+  const createMutation = useCreateSession();
+  const joinMutation = useJoinByCode();
+  const loading = createMutation.isPending || joinMutation.isPending;
 
   // World setting
   const [worldSource, setWorldSource] = useState<
@@ -114,21 +124,12 @@ function LandingContent() {
   const [customWorldText, setCustomWorldText] = useState("");
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
 
+  // Default-select the first character once the list loads.
   useEffect(() => {
-    if (!username) return;
-    setCharsLoading(true);
-    getToken()
-      .then((t) => {
-        if (!t) return Promise.resolve([]);
-        return getMyCharacters(t);
-      })
-      .then((chars) => {
-        setCharacters(chars);
-        if (chars.length > 0) setSelectedCharId(chars[0].id);
-      })
-      .catch(() => {})
-      .finally(() => setCharsLoading(false));
-  }, [username, getToken]);
+    if (characters.length > 0 && !selectedCharId) {
+      setSelectedCharId(characters[0].id);
+    }
+  }, [characters, selectedCharId]);
 
   const selectedChar = characters.find((c) => c.id === selectedCharId);
 
@@ -174,11 +175,8 @@ function LandingContent() {
       return;
     }
     setError("");
-    setLoading(true);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      const res = await createSession(token, {
+      const res = await createMutation.mutateAsync({
         playerName: username,
         characterId: selectedCharId,
         worldSetting,
@@ -188,8 +186,6 @@ function LandingContent() {
       router.push(`/lobby/${res.sessionId}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create session");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -199,19 +195,15 @@ function LandingContent() {
       return;
     }
     setError("");
-    setLoading(true);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      const gameState = await getSessionByCode(joinCode.toUpperCase());
-      const player = await joinSession(token, gameState.sessionId, {
-        playerName: username,
-        characterId: selectedCharId,
+      const { gameState, player } = await joinMutation.mutateAsync({
+        code: joinCode.toUpperCase(),
+        body: {
+          playerName: username,
+          characterId: selectedCharId,
+        },
       });
-      localStorage.setItem(
-        `dnd-playerId-${gameState.sessionId}`,
-        player.id
-      );
+      localStorage.setItem(`dnd-playerId-${gameState.sessionId}`, player.id);
       localStorage.setItem(
         `dnd-joinCode-${gameState.sessionId}`,
         gameState.joinCode
@@ -219,55 +211,52 @@ function LandingContent() {
       router.push(`/lobby/${gameState.sessionId}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to join session");
-    } finally {
-      setLoading(false);
     }
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-xl border border-border-accent bg-surface p-8 glow">
-        <h1 className="mb-2 text-center text-4xl font-bold tracking-wider text-accent">
-          D&D AI
-        </h1>
-        <p className="mb-2 text-center text-sm text-text-muted">
+    <main className="flex min-h-dvh items-center justify-center p-4">
+      <Panel glow corners className="w-full max-w-lg p-8 animate-rise">
+        <div className="mb-1 flex justify-center">
+          <Brand size="lg" />
+        </div>
+        <p className="text-center text-xs uppercase tracking-[0.25em] text-gold">
           AI Dungeon Master
         </p>
-        <p className="mb-6 text-center text-xs text-text-muted">
+        <p className="mb-6 mt-3 text-center text-xs text-text-muted">
           Logged in as <span className="text-text">{username}</span>
           <button
             onClick={logout}
-            className="ml-2 text-accent hover:underline"
+            className="ml-2 cursor-pointer text-accent transition hover:text-accent-light hover:underline"
           >
             logout
           </button>
         </p>
 
+        <hr className="ornament mb-6" />
+
         {/* Character Selection */}
         <div className="mb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Select Character
-          </label>
           {charsLoading ? (
-            <p className="text-sm text-text-muted">Loading characters...</p>
+            <span className="inline-flex items-center gap-2 text-sm text-text-muted">
+              <Spinner className="text-accent" /> Loading characters...
+            </span>
           ) : characters.length === 0 ? (
-            <div className="rounded-lg border border-border bg-bg p-4 text-center">
-              <p className="mb-2 text-sm text-text-muted">
+            <div className="rounded-lg border border-border bg-bg-elevated p-5 text-center">
+              <p className="mb-3 text-sm text-text-muted">
                 No characters found
               </p>
-              <button
-                onClick={() => router.push("/characters/new")}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark"
-              >
+              <Button onClick={() => router.push("/characters/new")} size="sm">
                 Create Your First Character
-              </button>
+              </Button>
             </div>
           ) : (
-            <>
+            <Field label="Select Character" htmlFor="char-select">
               <select
+                id="char-select"
                 value={selectedCharId}
                 onChange={(e) => setSelectedCharId(e.target.value)}
-                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                className={controlClass}
               >
                 {characters.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -276,39 +265,39 @@ function LandingContent() {
                 ))}
               </select>
               {selectedChar && (
-                <div className="mt-2 flex items-center justify-between rounded-lg border border-border bg-bg px-3 py-2">
-                  <div className="text-xs text-text-muted">
-                    HP {selectedChar.hitPoints} | AC{" "}
-                    {selectedChar.armorClass} | Speed{" "}
-                    {selectedChar.speed}
+                <div className="mt-2 flex items-center justify-between rounded-lg border border-border bg-bg-elevated px-3 py-2">
+                  <div className="tabular text-xs text-text-muted">
+                    <span className="text-gold">HP</span> {selectedChar.hitPoints}
+                    {"  "}
+                    <span className="text-gold">AC</span> {selectedChar.armorClass}
+                    {"  "}
+                    <span className="text-gold">SPD</span> {selectedChar.speed}
                   </div>
                   <button
                     onClick={() => router.push("/characters")}
-                    className="text-xs text-accent hover:underline"
+                    className="cursor-pointer text-xs text-accent transition hover:text-accent-light hover:underline"
                   >
                     Manage
                   </button>
                 </div>
               )}
-            </>
+            </Field>
           )}
         </div>
 
         {/* Mode selection */}
         {mode === "idle" && characters.length > 0 && (
           <div className="flex gap-3">
-            <button
-              onClick={() => setMode("create")}
-              className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark"
-            >
+            <Button onClick={() => setMode("create")} fullWidth>
               Create Session
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setMode("join")}
-              className="flex-1 rounded-lg border border-accent px-4 py-2.5 text-sm font-semibold text-accent transition hover:bg-accent hover:text-white"
+              variant="outline"
+              fullWidth
             >
               Join Session
-            </button>
+            </Button>
           </div>
         )}
 
@@ -320,37 +309,27 @@ function LandingContent() {
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-text-muted">
                 World Setting
               </label>
-              <div className="flex rounded-lg border border-border bg-bg text-xs">
-                <button
-                  onClick={() => setWorldSource("preset")}
-                  className={`flex-1 rounded-l-lg px-3 py-2 font-medium transition ${
-                    worldSource === "preset"
-                      ? "bg-accent text-white"
-                      : "text-text-muted hover:text-text"
-                  }`}
-                >
-                  Presets
-                </button>
-                <button
-                  onClick={() => setWorldSource("custom-write")}
-                  className={`flex-1 border-x border-border px-3 py-2 font-medium transition ${
-                    worldSource === "custom-write"
-                      ? "bg-accent text-white"
-                      : "text-text-muted hover:text-text"
-                  }`}
-                >
-                  Write
-                </button>
-                <button
-                  onClick={() => setWorldSource("custom-upload")}
-                  className={`flex-1 rounded-r-lg px-3 py-2 font-medium transition ${
-                    worldSource === "custom-upload"
-                      ? "bg-accent text-white"
-                      : "text-text-muted hover:text-text"
-                  }`}
-                >
-                  Upload
-                </button>
+              <div className="flex rounded-lg border border-border bg-bg-elevated p-1 text-xs">
+                {(
+                  [
+                    ["preset", "Presets"],
+                    ["custom-write", "Write"],
+                    ["custom-upload", "Upload"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setWorldSource(value)}
+                    className={cn(
+                      "flex-1 cursor-pointer rounded-md px-3 py-2 font-medium transition",
+                      worldSource === value
+                        ? "bg-accent text-white shadow-[0_0_16px_var(--color-accent-glow)]"
+                        : "text-text-muted hover:text-text"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -361,30 +340,33 @@ function LandingContent() {
                   <div key={world.id}>
                     <button
                       onClick={() => setSelectedPreset(world.id)}
-                      className={`w-full rounded-lg border px-4 py-3 text-left transition ${
+                      className={cn(
+                        "w-full cursor-pointer rounded-lg border px-4 py-3 text-left transition",
                         selectedPreset === world.id
                           ? "border-accent bg-accent/10"
-                          : "border-border bg-bg hover:border-accent/50"
-                      }`}
+                          : "border-border bg-bg-elevated hover:border-accent/50 hover:-translate-y-0.5"
+                      )}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-text">
+                          <p
+                            className="text-sm font-semibold text-text"
+                            style={{ fontFamily: "var(--font-display)" }}
+                          >
                             {world.name}
                           </p>
                           <p className="text-xs text-text-muted">
                             {world.tagline}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`h-3 w-3 rounded-full border-2 transition ${
-                              selectedPreset === world.id
-                                ? "border-accent bg-accent"
-                                : "border-border"
-                            }`}
-                          />
-                        </div>
+                        <span
+                          className={cn(
+                            "h-3.5 w-3.5 flex-shrink-0 rounded-full border-2 transition",
+                            selectedPreset === world.id
+                              ? "border-gold bg-gold"
+                              : "border-border"
+                          )}
+                        />
                       </div>
                     </button>
                     {selectedPreset === world.id && (
@@ -394,7 +376,7 @@ function LandingContent() {
                             expandedPreset === world.id ? null : world.id
                           )
                         }
-                        className="mt-1 ml-1 text-xs text-accent hover:underline"
+                        className="mt-1 ml-1 cursor-pointer text-xs text-accent transition hover:text-accent-light hover:underline"
                       >
                         {expandedPreset === world.id
                           ? "Hide details"
@@ -402,7 +384,7 @@ function LandingContent() {
                       </button>
                     )}
                     {expandedPreset === world.id && (
-                      <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-bg p-3 text-xs text-text-muted whitespace-pre-wrap">
+                      <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-bg-elevated p-3 text-xs leading-relaxed text-text-muted whitespace-pre-wrap">
                         {world.setting}
                       </div>
                     )}
@@ -418,14 +400,14 @@ function LandingContent() {
                 onChange={(e) => setCustomWorldText(e.target.value)}
                 placeholder={`Describe your world setting...\n\nInclude key locations, factions, tone, and any rules or themes you want the DM to follow. Markdown is supported.`}
                 rows={8}
-                className="w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+                className={cn(controlClass, "resize-none")}
               />
             )}
 
             {/* Custom upload */}
             {worldSource === "custom-upload" && (
               <div className="space-y-3">
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-bg px-4 py-6 transition hover:border-accent">
+                <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-bg-elevated px-4 py-6 transition hover:border-accent">
                   <svg
                     className="mb-2 h-8 w-8 text-text-muted"
                     fill="none"
@@ -458,12 +440,12 @@ function LandingContent() {
                       </span>
                       <button
                         onClick={() => setCustomWorldText("")}
-                        className="text-xs text-accent hover:underline"
+                        className="cursor-pointer text-xs text-accent transition hover:text-accent-light hover:underline"
                       >
                         Clear
                       </button>
                     </div>
-                    <div className="max-h-32 overflow-y-auto rounded-lg border border-border bg-bg p-3 text-xs text-text-muted whitespace-pre-wrap">
+                    <div className="max-h-32 overflow-y-auto rounded-lg border border-border bg-bg-elevated p-3 text-xs text-text-muted whitespace-pre-wrap">
                       {customWorldText}
                     </div>
                   </div>
@@ -471,22 +453,24 @@ function LandingContent() {
               </div>
             )}
 
-            <button
+            <Button
               onClick={handleCreate}
-              disabled={loading || !selectedCharId}
-              className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
+              disabled={!selectedCharId}
+              loading={loading}
+              fullWidth
             >
               {loading ? "Creating..." : "Create New Session"}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => {
                 setMode("idle");
                 setError("");
               }}
-              className="w-full text-sm text-text-muted hover:text-text"
+              variant="ghost"
+              fullWidth
             >
               Back
-            </button>
+            </Button>
           </div>
         )}
 
@@ -495,37 +479,38 @@ function LandingContent() {
           <div className="space-y-3">
             <input
               type="text"
-              placeholder="Join Code (6 characters)"
+              placeholder="JOIN CODE"
               maxLength={6}
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-center text-lg font-mono tracking-widest text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              className={cn(
+                controlClass,
+                "tabular text-center text-2xl tracking-[0.4em]"
+              )}
             />
-            <button
+            <Button
               onClick={handleJoin}
-              disabled={loading || !selectedCharId}
-              className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
+              disabled={!selectedCharId}
+              loading={loading}
+              fullWidth
             >
               {loading ? "Joining..." : "Join Session"}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => {
                 setMode("idle");
                 setError("");
               }}
-              className="w-full text-sm text-text-muted hover:text-text"
+              variant="ghost"
+              fullWidth
             >
               Back
-            </button>
+            </Button>
           </div>
         )}
 
-        {error && (
-          <p className="mt-4 rounded-lg bg-accent-dark/20 px-3 py-2 text-center text-sm text-accent">
-            {error}
-          </p>
-        )}
-      </div>
+        {error && <Alert className="mt-4">{error}</Alert>}
+      </Panel>
     </main>
   );
 }

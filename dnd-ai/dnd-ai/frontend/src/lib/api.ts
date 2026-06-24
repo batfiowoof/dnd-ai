@@ -46,8 +46,13 @@ export async function createSession(
   return handleResponse(res);
 }
 
-export async function getSessionByCode(code: string): Promise<GameStateDto> {
-  const res = await fetch(`${BASE_URL}/sessions/${code}`);
+export async function getSessionByCode(
+  token: string,
+  code: string
+): Promise<GameStateDto> {
+  const res = await fetch(`${BASE_URL}/sessions/${code}`, {
+    headers: getAuthHeaders(token),
+  });
   return handleResponse(res);
 }
 
@@ -75,22 +80,33 @@ export async function startSession(
   return handleResponse(res);
 }
 
-export async function getGameState(sessionId: string): Promise<GameStateDto> {
-  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/state`);
+export async function getGameState(
+  token: string,
+  sessionId: string
+): Promise<GameStateDto> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/state`, {
+    headers: getAuthHeaders(token),
+  });
   return handleResponse(res);
 }
 
 export async function getSessionHistory(
+  token: string,
   sessionId: string
 ): Promise<TurnEventDto[]> {
-  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/history`);
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/history`, {
+    headers: getAuthHeaders(token),
+  });
   return handleResponse(res);
 }
 
 export async function getSessionPlayers(
+  token: string,
   sessionId: string
 ): Promise<PlayerDto[]> {
-  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/players`);
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/players`, {
+    headers: getAuthHeaders(token),
+  });
   return handleResponse(res);
 }
 

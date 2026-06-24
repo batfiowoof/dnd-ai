@@ -4,19 +4,15 @@ import { useEffect, useState, useRef, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
-import type {
-  DmResponseDto,
-  GameStateDto,
-  PlayerDto,
-  TurnEventDto,
-} from "@/types";
+import type { DmResponseDto, GameStateDto } from "@/types";
 import {
-  getGameState,
-  getSessionHistory,
-  getSessionPlayers,
-  startSession,
-  kickPlayer,
-} from "@/lib/api";
+  useGameState,
+  useSessionHistory,
+  useSessionPlayers,
+  useStartSession,
+  useKickPlayer,
+} from "@/hooks/useSessionQueries";
+import { useSessionStore } from "@/store/sessionStore";
 import {
   createStompClient,
   subscribeToSession,
@@ -24,15 +20,7 @@ import {
   sendAction,
 } from "@/lib/websocket";
 import type { Client } from "@stomp/stompjs";
-
-/* ─── Chat log entry ─────────────────────────────────────────── */
-interface LogEntry {
-  id: string;
-  type: "action" | "dm" | "system";
-  playerName?: string;
-  text: string;
-  turnNumber: number;
-}
+import { Button, Panel, Brand, Alert, D20Mark, cn } from "@/components/ui";
 
 /* ════════════════════════════════════════════════════════════════
    Combined Lobby + Game page
@@ -57,27 +45,37 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const { username, getToken } = useAuth();
 
-  /* ── shared state ───────────────────────────────────────────── */
-  const [players, setPlayers] = useState<PlayerDto[]>([]);
-  const [status, setStatus] = useState<string>("WAITING");
-  const [createdBy, setCreatedBy] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [connected, setConnected] = useState(false);
+  /* ── live game state (Zustand — seeded by React Query + WebSocket) ── */
+  const players = useSessionStore((s) => s.players);
+  const status = useSessionStore((s) => s.status);
+  const createdBy = useSessionStore((s) => s.createdBy);
+  const error = useSessionStore((s) => s.error);
+  const connected = useSessionStore((s) => s.connected);
+  const logs = useSessionStore((s) => s.logs);
+  const currentTurnPlayerId = useSessionStore((s) => s.currentTurnPlayerId);
+  const turnNumber = useSessionStore((s) => s.turnNumber);
+  const setError = useSessionStore((s) => s.setError);
+  const hydrateFromGameState = useSessionStore((s) => s.hydrateFromGameState);
+  const seedLogsFromHistory = useSessionStore((s) => s.seedLogsFromHistory);
+  const setPlayers = useSessionStore((s) => s.setPlayers);
 
-  /* ── lobby state ────────────────────────────────────────────── */
-  const [loading, setLoading] = useState(false);
+  /* ── purely-local UI state ──────────────────────────────────── */
   const [copied, setCopied] = useState(false);
-
-  /* ── game state ─────────────────────────────────────────────── */
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [currentTurnPlayerId, setCurrentTurnPlayerId] = useState<string | null>(
-    null
-  );
-  const [turnNumber, setTurnNumber] = useState(0);
   const [actionText, setActionText] = useState("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Client | null>(null);
+
+  /* ── mutations ──────────────────────────────────────────────── */
+  const startMutation = useStartSession();
+  const kickMutation = useKickPlayer();
+  const loading = startMutation.isPending;
+
+  /* ── reset per-session live state on mount / session change ─── */
+  useEffect(() => {
+    useSessionStore.getState().reset();
+    return () => useSessionStore.getState().reset();
+  }, [sessionId]);
 
   const playerId =
     typeof window !== "undefined"
@@ -102,46 +100,39 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     }, 50);
   }, []);
 
-  /* ── load initial state ─────────────────────────────────────── */
-  useEffect(() => {
-    async function loadInitial() {
-      try {
-        const state = await getGameState(sessionId);
-        setPlayers(state.players);
-        setStatus(state.status);
-        setCreatedBy(state.createdBy);
-        setCurrentTurnPlayerId(state.currentTurnPlayerId);
-        setTurnNumber(state.turnNumber);
+  /* ── load initial state (React Query → seed Zustand store) ──── */
+  const gameStateQuery = useGameState(sessionId);
+  // Whether the session was already underway at load time — drives the
+  // one-shot history fetch. Derived from the seed query (not live status) so a
+  // WebSocket GAME_STARTED transition can't re-trigger it and clobber WS logs.
+  const loadedStatus = gameStateQuery.data?.status;
+  const historyQuery = useSessionHistory(
+    sessionId,
+    loadedStatus === "ACTIVE" || loadedStatus === "FINISHED"
+  );
 
-        if (state.status === "ACTIVE" || state.status === "FINISHED") {
-          const history = await getSessionHistory(sessionId);
-          const entries: LogEntry[] = [];
-          history.forEach((h: TurnEventDto) => {
-            entries.push({
-              id: `${h.id}-action`,
-              type: "action",
-              playerName: h.playerName,
-              text: h.action,
-              turnNumber: h.turnNumber,
-            });
-            if (h.dmResponse) {
-              entries.push({
-                id: `${h.id}-dm`,
-                type: "dm",
-                text: h.dmResponse,
-                turnNumber: h.turnNumber,
-              });
-            }
-          });
-          setLogs(entries);
-          scrollToBottom();
-        }
-      } catch {
-        setError("Failed to load session");
-      }
+  useEffect(() => {
+    if (gameStateQuery.data) hydrateFromGameState(gameStateQuery.data);
+  }, [gameStateQuery.data, hydrateFromGameState]);
+
+  useEffect(() => {
+    if (gameStateQuery.isError) setError("Failed to load session");
+  }, [gameStateQuery.isError, setError]);
+
+  useEffect(() => {
+    if (historyQuery.data) {
+      seedLogsFromHistory(historyQuery.data);
+      scrollToBottom();
     }
-    loadInitial();
-  }, [sessionId, scrollToBottom]);
+  }, [historyQuery.data, seedLogsFromHistory, scrollToBottom]);
+
+  /* ── players poll (lobby WAITING only) → seed store ─────────── */
+  const playersQuery = useSessionPlayers(sessionId, {
+    poll: status === "WAITING",
+  });
+  useEffect(() => {
+    if (playersQuery.data) setPlayers(playersQuery.data);
+  }, [playersQuery.data, setPlayers]);
 
   /* ── WebSocket ──────────────────────────────────────────────── */
   useEffect(() => {
@@ -156,106 +147,56 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
       client = createStompClient(
         token,
       () => {
-        setConnected(true);
+        const store = useSessionStore.getState();
+        store.setConnected(true);
 
         subscribeToSession(client!, sessionId, (msg: unknown) => {
           const data = msg as Record<string, unknown>;
+          const s = useSessionStore.getState();
 
           /* DM response (has dmNarration field) */
           if ("dmNarration" in data) {
             const dm = data as unknown as DmResponseDto;
-            setLogs((prev) => {
-              const actionId = `ws-action-${dm.turnNumber}-${dm.playerId}`;
-              const dmId = `ws-dm-${dm.turnNumber}-${dm.playerId}`;
-              if (prev.some((e) => e.id === dmId)) return prev;
-
-              const playerName =
-                (data as Record<string, unknown>).playerName as
-                  | string
-                  | undefined;
-
-              const newEntries: LogEntry[] = [];
-              if (!prev.some((e) => e.id === actionId)) {
-                newEntries.push({
-                  id: actionId,
-                  type: "action",
-                  playerName: playerName ?? "Player",
-                  text: dm.playerAction,
-                  turnNumber: dm.turnNumber,
-                });
-              }
-              newEntries.push({
-                id: dmId,
-                type: "dm",
-                text: dm.dmNarration,
-                turnNumber: dm.turnNumber,
-              });
-              return [...prev, ...newEntries];
-            });
-            setCurrentTurnPlayerId(dm.nextTurnPlayerId);
-            setTurnNumber(dm.turnNumber + 1);
+            const playerName = data.playerName as string | undefined;
+            s.applyDmResponse(dm, playerName);
             scrollToBottom();
             return;
           }
 
           /* Session lifecycle events */
           if (data.type === "TURN_CHANGE") {
-            setCurrentTurnPlayerId(data.nextPlayerId as string);
-            setTurnNumber(Number(data.turnNumber));
+            s.setTurnChange(
+              data.nextPlayerId as string,
+              Number(data.turnNumber)
+            );
           }
 
           if (data.type === "PLAYER_JOINED" || data.type === "PLAYER_LEFT") {
             const gs = data.gameState as GameStateDto | undefined;
-            if (gs) {
-              setPlayers(gs.players);
-              setStatus(gs.status);
-              setCreatedBy(gs.createdBy);
-            }
+            if (gs) s.applyPlayerEvent(gs);
           }
 
           if (data.type === "GAME_STARTED") {
             const gs = data.gameState as GameStateDto | undefined;
             if (gs) {
-              setPlayers(gs.players);
-              setCurrentTurnPlayerId(gs.currentTurnPlayerId);
-              setTurnNumber(gs.turnNumber);
-              setCreatedBy(gs.createdBy);
-              setStatus("ACTIVE");
-              setLogs((prev) => [
-                ...prev,
-                {
-                  id: "system-start",
-                  type: "system",
-                  text: "The adventure begins... The Dungeon Master awaits your actions.",
-                  turnNumber: 0,
-                },
-              ]);
+              s.applyGameStarted(gs);
               scrollToBottom();
             }
           }
 
           if (data.type === "GAME_ENDED") {
-            setStatus("FINISHED");
-            setLogs((prev) => [
-              ...prev,
-              {
-                id: "system-end",
-                type: "system",
-                text: "The adventure has come to an end.",
-                turnNumber: turnNumber,
-              },
-            ]);
+            s.applyGameEnded();
             scrollToBottom();
           }
         });
 
         subscribeToErrors(client!, (err) => {
-          setError(err);
-          setTimeout(() => setError(""), 5000);
+          useSessionStore.getState().setError(err);
+          setTimeout(() => useSessionStore.getState().setError(""), 5000);
         });
       },
       () => {
-        setConnected(false);
+        useSessionStore.getState().setConnected(false);
       }
     );
 
@@ -271,54 +212,26 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId, username, getToken, scrollToBottom]);
 
-  /* ── polling fallback (lobby only) ──────────────────────────── */
-  useEffect(() => {
-    if (status !== "WAITING") return;
-    const interval = setInterval(async () => {
-      try {
-        const list = await getSessionPlayers(sessionId);
-        setPlayers(list);
-      } catch {
-        /* ignore */
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [sessionId, status]);
-
   /* ── lobby actions ──────────────────────────────────────────── */
   async function handleStart() {
     if (!username) return;
-    setLoading(true);
     setError("");
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      const gs = await startSession(token, sessionId);
-      setStatus(gs.status);
-      setPlayers(gs.players);
-      setCurrentTurnPlayerId(gs.currentTurnPlayerId);
-      setTurnNumber(gs.turnNumber);
+      const gs = await startMutation.mutateAsync(sessionId);
+      hydrateFromGameState(gs);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to start session");
-    } finally {
-      setLoading(false);
     }
   }
 
   async function handleKick(targetPlayerId: string) {
     if (!username) return;
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      await kickPlayer(token, sessionId, targetPlayerId);
-      // The player list will update via WebSocket PLAYER_LEFT event,
-      // but also refetch to be safe
-      const list = await getSessionPlayers(sessionId);
-      setPlayers(list);
+      // Player list refreshes via the WebSocket PLAYER_LEFT event and the
+      // players-query invalidation in the mutation's onSuccess.
+      await kickMutation.mutateAsync({ sessionId, playerId: targetPlayerId });
     } catch (e: unknown) {
-      setError(
-        e instanceof Error ? e.message : "Failed to remove player"
-      );
+      setError(e instanceof Error ? e.message : "Failed to remove player");
       setTimeout(() => setError(""), 5000);
     }
   }
@@ -337,16 +250,13 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
     sendAction(clientRef.current, sessionId, actionText.trim());
 
-    setLogs((prev) => [
-      ...prev,
-      {
-        id: `local-${Date.now()}`,
-        type: "action",
-        playerName: username ?? "You",
-        text: actionText.trim(),
-        turnNumber,
-      },
-    ]);
+    useSessionStore.getState().addLog({
+      id: `local-${Date.now()}`,
+      type: "action",
+      playerName: username ?? "You",
+      text: actionText.trim(),
+      turnNumber,
+    });
     setActionText("");
     scrollToBottom();
   }
@@ -361,51 +271,52 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
      ════════════════════════════════════════════════════════════ */
   if (status === "WAITING") {
     return (
-      <main className="flex min-h-screen items-center justify-center p-4">
-        <div className="w-full max-w-lg rounded-xl border border-border-accent bg-surface p-8">
-          <h1 className="mb-6 text-center text-2xl font-bold text-accent">
+      <main className="flex min-h-dvh items-center justify-center p-4">
+        <Panel corners className="w-full max-w-lg p-8 animate-rise">
+          <h1 className="mb-1 text-center text-2xl font-bold text-accent">
             Game Lobby
           </h1>
+          <p className="mb-6 text-center text-xs uppercase tracking-[0.25em] text-gold">
+            Gather your party
+          </p>
 
           {/* Join Code */}
           {joinCode && (
             <div className="mb-6 text-center">
-              <p className="mb-1 text-xs uppercase tracking-widest text-text-muted">
+              <p className="mb-2 text-xs uppercase tracking-widest text-text-muted">
                 Join Code
               </p>
               <button
                 onClick={copyCode}
-                className="inline-block rounded-lg bg-bg px-6 py-3 font-mono text-3xl font-bold tracking-[0.3em] text-accent transition hover:bg-surface-light"
+                className="tabular inline-block cursor-pointer rounded-lg border border-border-accent bg-bg-elevated px-6 py-3 text-3xl font-bold tracking-[0.3em] text-accent transition hover:border-accent hover:shadow-[0_0_24px_var(--color-accent-glow)]"
               >
                 {joinCode}
               </button>
-              <p className="mt-1 text-xs text-text-muted">
+              <p className="mt-2 text-xs text-text-muted">
                 {copied ? "Copied!" : "Click to copy"}
               </p>
             </div>
           )}
 
+          <hr className="ornament mb-6" />
+
           {/* Session info */}
           <div className="mb-6 text-center">
             <p className="text-xs text-text-muted">
-              Session: {sessionId.slice(0, 8)}...
-            </p>
-            <p className="text-xs text-text-muted">
-              Status: <span className="text-accent">{status}</span>
+              Session: <span className="tabular">{sessionId.slice(0, 8)}...</span>
             </p>
             {createdBy && (
               <p className="text-xs text-text-muted">
                 Created by: <span className="text-text">{createdBy}</span>
-                {isCreator && (
-                  <span className="ml-1 text-accent">(you)</span>
-                )}
+                {isCreator && <span className="ml-1 text-gold">(you)</span>}
               </p>
             )}
             <div className="mt-1 flex items-center justify-center gap-2">
               <span
-                className={`h-2 w-2 rounded-full ${
-                  connected ? "bg-green-500" : "bg-red-500"
-                }`}
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  connected ? "bg-success" : "bg-danger"
+                )}
               />
               <span className="text-[10px] text-text-muted">
                 {connected ? "Connected" : "Connecting..."}
@@ -422,7 +333,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               {humanPlayers.map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between rounded-lg border border-border bg-bg px-4 py-2.5"
+                  className="flex items-center justify-between rounded-lg border border-border bg-bg-elevated px-4 py-2.5"
                 >
                   <div>
                     <span className="text-sm font-medium">{p.username}</span>
@@ -430,7 +341,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                       {p.characterName}
                     </span>
                     {p.username === createdBy && (
-                      <span className="ml-2 rounded bg-accent-dark/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-accent">
+                      <span className="ml-2 rounded bg-gold-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-gold">
                         Host
                       </span>
                     )}
@@ -440,7 +351,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     p.role === "PLAYER" && (
                       <button
                         onClick={() => handleKick(p.id)}
-                        className="rounded px-2 py-1 text-xs text-text-muted transition hover:bg-accent-dark/30 hover:text-accent"
+                        className="cursor-pointer rounded px-2 py-1 text-xs text-text-muted transition hover:bg-accent-dark/30 hover:text-accent"
                         title="Remove player"
                       >
                         Kick
@@ -457,8 +368,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           </div>
 
           {/* AI DM indicator */}
-          <div className="mb-6 flex items-center gap-2 rounded-lg border border-border bg-bg px-4 py-2.5">
-            <span className="text-accent">&#9876;</span>
+          <div className="mb-6 flex items-center gap-3 rounded-lg border border-border-accent bg-accent-glow px-4 py-2.5">
+            <D20Mark className="h-5 w-5 flex-shrink-0 text-accent" />
             <div>
               <span className="text-sm font-medium text-accent">
                 AI Dungeon Master
@@ -471,13 +382,15 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
           {/* Start Button — only the creator can start */}
           {isCreator && (
-            <button
+            <Button
               onClick={handleStart}
-              disabled={loading || humanPlayers.length < 1}
-              className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
+              disabled={humanPlayers.length < 1}
+              loading={loading}
+              size="lg"
+              fullWidth
             >
               {loading ? "Starting..." : "Start Adventure"}
-            </button>
+            </Button>
           )}
 
           {!isCreator && (
@@ -486,12 +399,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             </p>
           )}
 
-          {error && (
-            <p className="mt-4 rounded-lg bg-accent-dark/20 px-3 py-2 text-center text-sm text-accent">
-              {error}
-            </p>
-          )}
-        </div>
+          {error && <Alert className="mt-4">{error}</Alert>}
+        </Panel>
       </main>
     );
   }
@@ -500,35 +409,37 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
      RENDER — ACTIVE / FINISHED (chat room)
      ════════════════════════════════════════════════════════════ */
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
+      <header className="flex items-center justify-between border-b border-border bg-surface/80 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold text-accent">D&D AI</h1>
+          <Brand size="sm" />
           {status === "FINISHED" && (
-            <span className="rounded bg-accent-dark/30 px-2 py-0.5 text-[10px] uppercase tracking-wider text-accent">
+            <span className="rounded bg-gold-muted px-2 py-0.5 text-[10px] uppercase tracking-wider text-gold">
               Finished
             </span>
           )}
         </div>
         <div className="flex items-center gap-4">
           <span className="text-xs text-text-muted">
-            Turn {turnNumber}
+            <span className="tabular text-gold">Turn {turnNumber}</span>
             {currentPlayer && (
               <> &middot; {currentPlayer.characterName}&apos;s turn</>
             )}
           </span>
           <span
-            className={`h-2 w-2 rounded-full ${
-              connected ? "bg-green-500" : "bg-red-500"
-            }`}
+            className={cn(
+              "h-2 w-2 rounded-full",
+              connected ? "bg-success" : "bg-danger"
+            )}
+            title={connected ? "Connected" : "Disconnected"}
           />
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar — players */}
-        <aside className="hidden w-52 flex-shrink-0 border-r border-border bg-surface p-4 md:flex md:flex-col">
+        <aside className="hidden w-52 flex-shrink-0 border-r border-border bg-surface/60 p-4 md:flex md:flex-col">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Players
           </h2>
@@ -536,11 +447,12 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             {humanPlayers.map((p) => (
               <div
                 key={p.id}
-                className={`rounded px-2 py-1.5 text-xs ${
+                className={cn(
+                  "rounded-lg px-2.5 py-1.5 text-xs transition",
                   p.id === currentTurnPlayerId
-                    ? "border border-accent bg-accent-glow text-accent"
-                    : "text-text-muted"
-                }`}
+                    ? "border border-gold/60 bg-gold-muted text-gold"
+                    : "border border-transparent text-text-muted"
+                )}
               >
                 <div className="font-medium">{p.characterName}</div>
                 <div className="text-[10px] opacity-60">
@@ -554,7 +466,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           {/* AI DM indicator in sidebar */}
           <div className="mt-auto border-t border-border pt-3">
             <div className="flex items-center gap-2 text-xs text-accent">
-              <span>&#9876;</span>
+              <D20Mark className="h-4 w-4" />
               <span className="font-medium">Dungeon Master</span>
             </div>
             <div className="text-[10px] text-text-muted">AI &middot; Ollama</div>
@@ -569,18 +481,19 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             className="flex-1 overflow-y-auto p-4 space-y-3"
           >
             {logs.map((entry) => (
-              <div key={entry.id}>
+              <div key={entry.id} className="animate-rise">
                 {entry.type === "action" && (
                   <div className="flex gap-2">
-                    <span className="text-xs font-semibold text-accent">
+                    <span className="text-xs font-semibold text-gold">
                       {entry.playerName}:
                     </span>
                     <span className="text-sm text-text">{entry.text}</span>
                   </div>
                 )}
                 {entry.type === "dm" && (
-                  <div className="ml-4 rounded-lg border border-border-accent bg-accent-glow px-4 py-3">
-                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-accent">
+                  <div className="ml-4 rounded-lg border border-border-accent bg-accent-glow px-4 py-3 shadow-[0_0_24px_var(--color-accent-glow)]">
+                    <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+                      <D20Mark className="h-3.5 w-3.5" />
                       Dungeon Master
                     </span>
                     <p className="text-sm leading-relaxed text-text">
@@ -604,7 +517,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
           {/* Error */}
           {error && (
-            <div className="mx-4 mb-2 rounded-lg bg-accent-dark/20 px-3 py-2 text-center text-xs text-accent">
+            <div className="mx-4 mb-2 rounded-lg border border-accent-dark/40 bg-accent-dark/20 px-3 py-2 text-center text-xs text-accent-light">
               {error}
             </div>
           )}
@@ -613,7 +526,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           {status === "ACTIVE" && (
             <form
               onSubmit={handleSubmit}
-              className="border-t border-border bg-surface p-4"
+              className="border-t border-border bg-surface/80 p-4 backdrop-blur-sm"
             >
               <div className="flex gap-2">
                 <input
@@ -626,18 +539,18 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                       : "Waiting for your turn..."
                   }
                   disabled={!isMyTurn || !connected}
-                  className="flex-1 rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-40"
+                  className="flex-1 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-40"
                 />
-                <button
+                <Button
                   type="submit"
                   disabled={!isMyTurn || !connected || !actionText.trim()}
-                  className="rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-40"
+                  size="lg"
                 >
                   Send
-                </button>
+                </Button>
               </div>
               {isMyTurn && (
-                <p className="mt-1 text-xs text-accent">
+                <p className="mt-1.5 text-xs font-medium text-gold">
                   It&apos;s your turn!
                 </p>
               )}
@@ -650,12 +563,13 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               <p className="text-sm text-text-muted">
                 This adventure has ended.
               </p>
-              <button
+              <Button
                 onClick={() => router.push("/")}
-                className="mt-2 rounded-lg border border-accent px-4 py-2 text-sm text-accent transition hover:bg-accent hover:text-white"
+                variant="outline"
+                className="mt-2"
               >
                 New Adventure
-              </button>
+              </Button>
             </div>
           )}
         </div>

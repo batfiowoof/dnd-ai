@@ -4,8 +4,7 @@ import { useState, useEffect, useMemo, use } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
-import { getCharacter, updateCharacter } from "@/lib/api";
-import type { CharacterDto } from "@/types";
+import { useCharacter, useUpdateCharacter } from "@/hooks/useCharacterQueries";
 import {
   RACES,
   CLASSES,
@@ -18,6 +17,7 @@ import {
   calculateArmorClass,
   type AbilityName,
 } from "@/lib/dnd5e";
+import { Button, Alert, Spinner } from "@/components/ui";
 
 const ABILITY_LABELS: Record<AbilityName, string> = {
   strength: "STR",
@@ -43,10 +43,12 @@ export default function CharacterEditPage({
 
 function EditForm({ characterId }: { characterId: string }) {
   const router = useRouter();
-  const { username, getToken } = useAuth();
+  const { username } = useAuth();
+  const characterQuery = useCharacter(characterId, !!username);
+  const updateMutation = useUpdateCharacter();
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const loading = characterQuery.isLoading;
+  const saving = updateMutation.isPending;
   const [error, setError] = useState("");
 
   const [name, setName] = useState("");
@@ -65,33 +67,30 @@ function EditForm({ characterId }: { characterId: string }) {
     charisma: 10,
   });
 
+  // Seed the editable form once the character loads.
   useEffect(() => {
-    if (!username) return;
-    getToken()
-      .then((t) => {
-        if (!t) throw new Error("Not authenticated");
-        return getCharacter(t, characterId);
-      })
-      .then((c: CharacterDto) => {
-        setName(c.name);
-        setRace(c.race);
-        setCharacterClass(c.characterClass);
-        setLevel(c.level);
-        setBackground(c.background ?? "");
-        setAlignment(c.alignment ?? "");
-        setBackstory(c.backstory ?? "");
-        setAbilities({
-          strength: c.strength,
-          dexterity: c.dexterity,
-          constitution: c.constitution,
-          intelligence: c.intelligence,
-          wisdom: c.wisdom,
-          charisma: c.charisma,
-        });
-      })
-      .catch(() => setError("Failed to load character"))
-      .finally(() => setLoading(false));
-  }, [username, characterId, getToken]);
+    const c = characterQuery.data;
+    if (!c) return;
+    setName(c.name);
+    setRace(c.race);
+    setCharacterClass(c.characterClass);
+    setLevel(c.level);
+    setBackground(c.background ?? "");
+    setAlignment(c.alignment ?? "");
+    setBackstory(c.backstory ?? "");
+    setAbilities({
+      strength: c.strength,
+      dexterity: c.dexterity,
+      constitution: c.constitution,
+      intelligence: c.intelligence,
+      wisdom: c.wisdom,
+      charisma: c.charisma,
+    });
+  }, [characterQuery.data]);
+
+  useEffect(() => {
+    if (characterQuery.isError) setError("Failed to load character");
+  }, [characterQuery.isError]);
 
   const selectedClass = CLASSES.find((c) => c.name === characterClass);
 
@@ -110,63 +109,68 @@ function EditForm({ characterId }: { characterId: string }) {
 
   async function handleSave() {
     if (!username || !name.trim() || !race || !characterClass) return;
-    setSaving(true);
     setError("");
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      await updateCharacter(token, characterId, {
-        name: name.trim(),
-        race,
-        characterClass,
-        level,
-        background,
-        alignment,
-        strength: abilities.strength,
-        dexterity: abilities.dexterity,
-        constitution: abilities.constitution,
-        intelligence: abilities.intelligence,
-        wisdom: abilities.wisdom,
-        charisma: abilities.charisma,
-        hitPoints: derivedHP,
-        armorClass: derivedAC,
-        speed: derivedSpeed,
-        equipment: selectedClass?.equipment ?? [],
-        proficiencies: selectedClass?.proficiencies ?? [],
-        features: selectedRace?.traits ?? [],
-        backstory,
+      await updateMutation.mutateAsync({
+        id: characterId,
+        body: {
+          name: name.trim(),
+          race,
+          characterClass,
+          level,
+          background,
+          alignment,
+          strength: abilities.strength,
+          dexterity: abilities.dexterity,
+          constitution: abilities.constitution,
+          intelligence: abilities.intelligence,
+          wisdom: abilities.wisdom,
+          charisma: abilities.charisma,
+          hitPoints: derivedHP,
+          armorClass: derivedAC,
+          speed: derivedSpeed,
+          equipment: selectedClass?.equipment ?? [],
+          proficiencies: selectedClass?.proficiencies ?? [],
+          features: selectedRace?.traits ?? [],
+          backstory,
+        },
       });
       router.push("/characters");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save character");
-    } finally {
-      setSaving(false);
     }
   }
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-text-muted">Loading character...</p>
+      <main className="flex min-h-dvh items-center justify-center">
+        <span className="inline-flex items-center gap-3 text-text-muted">
+          <Spinner className="text-accent" /> Loading character...
+        </span>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen p-4">
+    <main className="min-h-dvh p-4">
       <div className="mx-auto max-w-2xl">
         <div className="mb-6 flex items-center justify-between">
           <button
             onClick={() => router.push("/characters")}
-            className="text-sm text-text-muted hover:text-accent"
+            className="cursor-pointer text-sm text-text-muted transition hover:text-accent"
           >
             &larr; Back to Characters
           </button>
-          <h1 className="text-2xl font-bold text-accent">Edit Character</h1>
+          <h1
+            className="text-2xl font-bold text-accent"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Edit Character
+          </h1>
           <div className="w-24" />
         </div>
 
-        <div className="rounded-xl border border-border-accent bg-surface p-6 space-y-5">
+        <div className="rounded-xl border border-border-accent bg-surface p-6 space-y-5 panel-corners">
           {/* Name */}
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -176,7 +180,7 @@ function EditForm({ characterId }: { characterId: string }) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             />
           </div>
 
@@ -189,7 +193,7 @@ function EditForm({ characterId }: { characterId: string }) {
               <select
                 value={race}
                 onChange={(e) => setRace(e.target.value)}
-                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text"
+                className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
                 {RACES.map((r) => (
@@ -206,7 +210,7 @@ function EditForm({ characterId }: { characterId: string }) {
               <select
                 value={characterClass}
                 onChange={(e) => setCharacterClass(e.target.value)}
-                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text"
+                className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
                 {CLASSES.map((c) => (
@@ -229,7 +233,7 @@ function EditForm({ characterId }: { characterId: string }) {
               max={20}
               value={level}
               onChange={(e) => setLevel(Number(e.target.value))}
-              className="w-24 rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="w-24 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             />
           </div>
 
@@ -242,7 +246,7 @@ function EditForm({ characterId }: { characterId: string }) {
               <select
                 value={background}
                 onChange={(e) => setBackground(e.target.value)}
-                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text"
+                className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
                 {BACKGROUNDS.map((b) => (
@@ -259,7 +263,7 @@ function EditForm({ characterId }: { characterId: string }) {
               <select
                 value={alignment}
                 onChange={(e) => setAlignment(e.target.value)}
-                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text"
+                className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
                 {ALIGNMENTS.map((a) => (
@@ -283,7 +287,7 @@ function EditForm({ characterId }: { characterId: string }) {
                 return (
                   <div
                     key={a}
-                    className="rounded-lg border border-border bg-bg p-3 text-center"
+                    className="rounded-lg border border-border bg-bg-elevated p-3 text-center"
                   >
                     <div className="text-xs font-bold text-accent">
                       {ABILITY_LABELS[a]}
@@ -311,17 +315,17 @@ function EditForm({ characterId }: { characterId: string }) {
           </div>
 
           {/* Combat stats preview */}
-          <div className="flex justify-around rounded-lg border border-border bg-bg p-3 text-center">
+          <div className="flex justify-around rounded-lg border border-border bg-bg-elevated p-3 text-center">
             <div>
-              <div className="text-lg font-bold text-accent">{derivedHP}</div>
+              <div className="tabular text-lg font-bold text-gold">{derivedHP}</div>
               <div className="text-[10px] text-text-muted">HP</div>
             </div>
             <div>
-              <div className="text-lg font-bold text-accent">{derivedAC}</div>
+              <div className="tabular text-lg font-bold text-gold">{derivedAC}</div>
               <div className="text-[10px] text-text-muted">AC</div>
             </div>
             <div>
-              <div className="text-lg font-bold text-accent">
+              <div className="tabular text-lg font-bold text-gold">
                 {derivedSpeed}
               </div>
               <div className="text-[10px] text-text-muted">Speed</div>
@@ -337,31 +341,29 @@ function EditForm({ characterId }: { characterId: string }) {
               value={backstory}
               onChange={(e) => setBackstory(e.target.value)}
               rows={4}
-              className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             />
           </div>
 
           {/* Error & Actions */}
-          {error && (
-            <p className="rounded-lg bg-accent-dark/20 px-3 py-2 text-center text-sm text-accent">
-              {error}
-            </p>
-          )}
+          {error && <Alert>{error}</Alert>}
 
           <div className="flex gap-3">
-            <button
+            <Button
               onClick={() => router.push("/characters")}
-              className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm text-text-muted transition hover:text-text"
+              variant="ghost"
+              fullWidth
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleSave}
-              disabled={saving || !name.trim() || !race || !characterClass}
-              className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
+              disabled={!name.trim() || !race || !characterClass}
+              loading={saving}
+              fullWidth
             >
               {saving ? "Saving..." : "Save Changes"}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

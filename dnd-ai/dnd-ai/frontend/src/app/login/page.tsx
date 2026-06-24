@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { Button, Panel, Brand, Divider, Spinner } from "@/components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,8 +17,11 @@ export default function LoginPage() {
 
   if (isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-4">
-        <p className="text-text-muted">Loading...</p>
+      <main className="flex min-h-dvh items-center justify-center p-4">
+        <span className="inline-flex items-center gap-3 text-text-muted">
+          <Spinner className="text-accent" />
+          Loading...
+        </span>
       </main>
     );
   }
@@ -27,35 +31,39 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-xl border border-border-accent bg-surface p-8 glow">
-        <h1 className="mb-2 text-center text-4xl font-bold tracking-wider text-accent">
-          D&D AI
-        </h1>
-        <p className="mb-8 text-center text-sm text-text-muted">
+    <main className="flex min-h-dvh items-center justify-center p-4">
+      <Panel glow corners className="w-full max-w-md p-8 animate-rise">
+        <div className="mb-1 flex justify-center">
+          <Brand size="lg" />
+        </div>
+        <p className="text-center text-sm uppercase tracking-[0.25em] text-gold">
           AI Dungeon Master
         </p>
 
-        <div className="space-y-3">
-          <button
-            onClick={() => login()}
-            className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition hover:bg-accent-dark"
-          >
-            Sign In
-          </button>
+        <Divider />
 
-          <button
+        <p className="mb-6 text-center text-sm leading-relaxed text-text-muted">
+          Gather your party, choose your world, and let an AI weave the tale.
+        </p>
+
+        <div className="space-y-3">
+          <Button onClick={() => login()} size="lg" fullWidth>
+            Sign In
+          </Button>
+          <Button
             onClick={() => register()}
-            className="w-full rounded-lg border border-accent px-4 py-3 text-sm font-semibold text-accent transition hover:bg-accent hover:text-white"
+            variant="outline"
+            size="lg"
+            fullWidth
           >
             Create Account
-          </button>
+          </Button>
         </div>
 
         <p className="mt-6 text-center text-xs text-text-muted">
-          Your characters and sessions will be saved to your account.
+          Your characters and sessions are saved to your account.
         </p>
-      </div>
+      </Panel>
     </main>
   );
 }

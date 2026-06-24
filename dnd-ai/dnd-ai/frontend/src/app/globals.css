@@ -1,38 +1,192 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0a0a0a;
-  --color-surface: #1a1a1a;
-  --color-surface-light: #252525;
+  /* ── Surfaces (warm near-black, ember/parchment-dark) ── */
+  --color-bg: #0b0a0a;
+  --color-surface: #171312;
+  --color-surface-light: #221c1a;
+  --color-bg-elevated: #0f0c0c;
+
+  /* ── Red accent (primary brand) ── */
   --color-accent: #dc2626;
   --color-accent-dark: #991b1b;
+  --color-accent-light: #f87171;
   --color-accent-glow: rgba(220, 38, 38, 0.15);
-  --color-text: #f5f5f5;
-  --color-text-muted: #a3a3a3;
-  --color-border: #2a2a2a;
+
+  /* ── Gold (secondary accent — used sparingly) ── */
+  --color-gold: #c9a227;
+  --color-gold-muted: rgba(201, 162, 39, 0.15);
+
+  /* ── Text ── */
+  --color-text: #f5f1ed;
+  --color-text-muted: #a39a93;
+
+  /* ── Borders ── */
+  --color-border: #2c2522;
   --color-border-accent: rgba(220, 38, 38, 0.3);
+
+  /* ── Semantic ── */
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+
+  /* ── Fonts (vars set by next/font in layout.tsx) ── */
+  --font-display: var(--font-cinzel), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, Consolas,
+    monospace;
+
+  /* ── Radius scale ── */
+  --radius: 0.75rem;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
+  position: relative;
   background-color: var(--color-bg);
   color: var(--color-text);
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar */
+/* Soft ember vignette behind all content (static, no JS/animation) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 50% -10%,
+      rgba(220, 38, 38, 0.1),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 50% 110%,
+      rgba(153, 27, 27, 0.08),
+      transparent 55%
+    );
+}
+
+/* ── Typography defaults ── */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+/* ── Focus visibility (accessibility) ── */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Tabular figures for codes, stats, timers */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 ::-webkit-scrollbar-track {
   background: var(--color-surface);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-accent-dark);
-  border-radius: 3px;
+  border-radius: 4px;
+  border: 2px solid var(--color-surface);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
 }
 
-/* Glow effect for accent elements */
+/* ── Accent glow utility ── */
 .glow {
-  box-shadow: 0 0 20px var(--color-accent-glow), 0 0 40px var(--color-accent-glow);
+  box-shadow: 0 0 30px var(--color-accent-glow),
+    0 0 60px rgba(220, 38, 38, 0.08);
+}
+.text-glow {
+  text-shadow: 0 0 18px var(--color-accent-glow);
+}
+
+/* ── Ornamental divider (thin gradient rule + center diamond) ── */
+.ornament {
+  position: relative;
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-border-accent),
+    transparent
+  );
+}
+.ornament::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--color-accent);
+  box-shadow: 0 0 10px var(--color-accent-glow);
+}
+
+/* ── Subtle corner ornament for panels ── */
+.panel-corners {
+  position: relative;
+}
+.panel-corners::before,
+.panel-corners::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--color-border-accent);
+  border-style: solid;
+}
+.panel-corners::before {
+  top: 8px;
+  left: 8px;
+  border-width: 1px 0 0 1px;
+}
+.panel-corners::after {
+  bottom: 8px;
+  right: 8px;
+  border-width: 0 1px 1px 0;
+}
+
+/* ── Entrance animation (respect reduced motion) ── */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise 280ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

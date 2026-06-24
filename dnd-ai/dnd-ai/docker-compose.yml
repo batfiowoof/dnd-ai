@@ -57,7 +57,7 @@ services:
 
   # ── Ollama (LLM inference) ────────────────────────
   # After first start, pull the model:
-  #   docker exec -it dnd-ollama ollama pull llama3.2
+  #   docker exec -it dnd-ollama ollama pull qwen3.5:4b
   ollama:
     image: ollama/ollama:latest
     container_name: dnd-ollama

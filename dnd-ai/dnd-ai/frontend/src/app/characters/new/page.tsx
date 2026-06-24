@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
-import { createCharacter } from "@/lib/api";
+import { useCreateCharacter } from "@/hooks/useCharacterQueries";
 import {
   RACES,
   CLASSES,
@@ -22,6 +22,7 @@ import {
   type RaceInfo,
   type ClassInfo,
 } from "@/lib/dnd5e";
+import { Button, Alert, cn } from "@/components/ui";
 
 type AbilityMethod = "standard" | "pointbuy";
 
@@ -63,11 +64,12 @@ export default function CharacterCreatePage() {
 
 function CharacterCreateForm() {
   const router = useRouter();
-  const { username, getToken } = useAuth();
+  const { username } = useAuth();
+  const createMutation = useCreateCharacter();
+  const saving = createMutation.isPending;
 
   const [step, setStep] = useState<Step>("Race");
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
 
   // Character state
   const [name, setName] = useState("");
@@ -179,12 +181,9 @@ function CharacterCreateForm() {
 
   async function handleSave() {
     if (!username || !selectedRace || !selectedClass || !name.trim()) return;
-    setSaving(true);
     setError("");
     try {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      await createCharacter(token, {
+      await createMutation.mutateAsync({
         name: name.trim(),
         race: selectedRace.name,
         characterClass: selectedClass.name,
@@ -208,23 +207,26 @@ function CharacterCreateForm() {
       router.push("/characters");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save character");
-    } finally {
-      setSaving(false);
     }
   }
 
   return (
-    <main className="min-h-screen p-4">
+    <main className="min-h-dvh p-4 sm:p-6">
       <div className="mx-auto max-w-4xl">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <button
             onClick={() => router.push("/characters")}
-            className="text-sm text-text-muted hover:text-accent"
+            className="cursor-pointer text-sm text-text-muted transition hover:text-accent"
           >
             &larr; Back to Characters
           </button>
-          <h1 className="text-2xl font-bold text-accent">Create Character</h1>
+          <h1
+            className="text-2xl font-bold text-accent"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Create Character
+          </h1>
           <div className="w-24" />
         </div>
 
@@ -234,35 +236,37 @@ function CharacterCreateForm() {
             <div key={s} className="flex items-center">
               <button
                 onClick={() => i <= stepIndex && setStep(s)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-semibold transition",
                   s === step
-                    ? "bg-accent text-white"
+                    ? "bg-accent text-white shadow-[0_0_16px_var(--color-accent-glow)]"
                     : i < stepIndex
-                      ? "bg-accent-dark/30 text-accent cursor-pointer"
+                      ? "cursor-pointer bg-accent-dark/30 text-accent hover:bg-accent-dark/50"
                       : "bg-surface-light text-text-muted"
-                }`}
+                )}
               >
-                {i + 1}. {s}
+                <span className="tabular">{i + 1}.</span> {s}
               </button>
               {i < STEPS.length - 1 && (
                 <div
-                  className={`mx-1 h-px w-6 ${
+                  className={cn(
+                    "mx-1 h-px w-6 transition",
                     i < stepIndex ? "bg-accent" : "bg-border"
-                  }`}
+                  )}
                 />
               )}
             </div>
           ))}
         </div>
 
-        <div className="rounded-xl border border-border-accent bg-surface p-6">
+        <div className="rounded-xl border border-border-accent bg-surface p-6 panel-corners">
           {/* ── STEP: Race ────────────────────────────────────── */}
           {step === "Race" && (
             <div>
               <h2 className="mb-2 text-lg font-bold text-accent">
                 Choose Your Race
               </h2>
-              <div className="mb-4 rounded-lg bg-bg p-3 text-xs text-text-muted">
+              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
                 <strong className="text-text">D&D 5E Guide:</strong> Your race
                 determines your character&apos;s physical traits, ability score
                 bonuses, speed, and special racial features. Each race brings
@@ -276,7 +280,7 @@ function CharacterCreateForm() {
                     className={`rounded-lg border p-4 text-left transition ${
                       selectedRace?.name === race.name
                         ? "border-accent bg-accent-glow"
-                        : "border-border bg-bg hover:border-accent/50"
+                        : "border-border bg-bg-elevated hover:border-accent/50"
                     }`}
                   >
                     <div className="mb-1 font-semibold text-text">
@@ -323,7 +327,7 @@ function CharacterCreateForm() {
               <h2 className="mb-2 text-lg font-bold text-accent">
                 Choose Your Class
               </h2>
-              <div className="mb-4 rounded-lg bg-bg p-3 text-xs text-text-muted">
+              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
                 <strong className="text-text">D&D 5E Guide:</strong> Your class
                 is your primary adventuring role. It determines your hit points,
                 abilities, and equipment. Your class defines how you interact
@@ -337,7 +341,7 @@ function CharacterCreateForm() {
                     className={`rounded-lg border p-4 text-left transition ${
                       selectedClass?.name === cls.name
                         ? "border-accent bg-accent-glow"
-                        : "border-border bg-bg hover:border-accent/50"
+                        : "border-border bg-bg-elevated hover:border-accent/50"
                     }`}
                   >
                     <div className="mb-1 flex items-center justify-between">
@@ -395,7 +399,7 @@ function CharacterCreateForm() {
               <h2 className="mb-2 text-lg font-bold text-accent">
                 Ability Scores
               </h2>
-              <div className="mb-4 rounded-lg bg-bg p-3 text-xs text-text-muted">
+              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
                 <strong className="text-text">D&D 5E Guide:</strong> Six
                 abilities define your character: Strength, Dexterity,
                 Constitution, Intelligence, Wisdom, and Charisma. Higher scores
@@ -455,7 +459,7 @@ function CharacterCreateForm() {
                   return (
                     <div
                       key={ability}
-                      className="rounded-lg border border-border bg-bg p-4"
+                      className="rounded-lg border border-border bg-bg-elevated p-4"
                     >
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-sm font-bold text-accent">
@@ -553,7 +557,7 @@ function CharacterCreateForm() {
               <h2 className="mb-2 text-lg font-bold text-accent">
                 Character Details
               </h2>
-              <div className="mb-4 rounded-lg bg-bg p-3 text-xs text-text-muted">
+              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
                 <strong className="text-text">D&D 5E Guide:</strong> Give your
                 character a name, choose a background that describes their life
                 before adventuring, select an alignment that reflects their
@@ -571,7 +575,7 @@ function CharacterCreateForm() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Thorin Ironforge"
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
                   />
                 </div>
 
@@ -582,7 +586,7 @@ function CharacterCreateForm() {
                   <select
                     value={background}
                     onChange={(e) => setBackground(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text"
+                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
                   >
                     <option value="">-- Select Background --</option>
                     {BACKGROUNDS.map((b) => (
@@ -600,7 +604,7 @@ function CharacterCreateForm() {
                   <select
                     value={alignment}
                     onChange={(e) => setAlignment(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text"
+                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
                   >
                     <option value="">-- Select Alignment --</option>
                     {ALIGNMENTS.map((a) => (
@@ -620,7 +624,7 @@ function CharacterCreateForm() {
                     onChange={(e) => setBackstory(e.target.value)}
                     placeholder="Describe your character's history, motivations, and goals..."
                     rows={4}
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
                   />
                 </div>
               </div>
@@ -636,7 +640,7 @@ function CharacterCreateForm() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* Identity */}
-                <div className="rounded-lg border border-border bg-bg p-4">
+                <div className="rounded-lg border border-border bg-bg-elevated p-4">
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                     Identity
                   </h3>
@@ -671,31 +675,31 @@ function CharacterCreateForm() {
                 </div>
 
                 {/* Combat Stats */}
-                <div className="rounded-lg border border-border bg-bg p-4">
+                <div className="rounded-lg border border-border bg-bg-elevated p-4">
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                     Combat
                   </h3>
                   <div className="flex justify-around text-center">
                     <div>
-                      <div className="text-2xl font-bold text-accent">
+                      <div className="tabular text-2xl font-bold text-gold">
                         {derivedHP}
                       </div>
                       <div className="text-xs text-text-muted">HP</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-accent">
+                      <div className="tabular text-2xl font-bold text-gold">
                         {derivedAC}
                       </div>
                       <div className="text-xs text-text-muted">AC</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-accent">
+                      <div className="tabular text-2xl font-bold text-gold">
                         {derivedSpeed}
                       </div>
                       <div className="text-xs text-text-muted">Speed</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-accent">
+                      <div className="tabular text-2xl font-bold text-gold">
                         d{selectedClass?.hitDie ?? "?"}
                       </div>
                       <div className="text-xs text-text-muted">Hit Die</div>
@@ -704,7 +708,7 @@ function CharacterCreateForm() {
                 </div>
 
                 {/* Ability Scores */}
-                <div className="rounded-lg border border-border bg-bg p-4 sm:col-span-2">
+                <div className="rounded-lg border border-border bg-bg-elevated p-4 sm:col-span-2">
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                     Ability Scores
                   </h3>
@@ -734,7 +738,7 @@ function CharacterCreateForm() {
 
                 {/* Equipment */}
                 {selectedClass && (
-                  <div className="rounded-lg border border-border bg-bg p-4">
+                  <div className="rounded-lg border border-border bg-bg-elevated p-4">
                     <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                       Equipment
                     </h3>
@@ -753,7 +757,7 @@ function CharacterCreateForm() {
 
                 {/* Traits & Features */}
                 {selectedRace && (
-                  <div className="rounded-lg border border-border bg-bg p-4">
+                  <div className="rounded-lg border border-border bg-bg-elevated p-4">
                     <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                       Racial Traits
                     </h3>
@@ -772,7 +776,7 @@ function CharacterCreateForm() {
 
                 {/* Backstory */}
                 {backstory && (
-                  <div className="rounded-lg border border-border bg-bg p-4 sm:col-span-2">
+                  <div className="rounded-lg border border-border bg-bg-elevated p-4 sm:col-span-2">
                     <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                       Backstory
                     </h3>
@@ -786,37 +790,25 @@ function CharacterCreateForm() {
           )}
 
           {/* ── Navigation / Error ────────────────────────────── */}
-          {error && (
-            <p className="mt-4 rounded-lg bg-accent-dark/20 px-3 py-2 text-center text-sm text-accent">
-              {error}
-            </p>
-          )}
+          {error && <Alert className="mt-4">{error}</Alert>}
 
           <div className="mt-6 flex items-center justify-between">
-            <button
+            <Button
               onClick={prevStep}
               disabled={stepIndex === 0}
-              className="rounded-lg border border-border px-4 py-2 text-sm text-text-muted transition hover:text-text disabled:opacity-30"
+              variant="ghost"
             >
               &larr; Back
-            </button>
+            </Button>
 
             {step === "Review" ? (
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
-              >
+              <Button onClick={handleSave} loading={saving} size="lg">
                 {saving ? "Saving..." : "Create Character"}
-              </button>
+              </Button>
             ) : (
-              <button
-                onClick={nextStep}
-                disabled={!canProceed()}
-                className="rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
-              >
+              <Button onClick={nextStep} disabled={!canProceed()} size="lg">
                 Next &rarr;
-              </button>
+              </Button>
             )}
           </div>
         </div>

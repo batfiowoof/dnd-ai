@@ -79,7 +79,7 @@ This starts all services:
 After the first start, pull the LLM model:
 
 ```bash
-docker exec -it dnd-ollama ollama pull llama3.2
+docker exec -it dnd-ollama ollama pull qwen3.5:4b
 ```
 
 ### Local Development
@@ -174,7 +174,7 @@ Connect to `/ws` with STOMP, then:
 |---|---|
 | Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
 | Backend | Spring Boot 4, Java 21, Spring AI, Spring Security |
-| AI / LLM | Ollama (llama3.2), Spring AI ChatClient |
+| AI / LLM | Ollama (qwen3.5:4b), Spring AI ChatClient |
 | Vector Search | pgvector (cosine similarity, IVFFlat index) |
 | Messaging | Apache Kafka (KRaft mode) |
 | Auth | Keycloak (OAuth2 / OIDC) |
