@@ -180,6 +180,20 @@ h3 {
   animation: rise 280ms ease-out both;
 }
 
+/* ── Gentle float for hero marks (stilled by reduced-motion below) ── */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

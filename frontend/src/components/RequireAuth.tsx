@@ -1,33 +1,30 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Button, Spinner } from "@/components/ui";
+import { Spinner } from "@/components/ui";
 
 export default function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, login } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
 
-  if (isLoading) {
+  // Once auth has resolved and the user isn't signed in, send them to the
+  // branded /login page (Sign In / Create Account) instead of showing a
+  // bare fallback here.
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  if (isLoading || !isAuthenticated) {
     return (
       <main className="flex min-h-dvh items-center justify-center">
         <span className="inline-flex items-center gap-3 text-text-muted">
           <Spinner className="text-accent" />
           Loading...
         </span>
-      </main>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center p-4">
-        <div className="text-center">
-          <p className="mb-4 text-text-muted">
-            You need to sign in to continue.
-          </p>
-          <Button onClick={() => login()} size="lg">
-            Sign In
-          </Button>
-        </div>
       </main>
     );
   }
