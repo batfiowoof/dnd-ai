@@ -1,0 +1,304 @@
+/* ════════════════════════════════════════════════════════════════
+   D&D AI — Keycloak login restyle
+   Layered on top of the base PatternFly `keycloak` login theme.
+   Mirrors the app design tokens in frontend/src/app/globals.css:
+   dark-red fantasy-tabletop aesthetic (accent #dc2626, gold #c9a227,
+   warm near-black surfaces, Cinzel / Inter / JetBrains Mono).
+   Selectors target the KC 24 PatternFly login DOM.
+   ════════════════════════════════════════════════════════════════ */
+
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  --dnd-bg: #0b0a0a;
+  --dnd-surface: #171312;
+  --dnd-surface-light: #221c1a;
+  --dnd-elevated: #0f0c0c;
+  --dnd-accent: #dc2626;
+  --dnd-accent-dark: #991b1b;
+  --dnd-accent-light: #f87171;
+  --dnd-accent-glow: rgba(220, 38, 38, 0.15);
+  --dnd-gold: #c9a227;
+  --dnd-text: #f5f1ed;
+  --dnd-muted: #a39a93;
+  --dnd-border: #2c2522;
+  --dnd-border-accent: rgba(220, 38, 38, 0.3);
+  --dnd-danger: #ef4444;
+  --dnd-font-display: "Cinzel", Georgia, "Times New Roman", serif;
+  --dnd-font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --dnd-font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* ── Page background + ember vignette ─────────────────────────── */
+html {
+  color-scheme: dark;
+}
+
+body.login-pf,
+.login-pf body {
+  background: var(--dnd-bg) !important;
+}
+
+.login-pf-page {
+  position: relative;
+  padding-top: 0;
+  background-color: var(--dnd-bg);
+  font-family: var(--dnd-font-sans);
+  color: var(--dnd-text);
+}
+
+/* Soft ember vignette (static), mirrors body::before in the app */
+.login-pf-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(220, 38, 38, 0.1), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(153, 27, 27, 0.08), transparent 55%);
+}
+
+.login-pf-page .login-pf-page-header,
+.login-pf-page #kc-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Brand header ─────────────────────────────────────────────── */
+#kc-header,
+#kc-header-wrapper {
+  font-family: var(--dnd-font-display);
+  color: var(--dnd-accent);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px var(--dnd-accent-glow);
+}
+
+/* ── Card ─────────────────────────────────────────────────────── */
+.login-pf-page .card-pf {
+  position: relative;
+  margin-top: 5vh;
+  padding: 2.25rem 2rem;
+  background: var(--dnd-surface);
+  border: 1px solid var(--dnd-border);
+  border-radius: 0.75rem;
+  box-shadow:
+    0 0 24px var(--dnd-accent-glow),
+    0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+/* Corner ornaments (mirrors .panel-corners) */
+.login-pf-page .card-pf::before,
+.login-pf-page .card-pf::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--dnd-border-accent);
+  border-style: solid;
+  pointer-events: none;
+}
+.login-pf-page .card-pf::before {
+  top: 8px;
+  left: 8px;
+  border-width: 1px 0 0 1px;
+}
+.login-pf-page .card-pf::after {
+  bottom: 8px;
+  right: 8px;
+  border-width: 0 1px 1px 0;
+}
+
+/* ── Headings / titles ────────────────────────────────────────── */
+#kc-page-title,
+.login-pf-page .card-pf h1,
+.login-pf-page .card-pf h2 {
+  font-family: var(--dnd-font-display);
+  color: var(--dnd-text);
+  letter-spacing: 0.02em;
+}
+
+#kc-page-title {
+  position: relative;
+  padding-bottom: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+/* Ornamental gradient divider with center diamond (mirrors .ornament) */
+#kc-page-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--dnd-border-accent), transparent);
+}
+
+/* ── Labels & text ────────────────────────────────────────────── */
+.login-pf-page label,
+.login-pf-page .control-label,
+#kc-form-options,
+.login-pf-page .pf-c-form__label,
+.login-pf-page #kc-info-message,
+.login-pf-page p {
+  color: var(--dnd-muted);
+  font-family: var(--dnd-font-sans);
+}
+
+/* ── Inputs ───────────────────────────────────────────────────── */
+.login-pf-page input[type="text"],
+.login-pf-page input[type="email"],
+.login-pf-page input[type="password"],
+.login-pf-page input[type="number"],
+.login-pf-page select,
+.login-pf-page .pf-c-form-control,
+.login-pf-page #username,
+.login-pf-page #password,
+.login-pf-page #password-new,
+.login-pf-page #password-confirm {
+  min-height: 44px;
+  background: var(--dnd-surface-light);
+  border: 1px solid var(--dnd-border);
+  border-radius: 0.5rem;
+  color: var(--dnd-text);
+  font-family: var(--dnd-font-sans);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.login-pf-page input::placeholder {
+  color: var(--dnd-muted);
+  opacity: 0.7;
+}
+
+.login-pf-page input[type="text"]:focus,
+.login-pf-page input[type="email"]:focus,
+.login-pf-page input[type="password"]:focus,
+.login-pf-page input[type="number"]:focus,
+.login-pf-page select:focus,
+.login-pf-page .pf-c-form-control:focus {
+  outline: none;
+  border-color: var(--dnd-accent);
+  box-shadow: 0 0 0 1px var(--dnd-accent), 0 0 16px var(--dnd-accent-glow);
+}
+
+/* Password show/hide toggle */
+.login-pf-page .pf-c-button.pf-m-control,
+.login-pf-page .pf-c-input-group__text {
+  background: var(--dnd-surface-light);
+  border: 1px solid var(--dnd-border);
+  color: var(--dnd-muted);
+}
+
+/* ── Primary button ───────────────────────────────────────────── */
+.login-pf-page .btn-primary,
+.login-pf-page input[type="submit"].btn-primary,
+.login-pf-page .pf-c-button.pf-m-primary,
+.login-pf-page #kc-login {
+  min-height: 44px;
+  background: var(--dnd-accent);
+  border: 1px solid var(--dnd-accent);
+  border-radius: 0.5rem;
+  color: #fff;
+  font-family: var(--dnd-font-sans);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 16px var(--dnd-accent-glow);
+  transition: background-color 150ms ease, box-shadow 150ms ease, transform 80ms ease;
+}
+.login-pf-page .btn-primary:hover,
+.login-pf-page .pf-c-button.pf-m-primary:hover,
+.login-pf-page #kc-login:hover {
+  background: var(--dnd-accent-dark);
+  border-color: var(--dnd-accent-dark);
+  box-shadow: 0 0 24px var(--dnd-accent-glow), 0 0 48px rgba(220, 38, 38, 0.08);
+}
+.login-pf-page .btn-primary:active,
+.login-pf-page .pf-c-button.pf-m-primary:active,
+.login-pf-page #kc-login:active {
+  transform: translateY(1px);
+}
+
+/* ── Secondary / default buttons ──────────────────────────────── */
+.login-pf-page .btn-default,
+.login-pf-page .pf-c-button.pf-m-secondary {
+  min-height: 44px;
+  background: transparent;
+  border: 1px solid var(--dnd-border-accent);
+  border-radius: 0.5rem;
+  color: var(--dnd-accent-light);
+}
+.login-pf-page .btn-default:hover,
+.login-pf-page .pf-c-button.pf-m-secondary:hover {
+  border-color: var(--dnd-accent);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* ── Links (gold, sparing) ────────────────────────────────────── */
+.login-pf-page a,
+.login-pf-page #kc-registration a,
+.login-pf-page #kc-info a,
+.login-pf-page .pf-c-button.pf-m-link {
+  color: var(--dnd-gold);
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+.login-pf-page a:hover,
+.login-pf-page #kc-registration a:hover,
+.login-pf-page .pf-c-button.pf-m-link:hover {
+  color: #e0bf4a;
+  text-decoration: underline;
+}
+
+/* ── Checkbox accent (remember me) ────────────────────────────── */
+.login-pf-page input[type="checkbox"] {
+  accent-color: var(--dnd-accent);
+}
+
+/* ── Alerts / feedback ────────────────────────────────────────── */
+.login-pf-page .alert-error,
+.login-pf-page .pf-c-alert.pf-m-danger,
+.login-pf-page #input-error,
+.login-pf-page .kc-feedback-text {
+  color: var(--dnd-accent-light);
+}
+.login-pf-page .alert-error,
+.login-pf-page .pf-c-alert.pf-m-danger {
+  background: rgba(153, 27, 27, 0.18);
+  border: 1px solid var(--dnd-border-accent);
+  border-radius: 0.5rem;
+}
+.login-pf-page .alert-success,
+.login-pf-page .pf-c-alert.pf-m-success {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 0.5rem;
+}
+
+/* ── Codes / OTP fields (mono) ────────────────────────────────── */
+.login-pf-page #otp,
+.login-pf-page input[name="totp"],
+.login-pf-page input[autocomplete="one-time-code"] {
+  font-family: var(--dnd-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+/* ── Accessibility: visible focus ring ────────────────────────── */
+.login-pf-page :focus-visible {
+  outline: 2px solid var(--dnd-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-pf-page *,
+  .login-pf-page *::before,
+  .login-pf-page *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

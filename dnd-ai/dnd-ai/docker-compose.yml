@@ -54,6 +54,7 @@ services:
       - "8180:8180"
     volumes:
       - ./keycloak/dnd-ai-realm.json:/opt/keycloak/data/import/dnd-ai-realm.json:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
 
   # ── Ollama (LLM inference) ────────────────────────
   # After first start, pull the model:

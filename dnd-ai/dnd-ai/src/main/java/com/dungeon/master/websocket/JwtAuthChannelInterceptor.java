@@ -1,5 +1,6 @@
 package com.dungeon.master.websocket;
 
+import com.dungeon.master.config.AuthUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
@@ -34,10 +35,11 @@ public class JwtAuthChannelInterceptor implements ChannelInterceptor {
                 String token = authHeader.substring(7);
                 try {
                     Jwt jwt = jwtDecoder.decode(token);
+                    String username = AuthUtils.username(jwt);
                     Principal principal = new UsernamePasswordAuthenticationToken(
-                            jwt.getSubject(), null, List.of());
+                            username, null, List.of());
                     accessor.setUser(principal);
-                    log.debug("WebSocket authenticated user: {}", jwt.getSubject());
+                    log.debug("WebSocket authenticated user: {}", username);
                 } catch (Exception e) {
                     log.warn("WebSocket JWT validation failed: {}", e.getMessage());
                 }

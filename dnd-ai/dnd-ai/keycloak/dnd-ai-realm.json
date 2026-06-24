@@ -1,6 +1,7 @@
 {
   "realm": "dnd-ai",
   "enabled": true,
+  "loginTheme": "dnd-ai",
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,
   "loginWithEmailAllowed": true,

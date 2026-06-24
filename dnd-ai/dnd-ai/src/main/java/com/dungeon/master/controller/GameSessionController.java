@@ -1,5 +1,6 @@
 package com.dungeon.master.controller;
 
+import com.dungeon.master.config.AuthUtils;
 import com.dungeon.master.model.dto.CreateSessionRequest;
 import com.dungeon.master.model.dto.CreateSessionResponse;
 import com.dungeon.master.model.dto.GameStateDto;
@@ -47,7 +48,7 @@ public class GameSessionController {
     public ResponseEntity<CreateSessionResponse> createSession(
             @Valid @RequestBody CreateSessionRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         CreateSessionResponse response = gameSessionService.createSession(request, username);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -64,7 +65,7 @@ public class GameSessionController {
             @PathVariable UUID sessionId,
             @Valid @RequestBody JoinSessionRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         PlayerDto player = gameSessionService.joinSession(sessionId, request, username);
         return ResponseEntity.ok(player);
     }
@@ -124,7 +125,7 @@ public class GameSessionController {
             @PathVariable UUID sessionId,
             @PathVariable UUID playerId,
             @AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         gameSessionService.removePlayer(sessionId, playerId, username);
         return ResponseEntity.noContent().build();
     }

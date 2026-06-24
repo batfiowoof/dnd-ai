@@ -1,5 +1,6 @@
 package com.dungeon.master.controller;
 
+import com.dungeon.master.config.AuthUtils;
 import com.dungeon.master.model.dto.CharacterCreateUpdateRequest;
 import com.dungeon.master.model.dto.CharacterDto;
 import com.dungeon.master.service.game.CharacterService;
@@ -32,7 +33,7 @@ public class CharacterController {
 
     @GetMapping
     public ResponseEntity<List<CharacterDto>> getMyCharacters(@AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         return ResponseEntity.ok(characterService.getCharactersByOwner(username));
     }
 
@@ -40,7 +41,7 @@ public class CharacterController {
     public ResponseEntity<CharacterDto> getCharacter(
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         return ResponseEntity.ok(characterService.getCharacter(id, username));
     }
 
@@ -48,7 +49,7 @@ public class CharacterController {
     public ResponseEntity<CharacterDto> createCharacter(
             @Valid @RequestBody CharacterCreateUpdateRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         CharacterDto character = characterService.createCharacter(request, username);
         return ResponseEntity.status(HttpStatus.CREATED).body(character);
     }
@@ -58,7 +59,7 @@ public class CharacterController {
             @PathVariable UUID id,
             @Valid @RequestBody CharacterCreateUpdateRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         return ResponseEntity.ok(characterService.updateCharacter(id, request, username));
     }
 
@@ -66,7 +67,7 @@ public class CharacterController {
     public ResponseEntity<Void> deleteCharacter(
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
-        String username = jwt.getSubject();
+        String username = AuthUtils.username(jwt);
         characterService.deleteCharacter(id, username);
         return ResponseEntity.noContent().build();
     }
