@@ -39,6 +39,7 @@ public class GameSessionService {
     private final PlayerRepository playerRepository;
     private final TurnEventRepository turnEventRepository;
     private final CharacterRepository characterRepository;
+    private final PlayerStateService playerStateService;
     private final GameEventProducer eventProducer;
 
     @Transactional
@@ -66,6 +67,7 @@ public class GameSessionService {
                 .turnIndex(0)
                 .build();
         player = playerRepository.save(player);
+        playerStateService.seedForPlayer(player, character);
 
         Player dmPlayer = Player.builder()
                 .username("AI_DUNGEON_MASTER")
@@ -118,6 +120,7 @@ public class GameSessionService {
                 .turnIndex(session.getTurnOrder().size())
                 .build();
         player = playerRepository.save(player);
+        playerStateService.seedForPlayer(player, character);
 
         session.getTurnOrder().add(player.getId());
         sessionRepository.save(session);
@@ -258,6 +261,10 @@ public class GameSessionService {
     }
 
     private PlayerDto toPlayerDto(Player player) {
+        String imageUrl = player.getCharacterId() == null ? null
+                : characterRepository.findById(player.getCharacterId())
+                        .map(Character::getImageUrl)
+                        .orElse(null);
         return new PlayerDto(
                 player.getId(),
                 player.getUsername(),
@@ -265,6 +272,7 @@ public class GameSessionService {
                 player.getRole(),
                 player.getTurnIndex(),
                 player.getCharacterId(),
+                imageUrl,
                 player.getCharacterSheet());
     }
 }

@@ -8,6 +8,7 @@ export interface PlayerDto {
   role: PlayerRole;
   turnIndex: number;
   characterId: string | null;
+  imageUrl: string | null;
   characterSheet: Record<string, unknown> | null;
 }
 
@@ -100,13 +101,137 @@ export interface DmNarrationEvent {
   dmNarration: string;
 }
 
+/* ── Dice rolling ─────────────────────────────────────────────── */
+export type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
+
+export interface DiceRollEvent {
+  type: "DICE_ROLL";
+  sessionId: string;
+  playerId: string;
+  playerName: string;
+  label: string;
+  notation: string;
+  count: number;
+  sides: number;
+  modifier: number;
+  mode: RollMode;
+  faces: number[];
+  discarded: number[] | null;
+  total: number;
+  crit: boolean;
+  fumble: boolean;
+}
+
+/* ── Player runtime state (HP / spell slots / inventory) ──────── */
+export type ItemKind =
+  | "POTION_HEALING"
+  | "POTION"
+  | "SCROLL"
+  | "WEAPON"
+  | "ARMOR"
+  | "GEAR";
+
+export interface InventoryItem {
+  name: string;
+  qty: number;
+  kind: ItemKind;
+}
+
+export interface SpellSlot {
+  level: number;
+  max: number;
+  used: number;
+}
+
+export interface PlayerRuntimeState {
+  playerId: string;
+  currentHp: number;
+  maxHp: number;
+  tempHp: number;
+  spellSlots: SpellSlot[];
+  inventory: InventoryItem[];
+  conditions: string[];
+}
+
+export interface PlayerStateEvent {
+  type: "PLAYER_STATE";
+  sessionId: string;
+  state: PlayerRuntimeState;
+}
+
+/* ── Combat ───────────────────────────────────────────────────── */
+export type CombatStatus = "ACTIVE" | "ENDED";
+export type CombatantKind = "PLAYER" | "ENEMY";
+
+export interface Combatant {
+  kind: CombatantKind;
+  refId: string;
+  name: string;
+  initiative: number;
+}
+
+export interface EnemyDto {
+  id: string;
+  name: string;
+  maxHp: number;
+  currentHp: number;
+  armorClass: number;
+  alive: boolean;
+}
+
+export interface CombatStateDto {
+  encounterId: string;
+  status: CombatStatus;
+  round: number;
+  activeIndex: number;
+  active: Combatant | null;
+  order: Combatant[];
+  enemies: EnemyDto[];
+}
+
+export interface RollSummary {
+  notation: string;
+  faces: number[];
+  total: number;
+  crit: boolean;
+  fumble: boolean;
+}
+
+export interface EnemyActionEvent {
+  type: "ENEMY_ACTION";
+  sessionId: string;
+  attackerKind: CombatantKind;
+  attackerName: string;
+  targetKind: CombatantKind;
+  targetName: string;
+  attackRoll: RollSummary;
+  vsAc: number;
+  hit: boolean;
+  damageRoll: RollSummary | null;
+  targetCurrentHp: number;
+  targetMaxHp: number;
+  targetDefeated: boolean;
+  combat: CombatStateDto;
+}
+
+export interface CombatLifecycleEvent {
+  type: "COMBAT_START" | "COMBAT_TURN" | "COMBAT_END";
+  sessionId: string;
+  victory: boolean | null;
+  combat: CombatStateDto;
+}
+
 export type WebSocketMessage =
   | DmResponseDto
   | SessionEvent
   | TurnChangeEvent
   | DmThinkingEvent
   | DmChunkEvent
-  | DmNarrationEvent;
+  | DmNarrationEvent
+  | DiceRollEvent
+  | PlayerStateEvent
+  | EnemyActionEvent
+  | CombatLifecycleEvent;
 
 /* ── Character types ──────────────────────────────────────────── */
 
@@ -132,6 +257,7 @@ export interface CharacterDto {
   proficiencies: string[];
   features: string[];
   backstory: string | null;
+  imageUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -156,4 +282,5 @@ export interface CharacterCreateUpdateRequest {
   proficiencies: string[];
   features: string[];
   backstory: string;
+  imageUrl: string;
 }

@@ -12,6 +12,7 @@ public record PlayerDto(
         PlayerRole role,
         int turnIndex,
         UUID characterId,
+        String imageUrl,
         Map<String, Object> characterSheet
 ) {
 }

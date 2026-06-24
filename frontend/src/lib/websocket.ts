@@ -1,5 +1,6 @@
 import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import type { RollMode } from "@/types";
 
 const WS_URL = "http://localhost:8080/ws";
 
@@ -81,5 +82,90 @@ export function sendAction(
   client.publish({
     destination: `/app/game/${sessionId}/action`,
     body: JSON.stringify({ action }),
+  });
+}
+
+export function sendRoll(
+  client: Client,
+  sessionId: string,
+  payload: { label: string; notation: string; mode?: RollMode }
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/roll`,
+    body: JSON.stringify({ mode: "NORMAL", ...payload }),
+  });
+}
+
+export function sendCast(
+  client: Client,
+  sessionId: string,
+  payload: { spellLevel: number; spellName?: string; attackNotation?: string }
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/cast`,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function sendUseItem(client: Client, sessionId: string, itemName: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/use-item`,
+    body: JSON.stringify({ itemName }),
+  });
+}
+
+export function sendHpChange(client: Client, sessionId: string, amount: number) {
+  client.publish({
+    destination: `/app/game/${sessionId}/hp`,
+    body: JSON.stringify({ amount }),
+  });
+}
+
+/* ── Combat ───────────────────────────────────────────────────── */
+
+export function sendStartEncounter(
+  client: Client,
+  sessionId: string,
+  enemies: string[]
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/start`,
+    body: JSON.stringify({ enemies }),
+  });
+}
+
+export function sendCombatAttack(
+  client: Client,
+  sessionId: string,
+  targetEnemyId: string
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/attack`,
+    body: JSON.stringify({ targetEnemyId }),
+  });
+}
+
+export function sendCombatUseItem(
+  client: Client,
+  sessionId: string,
+  itemName: string
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/use-item`,
+    body: JSON.stringify({ itemName }),
+  });
+}
+
+export function sendCombatEndTurn(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/end-turn`,
+    body: JSON.stringify({}),
+  });
+}
+
+export function sendEndCombat(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/end`,
+    body: JSON.stringify({}),
   });
 }

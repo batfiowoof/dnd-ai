@@ -1,9 +1,11 @@
 import type {
+  CombatStateDto,
   CreateSessionRequest,
   CreateSessionResponse,
   GameStateDto,
   JoinSessionRequest,
   PlayerDto,
+  PlayerRuntimeState,
   TurnEventDto,
   CharacterDto,
   CharacterCreateUpdateRequest,
@@ -126,6 +128,37 @@ export async function kickPlayer(
     const body = await res.json().catch(() => null);
     throw new Error(body?.message ?? `Request failed: ${res.status}`);
   }
+}
+
+export async function getMyRuntimeState(
+  token: string,
+  sessionId: string
+): Promise<PlayerRuntimeState> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/me/state`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+export async function getSessionStates(
+  token: string,
+  sessionId: string
+): Promise<PlayerRuntimeState[]> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/states`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+export async function getActiveCombat(
+  token: string,
+  sessionId: string
+): Promise<CombatStateDto | null> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/combat`, {
+    headers: getAuthHeaders(token),
+  });
+  if (res.status === 204) return null;
+  return handleResponse(res);
 }
 
 /* ── Character endpoints ─────────────────────────────────────── */

@@ -23,6 +23,7 @@ import {
   type ClassInfo,
 } from "@/lib/dnd5e";
 import { Button, Alert, cn } from "@/components/ui";
+import Portrait from "@/components/Portrait";
 
 type AbilityMethod = "standard" | "pointbuy";
 
@@ -78,6 +79,7 @@ function CharacterCreateForm() {
   const [background, setBackground] = useState("");
   const [alignment, setAlignment] = useState("");
   const [backstory, setBackstory] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
 
   // Abilities
   const [abilityMethod, setAbilityMethod] = useState<AbilityMethod>("standard");
@@ -203,6 +205,7 @@ function CharacterCreateForm() {
         proficiencies: selectedClass.proficiencies,
         features: selectedRace.traits,
         backstory,
+        imageUrl: imageUrl.trim(),
       });
       router.push("/characters");
     } catch (e: unknown) {
@@ -566,17 +569,37 @@ function CharacterCreateForm() {
               </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    Character Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Thorin Ironforge"
-                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-                  />
+                <div className="flex items-start gap-4">
+                  <Portrait src={imageUrl} name={name} size="xl" />
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                        Character Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Thorin Ironforge"
+                        className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                        Portrait URL
+                      </label>
+                      <input
+                        type="url"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        placeholder="https://example.com/portrait.png"
+                        className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+                      />
+                      <p className="mt-1 text-xs text-text-muted">
+                        Optional. Paste a link to an image; leave empty for initials.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div>

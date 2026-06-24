@@ -13,6 +13,7 @@ import {
   type AbilityName,
 } from "@/lib/dnd5e";
 import { Button, Brand, Alert, Spinner } from "@/components/ui";
+import Portrait from "@/components/Portrait";
 
 const ABILITY_LABELS: Record<AbilityName, string> = {
   strength: "STR",
@@ -121,22 +122,25 @@ function CharactersList() {
               >
                 {/* Name & class */}
                 <div className="mb-4 flex items-start justify-between">
-                  <div>
-                    <h3
-                      className="text-lg font-bold text-text"
-                      style={{ fontFamily: "var(--font-display)" }}
-                    >
-                      {c.name}
-                    </h3>
-                    <p className="text-sm text-text-muted">
-                      Level {c.level} {c.race} {c.characterClass}
-                    </p>
-                    {c.background && (
-                      <p className="text-xs text-text-muted">
-                        {c.background}
-                        {c.alignment ? ` \u00B7 ${c.alignment}` : ""}
+                  <div className="flex items-start gap-3">
+                    <Portrait src={c.imageUrl} name={c.name} size="lg" />
+                    <div>
+                      <h3
+                        className="text-lg font-bold text-text"
+                        style={{ fontFamily: "var(--font-display)" }}
+                      >
+                        {c.name}
+                      </h3>
+                      <p className="text-sm text-text-muted">
+                        Level {c.level} {c.race} {c.characterClass}
                       </p>
-                    )}
+                      {c.background && (
+                        <p className="text-xs text-text-muted">
+                          {c.background}
+                          {c.alignment ? ` \u00B7 ${c.alignment}` : ""}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     <button

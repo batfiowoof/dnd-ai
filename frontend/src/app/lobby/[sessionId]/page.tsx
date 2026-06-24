@@ -12,15 +12,38 @@ import {
   useStartSession,
   useKickPlayer,
 } from "@/hooks/useSessionQueries";
+import { useSessionStates, useActiveCombat } from "@/hooks/usePlayerStateQueries";
 import { useSessionStore } from "@/store/sessionStore";
 import {
   createStompClient,
   subscribeToSession,
   subscribeToErrors,
   sendAction,
+  sendRoll,
+  sendCast,
+  sendUseItem,
+  sendStartEncounter,
+  sendCombatAttack,
+  sendCombatUseItem,
+  sendCombatEndTurn,
+  sendEndCombat,
 } from "@/lib/websocket";
 import type { Client } from "@stomp/stompjs";
+import type {
+  DiceRollEvent,
+  PlayerStateEvent,
+  EnemyActionEvent,
+  CombatLifecycleEvent,
+} from "@/types";
 import { Button, Panel, Brand, Alert, D20Mark, cn } from "@/components/ui";
+import Portrait from "@/components/Portrait";
+import DiceRollModal from "@/components/dice/DiceRollModal";
+import QuickRollBar from "@/components/dice/QuickRollBar";
+import ActionBar from "@/components/game/ActionBar";
+import CharacterStatus from "@/components/game/CharacterStatus";
+import CombatTracker from "@/components/combat/CombatTracker";
+import EnemyActionModal from "@/components/combat/EnemyActionModal";
+import StartEncounterControl from "@/components/combat/StartEncounterControl";
 
 /* ════════════════════════════════════════════════════════════════
    Combined Lobby + Game page
@@ -55,10 +78,14 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const dmThinking = useSessionStore((s) => s.dmThinking);
   const currentTurnPlayerId = useSessionStore((s) => s.currentTurnPlayerId);
   const turnNumber = useSessionStore((s) => s.turnNumber);
+  const runtimeByPlayerId = useSessionStore((s) => s.runtimeByPlayerId);
+  const combat = useSessionStore((s) => s.combat);
   const setError = useSessionStore((s) => s.setError);
   const hydrateFromGameState = useSessionStore((s) => s.hydrateFromGameState);
   const seedLogsFromHistory = useSessionStore((s) => s.seedLogsFromHistory);
   const setPlayers = useSessionStore((s) => s.setPlayers);
+  const setRuntimeStates = useSessionStore((s) => s.setRuntimeStates);
+  const setCombat = useSessionStore((s) => s.setCombat);
 
   /* ── purely-local UI state ──────────────────────────────────── */
   const [copied, setCopied] = useState(false);
@@ -134,6 +161,24 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (playersQuery.data) setPlayers(playersQuery.data);
   }, [playersQuery.data, setPlayers]);
+
+  /* ── runtime states (HP / slots / inventory) → seed store ───── */
+  const statesQuery = useSessionStates(
+    sessionId,
+    loadedStatus === "ACTIVE" || loadedStatus === "FINISHED"
+  );
+  useEffect(() => {
+    if (statesQuery.data) setRuntimeStates(statesQuery.data);
+  }, [statesQuery.data, setRuntimeStates]);
+
+  /* ── active combat (resume on reload) → seed store ──────────── */
+  const combatQuery = useActiveCombat(
+    sessionId,
+    loadedStatus === "ACTIVE" || loadedStatus === "FINISHED"
+  );
+  useEffect(() => {
+    if (combatQuery.data !== undefined) setCombat(combatQuery.data);
+  }, [combatQuery.data, setCombat]);
 
   /* ── WebSocket ──────────────────────────────────────────────── */
   useEffect(() => {
@@ -216,6 +261,24 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               s.applyGameEnded();
               scrollToBottom();
               break;
+            case "DICE_ROLL":
+              s.applyDiceRoll(data as unknown as DiceRollEvent);
+              scrollToBottom();
+              break;
+            case "PLAYER_STATE":
+              s.applyPlayerState(
+                (data as unknown as PlayerStateEvent).state
+              );
+              break;
+            case "COMBAT_START":
+            case "COMBAT_TURN":
+            case "COMBAT_END":
+              s.applyCombatLifecycle(data as unknown as CombatLifecycleEvent);
+              scrollToBottom();
+              break;
+            case "ENEMY_ACTION":
+              s.applyEnemyAction(data as unknown as EnemyActionEvent);
+              break;
           }
         });
 
@@ -285,9 +348,72 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     scrollToBottom();
   }
 
+  function handleRoll(notation: string, label: string) {
+    if (!clientRef.current || !connected) return;
+    sendRoll(clientRef.current, sessionId, { label, notation });
+  }
+
+  function handleAttack() {
+    if (!clientRef.current || !connected) return;
+    sendRoll(clientRef.current, sessionId, {
+      label: "Attack",
+      notation: "1d20",
+    });
+  }
+
+  function handleCast(spellLevel: number) {
+    if (!clientRef.current || !connected) return;
+    sendCast(clientRef.current, sessionId, { spellLevel });
+  }
+
+  function handleUseItem(itemName: string) {
+    if (!clientRef.current || !connected) return;
+    sendUseItem(clientRef.current, sessionId, itemName);
+  }
+
+  /* ── combat handlers ────────────────────────────────────────── */
+  function handleStartEncounter(enemyKeys: string[]) {
+    if (!clientRef.current || !connected) return;
+    sendStartEncounter(clientRef.current, sessionId, enemyKeys);
+  }
+  function handleCombatAttack(enemyId: string) {
+    if (!clientRef.current || !connected) return;
+    sendCombatAttack(clientRef.current, sessionId, enemyId);
+  }
+  function handleCombatUseItem(itemName: string) {
+    if (!clientRef.current || !connected) return;
+    sendCombatUseItem(clientRef.current, sessionId, itemName);
+  }
+  function handleCombatEndTurn() {
+    if (!clientRef.current || !connected) return;
+    sendCombatEndTurn(clientRef.current, sessionId);
+  }
+  function handleEndCombat() {
+    if (!clientRef.current || !connected) return;
+    sendEndCombat(clientRef.current, sessionId);
+  }
+
   const humanPlayers = players.filter((p) => p.role === "PLAYER");
   const currentPlayer = humanPlayers.find(
     (p) => p.id === currentTurnPlayerId
+  );
+  const myState = playerId ? runtimeByPlayerId[playerId] ?? null : null;
+  const myCharacterName = humanPlayers.find(
+    (p) => p.id === playerId
+  )?.characterName;
+  const inCombat = combat?.status === "ACTIVE";
+
+  /* Resolve a chat log entry's author (matched by character name / username /
+     id) so we can show their portrait next to the line. */
+  const playerByName = useCallback(
+    (nameOrId?: string) =>
+      players.find(
+        (p) =>
+          p.id === nameOrId ||
+          p.characterName === nameOrId ||
+          p.username === nameOrId
+      ) ?? null,
+    [players]
   );
 
   /* ════════════════════════════════════════════════════════════
@@ -359,16 +485,19 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                   key={p.id}
                   className="flex items-center justify-between rounded-lg border border-border bg-bg-elevated px-4 py-2.5"
                 >
-                  <div>
-                    <span className="text-sm font-medium">{p.username}</span>
-                    <span className="ml-2 text-sm text-text-muted">
-                      {p.characterName}
-                    </span>
-                    {p.username === createdBy && (
-                      <span className="ml-2 rounded bg-gold-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-gold">
-                        Host
+                  <div className="flex items-center gap-3">
+                    <Portrait src={p.imageUrl} name={p.characterName} size="sm" />
+                    <div>
+                      <span className="text-sm font-medium">{p.username}</span>
+                      <span className="ml-2 text-sm text-text-muted">
+                        {p.characterName}
                       </span>
-                    )}
+                      {p.username === createdBy && (
+                        <span className="ml-2 rounded bg-gold-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-gold">
+                          Host
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {isCreator &&
                     p.username !== username &&
@@ -434,6 +563,10 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
      ════════════════════════════════════════════════════════════ */
   return (
     <div className="flex h-dvh flex-col">
+      {/* Dice + combat-action animation overlays */}
+      <DiceRollModal />
+      <EnemyActionModal />
+
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border bg-surface/80 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-3">
@@ -445,6 +578,12 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           )}
         </div>
         <div className="flex items-center gap-4">
+          {isCreator && status === "ACTIVE" && !inCombat && (
+            <StartEncounterControl
+              connected={connected}
+              onStart={handleStartEncounter}
+            />
+          )}
           <span className="text-xs text-text-muted">
             <span className="tabular text-gold">Turn {turnNumber}</span>
             {currentPlayer && (
@@ -463,7 +602,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar — players */}
-        <aside className="hidden w-52 flex-shrink-0 border-r border-border bg-surface/60 p-4 md:flex md:flex-col">
+        <aside className="hidden w-56 flex-shrink-0 overflow-y-auto border-r border-border bg-surface/60 p-4 md:flex md:flex-col">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Players
           </h2>
@@ -472,20 +611,64 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               <div
                 key={p.id}
                 className={cn(
-                  "rounded-lg px-2.5 py-1.5 text-xs transition",
+                  "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition",
                   p.id === currentTurnPlayerId
                     ? "border border-gold/60 bg-gold-muted text-gold"
                     : "border border-transparent text-text-muted"
                 )}
               >
-                <div className="font-medium">{p.characterName}</div>
-                <div className="text-[10px] opacity-60">
-                  {p.username}
-                  {p.username === createdBy && " (host)"}
+                <Portrait
+                  src={p.imageUrl}
+                  name={p.characterName}
+                  size="sm"
+                  active={p.id === currentTurnPlayerId}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{p.characterName}</div>
+                  <div className="truncate text-[10px] opacity-60">
+                    {p.username}
+                    {p.username === createdBy && " (host)"}
+                  </div>
+                  {runtimeByPlayerId[p.id] && (
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-light">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          runtimeByPlayerId[p.id].currentHp /
+                            Math.max(1, runtimeByPlayerId[p.id].maxHp) >
+                            0.5
+                            ? "bg-success"
+                            : runtimeByPlayerId[p.id].currentHp /
+                                  Math.max(1, runtimeByPlayerId[p.id].maxHp) >
+                                0.25
+                              ? "bg-gold"
+                              : "bg-danger"
+                        )}
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (runtimeByPlayerId[p.id].currentHp /
+                                Math.max(1, runtimeByPlayerId[p.id].maxHp)) *
+                                100
+                            )
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
+
+          {/* My character status */}
+          {myState && (
+            <div className="mt-4">
+              <CharacterStatus state={myState} characterName={myCharacterName} />
+            </div>
+          )}
 
           {/* AI DM indicator in sidebar */}
           <div className="mt-auto border-t border-border pt-3">
@@ -499,6 +682,21 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
         {/* Main chat area */}
         <div className="flex flex-1 flex-col">
+          {/* Combat overlay */}
+          {inCombat && combat && (
+            <CombatTracker
+              combat={combat}
+              myPlayerId={playerId}
+              myState={myState}
+              isHost={isCreator}
+              connected={connected}
+              onAttack={handleCombatAttack}
+              onUseItem={handleCombatUseItem}
+              onEndTurn={handleCombatEndTurn}
+              onEndCombat={handleEndCombat}
+            />
+          )}
+
           {/* Log */}
           <div
             ref={scrollRef}
@@ -507,11 +705,19 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             {logs.map((entry) => (
               <div key={entry.id} className="animate-rise">
                 {entry.type === "action" && (
-                  <div className="flex gap-2">
-                    <span className="text-xs font-semibold text-gold">
-                      {entry.playerName}:
-                    </span>
-                    <span className="text-sm text-text">{entry.text}</span>
+                  <div className="flex items-start gap-2">
+                    <Portrait
+                      src={playerByName(entry.playerName)?.imageUrl}
+                      name={entry.playerName}
+                      size="xs"
+                      className="mt-0.5"
+                    />
+                    <div className="flex flex-wrap gap-x-2">
+                      <span className="text-xs font-semibold text-gold">
+                        {entry.playerName}:
+                      </span>
+                      <span className="text-sm text-text">{entry.text}</span>
+                    </div>
                   </div>
                 )}
                 {entry.type === "dm" && (
@@ -523,6 +729,17 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     <p className="text-sm leading-relaxed text-text">
                       {entry.text}
                     </p>
+                  </div>
+                )}
+                {entry.type === "roll" && (
+                  <div className="flex items-center justify-center gap-2 text-xs text-text-muted">
+                    <D20Mark className="h-3.5 w-3.5 text-gold" />
+                    <span>
+                      <span className="font-medium text-gold">
+                        {entry.playerName}
+                      </span>{" "}
+                      {entry.text}
+                    </span>
                   </div>
                 )}
                 {entry.type === "system" && (
@@ -563,17 +780,35 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               onSubmit={handleSubmit}
               className="border-t border-border bg-surface/80 p-4 backdrop-blur-sm"
             >
+              <div className="mb-2 space-y-2">
+                {!inCombat && (
+                  <ActionBar
+                    state={myState}
+                    isMyTurn={isMyTurn}
+                    connected={connected}
+                    onAttack={handleAttack}
+                    onCast={handleCast}
+                    onUseItem={handleUseItem}
+                  />
+                )}
+                <QuickRollBar
+                  onRoll={handleRoll}
+                  disabled={!connected || inCombat}
+                />
+              </div>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={actionText}
                   onChange={(e) => setActionText(e.target.value)}
                   placeholder={
-                    isMyTurn
-                      ? "Describe your action..."
-                      : "Waiting for your turn..."
+                    inCombat
+                      ? "In combat — use combat actions above"
+                      : isMyTurn
+                        ? "Describe your action..."
+                        : "Waiting for your turn..."
                   }
-                  disabled={!isMyTurn || !connected}
+                  disabled={!isMyTurn || !connected || inCombat}
                   className="flex-1 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-40"
                 />
                 <Button

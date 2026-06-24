@@ -5,4 +5,5 @@ export { default as Divider } from "./Divider";
 export { default as Field, controlClass } from "./Field";
 export { default as Spinner } from "./Spinner";
 export { default as Alert } from "./Alert";
+export { default as Modal } from "./Modal";
 export { cn } from "./cn";

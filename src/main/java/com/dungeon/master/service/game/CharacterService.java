@@ -55,6 +55,7 @@ public class CharacterService {
                 .proficiencies(request.proficiencies() != null ? request.proficiencies() : List.of())
                 .features(request.features() != null ? request.features() : List.of())
                 .backstory(request.backstory())
+                .imageUrl(request.imageUrl())
                 .build();
 
         character = characterRepository.save(character);
@@ -86,6 +87,7 @@ public class CharacterService {
         if (request.proficiencies() != null) character.setProficiencies(request.proficiencies());
         if (request.features() != null) character.setFeatures(request.features());
         character.setBackstory(request.backstory());
+        character.setImageUrl(request.imageUrl());
         character.setUpdatedAt(LocalDateTime.now());
 
         character = characterRepository.save(character);
@@ -124,6 +126,7 @@ public class CharacterService {
                 c.getProficiencies(),
                 c.getFeatures(),
                 c.getBackstory(),
+                c.getImageUrl(),
                 c.getCreatedAt(),
                 c.getUpdatedAt()
         );

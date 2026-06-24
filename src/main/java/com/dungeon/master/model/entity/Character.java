@@ -111,6 +111,9 @@ public class Character {
 
     private String backstory;
 
+    @Column(name = "image_url")
+    private String imageUrl;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

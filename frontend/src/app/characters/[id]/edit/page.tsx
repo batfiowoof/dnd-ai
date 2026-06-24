@@ -18,6 +18,7 @@ import {
   type AbilityName,
 } from "@/lib/dnd5e";
 import { Button, Alert, Spinner } from "@/components/ui";
+import Portrait from "@/components/Portrait";
 
 const ABILITY_LABELS: Record<AbilityName, string> = {
   strength: "STR",
@@ -58,6 +59,7 @@ function EditForm({ characterId }: { characterId: string }) {
   const [background, setBackground] = useState("");
   const [alignment, setAlignment] = useState("");
   const [backstory, setBackstory] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [abilities, setAbilities] = useState<Record<AbilityName, number>>({
     strength: 10,
     dexterity: 10,
@@ -78,6 +80,7 @@ function EditForm({ characterId }: { characterId: string }) {
     setBackground(c.background ?? "");
     setAlignment(c.alignment ?? "");
     setBackstory(c.backstory ?? "");
+    setImageUrl(c.imageUrl ?? "");
     setAbilities({
       strength: c.strength,
       dexterity: c.dexterity,
@@ -133,6 +136,7 @@ function EditForm({ characterId }: { characterId: string }) {
           proficiencies: selectedClass?.proficiencies ?? [],
           features: selectedRace?.traits ?? [],
           backstory,
+          imageUrl: imageUrl.trim(),
         },
       });
       router.push("/characters");
@@ -171,17 +175,37 @@ function EditForm({ characterId }: { characterId: string }) {
         </div>
 
         <div className="rounded-xl border border-border-accent bg-surface p-6 space-y-5 panel-corners">
-          {/* Name */}
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-            />
+          {/* Portrait + Name */}
+          <div className="flex items-start gap-4">
+            <Portrait src={imageUrl} name={name} size="xl" />
+            <div className="flex-1 space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Portrait URL
+                </label>
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://example.com/portrait.png"
+                  className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                />
+                <p className="mt-1 text-xs text-text-muted">
+                  Optional. Paste a link to an image; leave empty for initials.
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Race & Class */}

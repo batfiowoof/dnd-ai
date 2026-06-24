@@ -1,10 +1,27 @@
 package com.dungeon.master.websocket;
 
+import com.dungeon.master.model.dto.CastRequest;
+import com.dungeon.master.model.dto.CombatActionRequest;
+import com.dungeon.master.model.dto.DiceRollEvent;
+import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.GameStateDto;
+import com.dungeon.master.model.dto.HpChangeRequest;
 import com.dungeon.master.model.dto.JoinSessionRequest;
 import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
+import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.dto.PlayerStateEvent;
+import com.dungeon.master.model.dto.RollRequest;
+import com.dungeon.master.model.dto.StartEncounterRequest;
+import com.dungeon.master.model.dto.UseItemRequest;
+import com.dungeon.master.model.entity.GameSession;
+import com.dungeon.master.model.entity.Player;
+import com.dungeon.master.model.enums.RollMode;
+import com.dungeon.master.service.game.CombatService;
+import com.dungeon.master.service.game.DiceService;
 import com.dungeon.master.service.game.GameSessionService;
+import com.dungeon.master.service.game.PlayerService;
+import com.dungeon.master.service.game.PlayerStateService;
 import com.dungeon.master.service.game.TurnService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +43,10 @@ public class GameWebSocketController {
 
     private final TurnService turnService;
     private final GameSessionService gameSessionService;
+    private final PlayerService playerService;
+    private final PlayerStateService playerStateService;
+    private final CombatService combatService;
+    private final DiceService diceService;
     private final SimpMessagingTemplate messagingTemplate;
 
     @MessageMapping("/game/{sessionId}/action")
@@ -45,6 +66,196 @@ public class GameWebSocketController {
                     username, "/queue/errors",
                     (Object) Map.of("error", e.getMessage()));
         }
+    }
+
+    @MessageMapping("/game/{sessionId}/roll")
+    public void handleRoll(@DestinationVariable UUID sessionId,
+                           @Payload RollRequest request,
+                           Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            RollMode mode = request.mode() == null ? RollMode.NORMAL : request.mode();
+            DiceRollResult result = diceService.roll(request.notation(), mode);
+            String label = request.label() == null || request.label().isBlank()
+                    ? "Roll" : request.label();
+
+            log.info("Dice roll: session={}, player={}, {}={}",
+                    sessionId, username, result.notation(), result.total());
+
+            messagingTemplate.convertAndSend(
+                    "/topic/game/" + sessionId,
+                    DiceRollEvent.of(sessionId, player.id(), player.characterName(), label, result));
+        } catch (Exception e) {
+            log.error("Error rolling dice: session={}, player={}", sessionId, username, e);
+            messagingTemplate.convertAndSendToUser(
+                    username, "/queue/errors",
+                    (Object) Map.of("error", e.getMessage()));
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/cast")
+    public void handleCast(@DestinationVariable UUID sessionId,
+                           @Payload CastRequest request,
+                           Principal principal) {
+        String username = principal.getName();
+        try {
+            Player player = turnService.requireActiveTurn(sessionId, username);
+
+            // Level 0 = cantrip: no slot consumed.
+            if (request.spellLevel() >= 1) {
+                PlayerRuntimeStateDto state =
+                        playerStateService.useSpellSlot(player.getId(), request.spellLevel());
+                broadcastState(sessionId, state);
+            }
+
+            String spell = request.spellName() == null || request.spellName().isBlank()
+                    ? (request.spellLevel() < 1 ? "a cantrip" : "a level-" + request.spellLevel() + " spell")
+                    : request.spellName();
+
+            DiceRollResult attack = null;
+            if (request.attackNotation() != null && !request.attackNotation().isBlank()) {
+                attack = diceService.roll(request.attackNotation());
+                messagingTemplate.convertAndSend("/topic/game/" + sessionId,
+                        DiceRollEvent.of(sessionId, player.getId(), player.getCharacterName(),
+                                "Spell Attack", attack));
+            }
+
+            String summary = player.getCharacterName() + " casts " + spell
+                    + (request.spellLevel() >= 1 ? " (level-" + request.spellLevel() + " slot)" : "")
+                    + (attack != null ? " — attack roll " + attack.notation() + " = " + attack.total() : "")
+                    + ".";
+            turnService.submitAction(sessionId, username, summary);
+        } catch (Exception e) {
+            log.error("Error casting spell: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/use-item")
+    public void handleUseItem(@DestinationVariable UUID sessionId,
+                              @Payload UseItemRequest request,
+                              Principal principal) {
+        String username = principal.getName();
+        try {
+            Player player = turnService.requireActiveTurn(sessionId, username);
+            PlayerStateService.ItemUseResult result =
+                    playerStateService.useItem(player.getId(), request.itemName());
+            broadcastState(sessionId, result.state());
+
+            if (result.healRoll() != null) {
+                messagingTemplate.convertAndSend("/topic/game/" + sessionId,
+                        DiceRollEvent.of(sessionId, player.getId(), player.getCharacterName(),
+                                "Healing", result.healRoll()));
+            }
+
+            String summary = player.getCharacterName() + " uses " + result.itemName()
+                    + (result.healed() > 0
+                            ? " and recovers " + result.healed() + " HP (now "
+                                    + result.state().currentHp() + "/" + result.state().maxHp() + ")"
+                            : "")
+                    + ".";
+            turnService.submitAction(sessionId, username, summary);
+        } catch (Exception e) {
+            log.error("Error using item: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/hp")
+    public void handleHpChange(@DestinationVariable UUID sessionId,
+                               @Payload HpChangeRequest request,
+                               Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            PlayerRuntimeStateDto state =
+                    playerStateService.applyHpDelta(player.id(), request.amount());
+            broadcastState(sessionId, state);
+        } catch (Exception e) {
+            log.error("Error changing HP: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/start")
+    public void handleCombatStart(@DestinationVariable UUID sessionId,
+                                  @Payload StartEncounterRequest request,
+                                  Principal principal) {
+        String username = principal.getName();
+        try {
+            GameSession session = gameSessionService.getSession(sessionId);
+            if (!username.equals(session.getCreatedBy())) {
+                throw new IllegalStateException("Only the host can start an encounter");
+            }
+            combatService.startEncounter(sessionId, request.enemies());
+        } catch (Exception e) {
+            log.error("Error starting combat: session={}, host={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/attack")
+    public void handleCombatAttack(@DestinationVariable UUID sessionId,
+                                   @Payload CombatActionRequest request,
+                                   Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerAttack(sessionId, username, request.targetEnemyId());
+        } catch (Exception e) {
+            log.error("Error in combat attack: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/use-item")
+    public void handleCombatUseItem(@DestinationVariable UUID sessionId,
+                                    @Payload CombatActionRequest request,
+                                    Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerUseItem(sessionId, username, request.itemName());
+        } catch (Exception e) {
+            log.error("Error in combat use-item: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/end-turn")
+    public void handleCombatEndTurn(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerEndTurn(sessionId, username);
+        } catch (Exception e) {
+            log.error("Error ending combat turn: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/end")
+    public void handleCombatEnd(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            GameSession session = gameSessionService.getSession(sessionId);
+            if (!username.equals(session.getCreatedBy())) {
+                throw new IllegalStateException("Only the host can end the encounter");
+            }
+            combatService.endEncounterByHost(sessionId);
+        } catch (Exception e) {
+            log.error("Error ending combat: session={}, host={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    private void broadcastState(UUID sessionId, PlayerRuntimeStateDto state) {
+        messagingTemplate.convertAndSend("/topic/game/" + sessionId,
+                PlayerStateEvent.of(sessionId, state));
+    }
+
+    private void sendError(String username, Exception e) {
+        messagingTemplate.convertAndSendToUser(
+                username, "/queue/errors",
+                (Object) Map.of("error", e.getMessage() == null ? "Action failed" : e.getMessage()));
     }
 
     @MessageMapping("/game/{sessionId}/join")

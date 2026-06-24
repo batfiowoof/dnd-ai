@@ -9,7 +9,9 @@ import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.TurnEvent;
+import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.GameStatus;
+import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
@@ -29,7 +31,28 @@ public class TurnService {
     private final GameSessionRepository sessionRepository;
     private final PlayerRepository playerRepository;
     private final TurnEventRepository turnEventRepository;
+    private final CombatEncounterRepository combatEncounterRepository;
     private final GameEventProducer eventProducer;
+
+    /**
+     * Validate that it is {@code username}'s turn in an ACTIVE session and return
+     * their player. Used by mechanical actions (cast/use-item) that must gate on
+     * turn ownership before mutating authoritative state.
+     */
+    public Player requireActiveTurn(UUID sessionId, String username) {
+        GameSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalStateException("Session not found: " + sessionId));
+        if (session.getStatus() != GameStatus.ACTIVE) {
+            throw new IllegalStateException("Game is not active");
+        }
+        Player player = playerRepository.findBySessionIdAndUsername(sessionId, username)
+                .orElseThrow(() -> new PlayerNotFoundException(
+                        "Player not found: " + username + " in session " + sessionId));
+        if (!player.getId().equals(session.getCurrentTurnPlayerId())) {
+            throw new NotYourTurnException("It's not your turn, " + username);
+        }
+        return player;
+    }
 
     @Transactional
     public void submitAction(UUID sessionId, String username, String action) {
@@ -38,6 +61,10 @@ public class TurnService {
 
         if (session.getStatus() != GameStatus.ACTIVE) {
             throw new IllegalStateException("Game is not active");
+        }
+
+        if (combatEncounterRepository.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE).isPresent()) {
+            throw new IllegalStateException("Combat is in progress — use combat actions");
         }
 
         Player player = playerRepository.findBySessionIdAndUsername(sessionId, username)

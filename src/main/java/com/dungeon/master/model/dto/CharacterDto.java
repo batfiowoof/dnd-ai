@@ -26,6 +26,7 @@ public record CharacterDto(
         List<String> proficiencies,
         List<String> features,
         String backstory,
+        String imageUrl,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
