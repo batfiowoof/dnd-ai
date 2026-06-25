@@ -15,7 +15,9 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -48,6 +50,17 @@ public class PlayerRuntimeState {
     @Column(name = "temp_hp", nullable = false)
     @Builder.Default
     private int tempHp = 0;
+
+    /** Armor class, snapshotted from the Character template on join. */
+    @Column(name = "armor_class", nullable = false)
+    @Builder.Default
+    private int armorClass = 10;
+
+    /** Ability scores (STR/DEX/CON/INT/WIS/CHA), snapshotted from the Character template. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Integer> abilities = new LinkedHashMap<>();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "spell_slots", columnDefinition = "jsonb")

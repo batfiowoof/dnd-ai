@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { applyPrefs, loadPrefs } from "@/lib/prefs";
 
 export default function Providers({ children }: { children: ReactNode }) {
+  // Reflect saved display prefs (reduce motion, text scale) on first paint.
+  useEffect(() => {
+    applyPrefs(loadPrefs());
+  }, []);
+
   const [queryClient] = useState(
     () =>
       new QueryClient({

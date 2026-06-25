@@ -150,11 +150,27 @@ export interface PlayerRuntimeState {
   currentHp: number;
   maxHp: number;
   tempHp: number;
+  armorClass: number;
+  /** Ability scores keyed by STR/DEX/CON/INT/WIS/CHA. */
+  abilities: Record<string, number>;
   spellSlots: SpellSlot[];
   inventory: InventoryItem[];
   conditions: string[];
   cantrips: string[];
   knownSpells: string[];
+}
+
+/** Summary of a session the current user belongs to, for the "your adventures" list. */
+export interface SessionSummary {
+  sessionId: string;
+  joinCode: string;
+  status: GameStatus;
+  title: string;
+  createdBy: string | null;
+  createdAt: string;
+  playerCount: number;
+  isCreator: boolean;
+  myPlayerId: string;
 }
 
 export interface PlayerStateEvent {

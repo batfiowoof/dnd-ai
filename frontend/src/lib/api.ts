@@ -6,6 +6,7 @@ import type {
   JoinSessionRequest,
   PlayerDto,
   PlayerRuntimeState,
+  SessionSummary,
   TurnEventDto,
   CharacterDto,
   CharacterCreateUpdateRequest,
@@ -110,6 +111,43 @@ export async function getSessionPlayers(
     headers: getAuthHeaders(token),
   });
   return handleResponse(res);
+}
+
+export async function getUserSessions(
+  token: string
+): Promise<SessionSummary[]> {
+  const res = await fetch(`${BASE_URL}/sessions/my-sessions`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+export async function leaveSession(
+  token: string,
+  sessionId: string
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/leave`, {
+    method: "POST",
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `Request failed: ${res.status}`);
+  }
+}
+
+export async function deleteSession(
+  token: string,
+  sessionId: string
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `Request failed: ${res.status}`);
+  }
 }
 
 export async function kickPlayer(

@@ -9,7 +9,7 @@ interface ActionBarProps {
   isMyTurn: boolean;
   connected: boolean;
   onAttack: () => void;
-  onCast: (spellLevel: number) => void;
+  onCast: (spellLevel: number, spellName?: string) => void;
   onUseItem: (itemName: string) => void;
   /** Management actions — available regardless of whose turn it is. */
   onLongRest?: () => void;
@@ -36,6 +36,10 @@ export default function ActionBar({
   const availableSlots =
     state?.spellSlots.filter((s) => s.used < s.max) ?? [];
   const usableItems = state?.inventory.filter((i) => i.qty > 0) ?? [];
+  const cantrips = state?.cantrips ?? [];
+  const knownSpells = state?.knownSpells ?? [];
+  // Leveled spells are cast from the lowest slot still available.
+  const lowestSlot = availableSlots.length > 0 ? availableSlots[0].level : null;
 
   function close() {
     setOpenMenu(null);
@@ -77,32 +81,86 @@ export default function ActionBar({
         </button>
         {openMenu === "cast" && (
           <Menu>
-            <MenuItem
-              onClick={() => {
-                close();
-                onCast(0);
-              }}
-            >
-              Cantrip (no slot)
-            </MenuItem>
-            {availableSlots.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-text-muted">No spell slots</p>
-            ) : (
-              availableSlots.map((s) => (
+            <div className="max-h-72 overflow-y-auto">
+              {/* Cantrips — no slot cost */}
+              <SectionLabel>Cantrips</SectionLabel>
+              {cantrips.length === 0 ? (
                 <MenuItem
-                  key={s.level}
                   onClick={() => {
                     close();
-                    onCast(s.level);
+                    onCast(0);
                   }}
                 >
-                  Level {s.level}{" "}
-                  <span className="tabular text-text-muted">
-                    ({s.max - s.used}/{s.max})
-                  </span>
+                  Cantrip <span className="text-text-muted">(no slot)</span>
                 </MenuItem>
-              ))
-            )}
+              ) : (
+                cantrips.map((name) => (
+                  <MenuItem
+                    key={name}
+                    onClick={() => {
+                      close();
+                      onCast(0, name);
+                    }}
+                  >
+                    {name}
+                  </MenuItem>
+                ))
+              )}
+
+              {/* Known leveled spells — consume the lowest available slot */}
+              {knownSpells.length > 0 && (
+                <>
+                  <SectionLabel>
+                    Spells{" "}
+                    <span className="text-text-muted normal-case">
+                      (uses a slot)
+                    </span>
+                  </SectionLabel>
+                  {knownSpells.map((name) => (
+                    <MenuItem
+                      key={name}
+                      disabled={lowestSlot === null}
+                      onClick={() => {
+                        if (lowestSlot === null) return;
+                        close();
+                        onCast(lowestSlot, name);
+                      }}
+                    >
+                      {name}
+                      {lowestSlot !== null && (
+                        <span className="tabular text-text-muted">
+                          {" "}
+                          · L{lowestSlot}
+                        </span>
+                      )}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
+
+              {/* Generic cast at a chosen slot level */}
+              <SectionLabel>Cast at slot level</SectionLabel>
+              {availableSlots.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-text-muted">
+                  No spell slots
+                </p>
+              ) : (
+                availableSlots.map((s) => (
+                  <MenuItem
+                    key={s.level}
+                    onClick={() => {
+                      close();
+                      onCast(s.level);
+                    }}
+                  >
+                    Level {s.level}{" "}
+                    <span className="tabular text-text-muted">
+                      ({s.max - s.used}/{s.max})
+                    </span>
+                  </MenuItem>
+                ))
+              )}
+            </div>
           </Menu>
         )}
       </div>
@@ -188,18 +246,29 @@ function Menu({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="sticky top-0 bg-surface px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-gold">
+      {children}
+    </div>
+  );
+}
+
 function MenuItem({
   children,
   onClick,
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="block w-full px-3 py-2 text-left text-xs text-text transition hover:bg-accent-glow hover:text-accent"
+      disabled={disabled}
+      className="block w-full px-3 py-2 text-left text-xs text-text transition hover:bg-accent-glow hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text"
     >
       {children}
     </button>

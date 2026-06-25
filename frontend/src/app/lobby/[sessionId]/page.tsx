@@ -39,13 +39,15 @@ import type {
   EnemyActionEvent,
   CombatLifecycleEvent,
   ItemKind,
+  PlayerRuntimeState,
+  PlayerDto,
 } from "@/types";
-import { Button, Panel, Brand, Alert, D20Mark, cn } from "@/components/ui";
+import { Button, Panel, Brand, Alert, D20Mark, Tooltip, cn } from "@/components/ui";
 import Portrait from "@/components/Portrait";
 import DiceRollModal from "@/components/dice/DiceRollModal";
 import QuickRollBar from "@/components/dice/QuickRollBar";
 import ActionBar from "@/components/game/ActionBar";
-import CharacterStatus from "@/components/game/CharacterStatus";
+import CharacterSheetDialog from "@/components/game/CharacterSheetDialog";
 import InventoryManager from "@/components/game/InventoryManager";
 import CombatTracker from "@/components/combat/CombatTracker";
 import EnemyActionModal from "@/components/combat/EnemyActionModal";
@@ -97,6 +99,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const [copied, setCopied] = useState(false);
   const [actionText, setActionText] = useState("");
   const [manageOpen, setManageOpen] = useState(false);
+  const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Client | null>(null);
@@ -169,10 +172,18 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     if (playersQuery.data) setPlayers(playersQuery.data);
   }, [playersQuery.data, setPlayers]);
 
-  /* ── runtime states (HP / slots / inventory) → seed store ───── */
+  /* ── runtime states (HP / slots / inventory) → seed store ─────
+     Gated on the LIVE status (not the frozen loadedStatus): when the creator
+     starts the game from the lobby, loadedStatus stays "WAITING", so keying the
+     one-shot fetch off it left stats empty until the first PLAYER_STATE event
+     (i.e. the first turn). Runtime state is seeded on join/create, so fetching
+     the moment the session is ACTIVE is correct and clobber-free (staleTime ∞). */
   const statesQuery = useSessionStates(
     sessionId,
-    loadedStatus === "ACTIVE" || loadedStatus === "FINISHED"
+    status === "ACTIVE" ||
+      status === "FINISHED" ||
+      loadedStatus === "ACTIVE" ||
+      loadedStatus === "FINISHED"
   );
   useEffect(() => {
     if (statesQuery.data) setRuntimeStates(statesQuery.data);
@@ -368,9 +379,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     });
   }
 
-  function handleCast(spellLevel: number) {
+  function handleCast(spellLevel: number, spellName?: string) {
     if (!clientRef.current || !connected) return;
-    sendCast(clientRef.current, sessionId, { spellLevel });
+    sendCast(clientRef.current, sessionId, { spellLevel, spellName });
   }
 
   function handleUseItem(itemName: string) {
@@ -423,10 +434,14 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     (p) => p.id === currentTurnPlayerId
   );
   const myState = playerId ? runtimeByPlayerId[playerId] ?? null : null;
-  const myCharacterName = humanPlayers.find(
-    (p) => p.id === playerId
-  )?.characterName;
+  const myPlayer = humanPlayers.find((p) => p.id === playerId);
   const inCombat = combat?.status === "ACTIVE";
+
+  /* ── character-sheet dialog target (any player) ─────────────── */
+  const sheetPlayer = sheetPlayerId
+    ? humanPlayers.find((p) => p.id === sheetPlayerId)
+    : null;
+  const sheetState = sheetPlayerId ? runtimeByPlayerId[sheetPlayerId] : null;
 
   /* Resolve a chat log entry's author (matched by character name / username /
      id) so we can show their portrait next to the line. */
@@ -600,6 +615,15 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         onEquip={handleEquipItem}
         onAdd={handleAddItem}
       />
+      {sheetPlayer && sheetState && (
+        <CharacterSheetDialog
+          open={!!sheetPlayerId}
+          onClose={() => setSheetPlayerId(null)}
+          state={sheetState}
+          characterName={sheetPlayer.characterName}
+          imageUrl={sheetPlayer.imageUrl}
+        />
+      )}
 
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border bg-surface/80 px-4 py-3 backdrop-blur-sm">
@@ -631,6 +655,16 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             )}
             title={connected ? "Connected" : "Disconnected"}
           />
+
+          {/* My character — always reachable (the sidebar is hidden below md) */}
+          {myPlayer && (
+            <AvatarTrigger
+              player={myPlayer}
+              state={myState}
+              placement="bottom"
+              onOpen={() => setSheetPlayerId(myPlayer.id)}
+            />
+          )}
         </div>
       </header>
 
@@ -651,11 +685,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     : "border border-transparent text-text-muted"
                 )}
               >
-                <Portrait
-                  src={p.imageUrl}
-                  name={p.characterName}
-                  size="sm"
+                <AvatarTrigger
+                  player={p}
+                  state={runtimeByPlayerId[p.id]}
                   active={p.id === currentTurnPlayerId}
+                  onOpen={() => setSheetPlayerId(p.id)}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{p.characterName}</div>
@@ -697,12 +731,10 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             ))}
           </div>
 
-          {/* My character status */}
-          {myState && (
-            <div className="mt-4">
-              <CharacterStatus state={myState} characterName={myCharacterName} />
-            </div>
-          )}
+          {/* Tip: hover an avatar for HP/AC, click for the full sheet. */}
+          <p className="mt-4 text-[10px] leading-relaxed text-text-muted">
+            Hover a portrait for HP &amp; AC · click for the full sheet.
+          </p>
 
           {/* AI DM indicator in sidebar */}
           <div className="mt-auto border-t border-border pt-3">
@@ -870,7 +902,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                 This adventure has ended.
               </p>
               <Button
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/play")}
                 variant="outline"
                 className="mt-2"
               >
@@ -881,5 +913,60 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Side-menu / header avatar. Hover (or focus) shows a quick HP + AC tooltip;
+ * clicking opens the full character-sheet dialog. Works for any player.
+ */
+function AvatarTrigger({
+  player,
+  state,
+  active = false,
+  onOpen,
+  placement = "right",
+}: {
+  player: PlayerDto;
+  state?: PlayerRuntimeState | null;
+  active?: boolean;
+  onOpen: () => void;
+  placement?: "top" | "right" | "bottom" | "left";
+}) {
+  return (
+    <Tooltip
+      placement={placement}
+      content={
+        <span className="block whitespace-nowrap text-xs">
+          <span className="block font-display font-semibold text-text">
+            {player.characterName}
+          </span>
+          {state ? (
+            <span className="mt-0.5 block tabular text-text-muted">
+              <span className="text-gold">HP</span> {state.currentHp}/
+              {state.maxHp}
+              {"    "}
+              <span className="text-gold">AC</span> {state.armorClass}
+            </span>
+          ) : (
+            <span className="mt-0.5 block text-text-muted">No stats yet</span>
+          )}
+        </span>
+      }
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`${player.characterName} character sheet`}
+        className="cursor-pointer rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <Portrait
+          src={player.imageUrl}
+          name={player.characterName}
+          size="sm"
+          active={active}
+        />
+      </button>
+    </Tooltip>
   );
 }

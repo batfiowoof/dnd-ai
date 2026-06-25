@@ -10,12 +10,15 @@ import { useAuth } from "@/context/AuthContext";
 import { queryKeys } from "@/lib/queryKeys";
 import {
   createSession,
+  deleteSession,
   getGameState,
   getSessionByCode,
   getSessionHistory,
   getSessionPlayers,
+  getUserSessions,
   joinSession,
   kickPlayer,
+  leaveSession,
   startSession,
 } from "@/lib/api";
 import type {
@@ -76,6 +79,17 @@ export function useSessionPlayers(
   });
 }
 
+/** The current user's sessions (created or joined), for the "your adventures" list. */
+export function useUserSessions(enabled = true) {
+  const requireToken = useRequireToken();
+  return useQuery({
+    queryKey: queryKeys.session.mine(),
+    queryFn: async () => getUserSessions(await requireToken()),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 /* ── Mutations ───────────────────────────────────────────────── */
 
 export function useCreateSession() {
@@ -109,6 +123,30 @@ export function useStartSession() {
   return useMutation({
     mutationFn: async (sessionId: string) =>
       startSession(await requireToken(), sessionId),
+  });
+}
+
+export function useLeaveSession() {
+  const requireToken = useRequireToken();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sessionId: string) =>
+      leaveSession(await requireToken(), sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session.mine() });
+    },
+  });
+}
+
+export function useDeleteSession() {
+  const requireToken = useRequireToken();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sessionId: string) =>
+      deleteSession(await requireToken(), sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session.mine() });
+    },
   });
 }
 

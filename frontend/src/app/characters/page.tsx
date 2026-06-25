@@ -69,6 +69,9 @@ function CharactersList() {
           </div>
           <div className="flex gap-2">
             <Button onClick={() => router.push("/")} variant="ghost" size="sm">
+              Menu
+            </Button>
+            <Button onClick={() => router.push("/play")} variant="outline" size="sm">
               Play
             </Button>
             <Button onClick={logout} variant="ghost" size="sm">

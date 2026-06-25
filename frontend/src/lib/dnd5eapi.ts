@@ -65,10 +65,35 @@ export interface ApiSpell {
   desc: string[];
 }
 
+export interface ApiDamage {
+  damage_dice: string;
+  damage_type?: ApiRef;
+}
+
 export interface ApiEquipment {
   index: string;
   name: string;
   equipment_category: ApiRef;
+  /** Free-text rules (gear, potions, magic items). Weapons/armor are usually sparse. */
+  desc?: string[];
+  /** Weapons. */
+  weapon_category?: string;
+  weapon_range?: string;
+  damage?: ApiDamage;
+  two_handed_damage?: ApiDamage;
+  range?: { normal: number; long?: number | null };
+  throw_range?: { normal: number; long?: number | null };
+  properties?: ApiRef[];
+  /** Armor. */
+  armor_category?: string;
+  armor_class?: { base: number; dex_bonus?: boolean; max_bonus?: number | null };
+  str_minimum?: number;
+  stealth_disadvantage?: boolean;
+  /** Magic items (potions, scrolls, wondrous items) — served from /magic-items. */
+  rarity?: { name: string };
+  /** Common. */
+  cost?: { quantity: number; unit: string };
+  weight?: number;
 }
 
 export interface ApiEquipCategory {
@@ -127,9 +152,25 @@ export const listRaces = () => apiGet<ApiList<ApiRef>>("/races");
 export const getRace = (index: string) => apiGet<ApiRace>(`/races/${index}`);
 export const getEquipment = (index: string) =>
   apiGet<ApiEquipment>(`/equipment/${index}`);
+/** Magic items (potions, scrolls, wondrous) live on a separate endpoint. */
+export const getMagicItem = (index: string) =>
+  apiGet<ApiEquipment>(`/magic-items/${index}`);
 export const getEquipmentCategory = (index: string) =>
   apiGet<ApiEquipCategory>(`/equipment-categories/${index}`);
 export const listAlignments = () => apiGet<ApiList<ApiRef>>("/alignments");
+
+/**
+ * Best-effort SRD index from a display name (e.g. "Potion of Healing" →
+ * "potion-of-healing"). The 2014 API derives indexes this way, so it resolves
+ * most SRD content; non-SRD / custom names simply 404 (callers fail silently).
+ */
+export function nameToIndex(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 /* ── Mappers ─────────────────────────────────────────────────────── */
 

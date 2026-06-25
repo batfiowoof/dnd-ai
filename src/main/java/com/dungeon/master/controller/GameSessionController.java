@@ -6,6 +6,7 @@ import com.dungeon.master.model.dto.CreateSessionResponse;
 import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.JoinSessionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
+import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.dto.TurnEventDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
@@ -51,6 +52,13 @@ public class GameSessionController {
         String username = AuthUtils.username(jwt);
         CreateSessionResponse response = gameSessionService.createSession(request, username);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/my-sessions")
+    public ResponseEntity<List<SessionSummaryDto>> getMySessions(
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = AuthUtils.username(jwt);
+        return ResponseEntity.ok(gameSessionService.getUserSessions(username));
     }
 
     @GetMapping("/{code}")
@@ -127,6 +135,24 @@ public class GameSessionController {
             @AuthenticationPrincipal Jwt jwt) {
         String username = AuthUtils.username(jwt);
         gameSessionService.removePlayer(sessionId, playerId, username);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{sessionId}/leave")
+    public ResponseEntity<Void> leaveSession(
+            @PathVariable UUID sessionId,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = AuthUtils.username(jwt);
+        gameSessionService.leaveSession(sessionId, username);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{sessionId}")
+    public ResponseEntity<Void> deleteSession(
+            @PathVariable UUID sessionId,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = AuthUtils.username(jwt);
+        gameSessionService.deleteSession(sessionId, username);
         return ResponseEntity.noContent().build();
     }
 }

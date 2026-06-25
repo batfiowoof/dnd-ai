@@ -10,6 +10,7 @@ import com.dungeon.master.model.dto.CreateSessionResponse;
 import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.JoinSessionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
+import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.TurnEvent;
@@ -25,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -248,6 +250,92 @@ public class GameSessionService {
                 sessionId, playerId, SessionEvent.Type.PLAYER_LEFT));
 
         log.info("Player {} removed from session {} by {}", playerId, sessionId, requestingUsername);
+    }
+
+    /** Sessions the user participates in (created or joined), newest first. */
+    public List<SessionSummaryDto> getUserSessions(String username) {
+        return playerRepository.findByUsername(username).stream()
+                .map(player -> sessionRepository.findById(player.getSessionId())
+                        .map(session -> toSummary(session, player, username))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .sorted(Comparator.comparing(SessionSummaryDto::createdAt).reversed())
+                .toList();
+    }
+
+    /** The calling user leaves a session. Creators must delete the session instead. */
+    @Transactional
+    public void leaveSession(UUID sessionId, String username) {
+        GameSession session = getSession(sessionId);
+
+        if (username.equals(session.getCreatedBy())) {
+            throw new IllegalStateException("The session creator must delete the session, not leave it");
+        }
+
+        Player player = playerRepository.findBySessionIdAndUsername(sessionId, username)
+                .orElseThrow(() -> new PlayerNotFoundException("You are not in this session"));
+
+        UUID playerId = player.getId();
+        session.getTurnOrder().remove(playerId);
+        if (playerId.equals(session.getCurrentTurnPlayerId())) {
+            session.setCurrentTurnPlayerId(
+                    session.getTurnOrder().isEmpty() ? null : session.getTurnOrder().get(0));
+        }
+
+        List<Player> remaining = playerRepository.findBySessionId(sessionId).stream()
+                .filter(p -> !p.getId().equals(playerId) && p.getRole() == PlayerRole.PLAYER)
+                .toList();
+        for (int i = 0; i < remaining.size(); i++) {
+            remaining.get(i).setTurnIndex(i);
+            playerRepository.save(remaining.get(i));
+        }
+        sessionRepository.save(session);
+        playerRepository.delete(player);
+
+        eventProducer.sendSessionEvent(new SessionEvent(
+                sessionId, playerId, SessionEvent.Type.PLAYER_LEFT));
+
+        log.info("Player {} left session {}", username, sessionId);
+    }
+
+    /** Creator-only: delete a session and all of its data (cascades to players, state, etc.). */
+    @Transactional
+    public void deleteSession(UUID sessionId, String username) {
+        GameSession session = getSession(sessionId);
+
+        if (!username.equals(session.getCreatedBy())) {
+            throw new IllegalStateException("Only the session creator can delete the session");
+        }
+
+        sessionRepository.delete(session);
+        log.info("Session {} deleted by {}", sessionId, username);
+    }
+
+    private SessionSummaryDto toSummary(GameSession session, Player myPlayer, String username) {
+        int playerCount = (int) playerRepository.countBySessionIdAndRole(session.getId(), PlayerRole.PLAYER);
+        return new SessionSummaryDto(
+                session.getId(),
+                session.getCode(),
+                session.getStatus(),
+                title(session.getWorldSetting()),
+                session.getCreatedBy(),
+                session.getCreatedAt(),
+                playerCount,
+                username.equals(session.getCreatedBy()),
+                myPlayer.getId());
+    }
+
+    /** Short, human-readable title from the first non-empty line of the world setting. */
+    private String title(String worldSetting) {
+        if (worldSetting == null || worldSetting.isBlank()) {
+            return "Untitled adventure";
+        }
+        String firstLine = worldSetting.strip().lines().findFirst().orElse("").strip();
+        firstLine = firstLine.replaceFirst("^#+\\s*", ""); // drop a leading markdown heading marker
+        if (firstLine.isBlank()) {
+            return "Untitled adventure";
+        }
+        return firstLine.length() > 80 ? firstLine.substring(0, 80).strip() + "…" : firstLine;
     }
 
     private String generateJoinCode() {

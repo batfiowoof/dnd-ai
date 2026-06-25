@@ -16,8 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -65,12 +67,22 @@ public class PlayerStateService {
         }
         inventory.add(new InventoryItem("Potion of Healing", 2, ItemKind.POTION_HEALING));
 
+        Map<String, Integer> abilities = new LinkedHashMap<>();
+        abilities.put("STR", character.getStrength());
+        abilities.put("DEX", character.getDexterity());
+        abilities.put("CON", character.getConstitution());
+        abilities.put("INT", character.getIntelligence());
+        abilities.put("WIS", character.getWisdom());
+        abilities.put("CHA", character.getCharisma());
+
         PlayerRuntimeState state = PlayerRuntimeState.builder()
                 .playerId(player.getId())
                 .sessionId(player.getSessionId())
                 .currentHp(hp)
                 .maxHp(hp)
                 .tempHp(0)
+                .armorClass(character.getArmorClass())
+                .abilities(abilities)
                 .spellSlots(SpellSlotTable.forClass(character.getCharacterClass(), character.getLevel()))
                 .inventory(inventory)
                 .conditions(new ArrayList<>())
@@ -270,6 +282,8 @@ public class PlayerStateService {
                 s.getCurrentHp(),
                 s.getMaxHp(),
                 s.getTempHp(),
+                s.getArmorClass(),
+                s.getAbilities(),
                 s.getSpellSlots(),
                 s.getInventory(),
                 s.getConditions(),

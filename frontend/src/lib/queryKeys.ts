@@ -4,6 +4,7 @@
  */
 export const queryKeys = {
   session: {
+    mine: () => ["sessions", "mine"] as const,
     state: (sessionId: string) => ["session", sessionId, "state"] as const,
     history: (sessionId: string) => ["session", sessionId, "history"] as const,
     players: (sessionId: string) => ["session", sessionId, "players"] as const,
@@ -24,5 +25,8 @@ export const queryKeys = {
       ["dnd5e", "startingEquipment", classIndex] as const,
     equipmentCategory: (categoryIndex: string) =>
       ["dnd5e", "equipmentCategory", categoryIndex] as const,
+    spellByName: (name: string) => ["dnd5e", "spellByName", name] as const,
+    equipmentByName: (name: string) =>
+      ["dnd5e", "equipmentByName", name] as const,
   },
 } as const;
