@@ -125,13 +125,25 @@ export const useSessionStore = create<SessionState>((set) => ({
     set(() => {
       const entries: LogEntry[] = [];
       history.forEach((h) => {
-        entries.push({
-          id: `${h.id}-action`,
-          type: "action",
-          playerName: h.playerName,
-          text: h.action,
-          turnNumber: h.turnNumber,
-        });
+        // Combat beats aren't player speech — the `action` is a mechanical summary that
+        // appeared live as dice/HP modals, not a chat bubble. Replay it as a neutral
+        // system line so it isn't falsely attributed to a player.
+        if (h.source === "COMBAT") {
+          entries.push({
+            id: `${h.id}-combat`,
+            type: "system",
+            text: h.action,
+            turnNumber: h.turnNumber,
+          });
+        } else {
+          entries.push({
+            id: `${h.id}-action`,
+            type: "action",
+            playerName: h.playerName,
+            text: h.action,
+            turnNumber: h.turnNumber,
+          });
+        }
         if (h.dmResponse) {
           entries.push({
             id: `${h.id}-dm`,

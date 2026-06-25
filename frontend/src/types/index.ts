@@ -48,6 +48,8 @@ export interface TurnEventDto {
   dmResponse: string;
   timestamp: string;
   turnNumber: number;
+  /** NARRATIVE = player turn; COMBAT = auto-resolved combat beat (mechanical summary + narration). */
+  source: "NARRATIVE" | "COMBAT";
 }
 
 export interface DmResponseDto {

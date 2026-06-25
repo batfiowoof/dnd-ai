@@ -4,9 +4,11 @@ import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
 import com.dungeon.master.model.entity.Player;
+import com.dungeon.master.model.entity.TurnEvent;
 import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.CombatantKind;
 import com.dungeon.master.model.enums.PlayerRole;
@@ -42,6 +44,8 @@ class CombatServiceTest {
     private CharacterRepository characterRepo;
     private PlayerStateService playerStateService;
     private DiceService diceService;
+    private TurnService turnService;
+    private GameEventProducer eventProducer;
     private SimpMessagingTemplate messaging;
     private CombatService combat;
 
@@ -55,9 +59,21 @@ class CombatServiceTest {
         characterRepo = mock(CharacterRepository.class);
         playerStateService = mock(PlayerStateService.class);
         diceService = mock(DiceService.class);
+        turnService = mock(TurnService.class);
+        eventProducer = mock(GameEventProducer.class);
         messaging = mock(SimpMessagingTemplate.class);
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
-                playerStateService, diceService, messaging);
+                playerStateService, diceService, turnService, eventProducer, messaging);
+
+        // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
+        when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))
+                .thenAnswer(inv -> TurnEvent.builder()
+                        .id(UUID.randomUUID())
+                        .sessionId(inv.getArgument(0))
+                        .playerId(inv.getArgument(1))
+                        .action(inv.getArgument(2))
+                        .turnNumber(1)
+                        .build());
 
         // save returns the argument (assigning an id when absent).
         when(encounterRepo.save(any(CombatEncounter.class))).thenAnswer(inv -> {

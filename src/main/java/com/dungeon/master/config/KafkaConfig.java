@@ -12,6 +12,7 @@ public class KafkaConfig {
     public static final String TOPIC_DM_RESPONSE = "game.dm.response";
     public static final String TOPIC_TURN_NEXT = "game.turn.next";
     public static final String TOPIC_SESSION_EVENT = "game.session.event";
+    public static final String TOPIC_COMBAT_NARRATION = "game.combat.narration";
 
     @Bean
     public NewTopic playerActionTopic() {
@@ -40,6 +41,14 @@ public class KafkaConfig {
     @Bean
     public NewTopic sessionEventTopic() {
         return TopicBuilder.name(TOPIC_SESSION_EVENT)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic combatNarrationTopic() {
+        return TopicBuilder.name(TOPIC_COMBAT_NARRATION)
                 .partitions(3)
                 .replicas(1)
                 .build();

@@ -78,13 +78,23 @@ export default function GamePage({
     if (!historyQuery.data) return;
     const entries: LogEntry[] = [];
     historyQuery.data.forEach((h: TurnEventDto) => {
-      entries.push({
-        id: `${h.id}-action`,
-        type: "action",
-        playerName: h.playerName,
-        text: h.action,
-        turnNumber: h.turnNumber,
-      });
+      // Combat beats are mechanical summaries, not player speech — replay as system lines.
+      if (h.source === "COMBAT") {
+        entries.push({
+          id: `${h.id}-combat`,
+          type: "system",
+          text: h.action,
+          turnNumber: h.turnNumber,
+        });
+      } else {
+        entries.push({
+          id: `${h.id}-action`,
+          type: "action",
+          playerName: h.playerName,
+          text: h.action,
+          turnNumber: h.turnNumber,
+        });
+      }
       if (h.dmResponse) {
         entries.push({
           id: `${h.id}-dm`,

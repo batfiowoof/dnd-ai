@@ -110,6 +110,51 @@ public class TurnService {
         log.info("DM response recorded: session={}, turn={}", sessionId, turnNumber);
     }
 
+    /**
+     * Persist a combat "beat" as a {@link TurnEvent} with the mechanical summary as its
+     * {@code action} and no DM response yet. Combat shares the session-wide turn-number
+     * sequence so the fight stays ordered in history and is picked up by RAG. The narration
+     * is filled in later by {@link #recordCombatNarration} once the LLM finishes streaming.
+     *
+     * @param playerId an associated player in the session (the acting player for a
+     *                 player-cycle beat, or any session player for start/end beats) — the
+     *                 row's {@code player_id} is non-null but combat narration is keyed by
+     *                 turn number, not by this player.
+     */
+    @Transactional
+    public TurnEvent createCombatBeat(UUID sessionId, UUID playerId, String summary) {
+        int nextTurnNumber = turnEventRepository.findTopBySessionIdOrderByTurnNumberDesc(sessionId)
+                .map(e -> e.getTurnNumber() + 1)
+                .orElse(1);
+
+        TurnEvent beat = TurnEvent.builder()
+                .sessionId(sessionId)
+                .playerId(playerId)
+                .action(summary)
+                .turnNumber(nextTurnNumber)
+                .source(com.dungeon.master.model.enums.TurnSource.COMBAT)
+                .build();
+        TurnEvent saved = turnEventRepository.save(beat);
+
+        log.info("Combat beat recorded: session={}, turn={}", sessionId, nextTurnNumber);
+        return saved;
+    }
+
+    /**
+     * Fill in the DM narration for a previously-created combat beat. Loads the exact event
+     * by id (never "find latest") so concurrent in-flight beats can't collide.
+     */
+    @Transactional
+    public void recordCombatNarration(UUID turnEventId, String narration) {
+        TurnEvent beat = turnEventRepository.findById(turnEventId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Combat beat not found: " + turnEventId));
+        beat.setDmResponse(narration);
+        turnEventRepository.save(beat);
+        log.info("Combat narration recorded: turnEvent={}, turn={}",
+                turnEventId, beat.getTurnNumber());
+    }
+
     @Transactional
     public UUID advanceTurn(UUID sessionId) {
         GameSession session = sessionRepository.findById(sessionId)

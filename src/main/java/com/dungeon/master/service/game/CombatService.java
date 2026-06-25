@@ -1,6 +1,8 @@
 package com.dungeon.master.service.game;
 
 import com.dungeon.master.exception.PlayerNotFoundException;
+import com.dungeon.master.kafka.event.CombatNarrationEvent;
+import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.CombatStateDto;
@@ -14,8 +16,10 @@ import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
 import com.dungeon.master.model.entity.Player;
+import com.dungeon.master.model.entity.TurnEvent;
 import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.CombatantKind;
+import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
@@ -32,6 +36,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Combat overlay state machine. While an encounter is ACTIVE the narrative turn
@@ -50,6 +55,8 @@ public class CombatService {
     private final CharacterRepository characterRepository;
     private final PlayerStateService playerStateService;
     private final DiceService diceService;
+    private final TurnService turnService;
+    private final GameEventProducer eventProducer;
     private final SimpMessagingTemplate messagingTemplate;
 
     /* ── reads ───────────────────────────────────────────────────── */
@@ -118,7 +125,11 @@ public class CombatService {
         log.info("Combat started: session={}, enemies={}, combatants={}",
                 sessionId, enemies.size(), order.size());
 
-        resolveUntilPlayerOrEnd(enc);
+        List<String> beat = new ArrayList<>();
+        beat.add("Combat begins! The party faces " + roster(enemies)
+                + ". Initiative is rolled.");
+        resolveUntilPlayerOrEnd(enc, beat);
+        flushBeat(sessionId, anyPlayerId(sessionId), beat);
     }
 
     /* ── player actions ──────────────────────────────────────────── */
@@ -160,7 +171,12 @@ public class CombatService {
                 enemy.getCurrentHp(), enemy.getMaxHp(), defeated,
                 toStateDto(enc)));
 
-        advanceTurn(enc);
+        List<String> beat = new ArrayList<>();
+        beat.add(describeAttack(player.getCharacterName(), enemy.getName(), atk,
+                enemy.getArmorClass(), hit, damageSummary,
+                enemy.getCurrentHp(), enemy.getMaxHp(), defeated));
+        advanceTurn(enc, beat);
+        flushBeat(sessionId, player.getId(), beat);
     }
 
     @Transactional
@@ -171,27 +187,36 @@ public class CombatService {
         PlayerStateService.ItemUseResult result = playerStateService.useItem(player.getId(), itemName);
         broadcast(sessionId, PlayerStateEvent.of(sessionId, result.state()));
 
-        advanceTurn(enc);
+        List<String> beat = new ArrayList<>();
+        beat.add(describeItemUse(player.getCharacterName(), result));
+        advanceTurn(enc, beat);
+        flushBeat(sessionId, player.getId(), beat);
     }
 
     @Transactional
     public void playerEndTurn(UUID sessionId, String username) {
         CombatEncounter enc = activeEncounter(sessionId);
-        requireCombatTurn(enc, sessionId, username);
-        advanceTurn(enc);
+        Player player = requireCombatTurn(enc, sessionId, username);
+
+        List<String> beat = new ArrayList<>();
+        beat.add(player.getCharacterName() + " holds their action and ends their turn.");
+        advanceTurn(enc, beat);
+        flushBeat(sessionId, player.getId(), beat);
     }
 
     @Transactional
     public void endEncounterByHost(UUID sessionId) {
         CombatEncounter enc = activeEncounter(sessionId);
-        endEncounter(enc, allEnemiesDead(sessionId));
+        List<String> beat = new ArrayList<>();
+        endEncounter(enc, allEnemiesDead(sessionId), beat);
+        flushBeat(sessionId, anyPlayerId(sessionId), beat);
     }
 
     /* ── turn engine ─────────────────────────────────────────────── */
 
-    private void advanceTurn(CombatEncounter enc) {
+    private void advanceTurn(CombatEncounter enc, List<String> beat) {
         advanceIndex(enc);
-        resolveUntilPlayerOrEnd(enc);
+        resolveUntilPlayerOrEnd(enc, beat);
     }
 
     /**
@@ -199,18 +224,18 @@ public class CombatService {
      * living player's turn or the encounter ends. Three termination guards plus a
      * hard step cap make non-termination impossible.
      */
-    private void resolveUntilPlayerOrEnd(CombatEncounter enc) {
+    private void resolveUntilPlayerOrEnd(CombatEncounter enc, List<String> beat) {
         UUID sessionId = enc.getSessionId();
         int order = enc.getInitiativeOrder().size();
         int maxSteps = Math.max(1, order) * 4 + 8;
 
         for (int step = 0; step < maxSteps; step++) {
             if (allEnemiesDead(sessionId)) {           // guard (a): victory
-                endEncounter(enc, true);
+                endEncounter(enc, true, beat);
                 return;
             }
             if (noLivingPlayers(sessionId)) {          // guard (b): TPK
-                endEncounter(enc, false);
+                endEncounter(enc, false, beat);
                 return;
             }
 
@@ -222,7 +247,7 @@ public class CombatService {
                     advanceIndex(enc);
                     continue;
                 }
-                enemyAct(enc, e);
+                enemyAct(enc, e, beat);
                 advanceIndex(enc);
                 continue;
             }
@@ -239,10 +264,10 @@ public class CombatService {
 
         // Safety net — should be unreachable given the guards above.
         log.warn("Combat step cap hit for session={}, ending encounter", sessionId);
-        endEncounter(enc, allEnemiesDead(sessionId));
+        endEncounter(enc, allEnemiesDead(sessionId), beat);
     }
 
-    private void enemyAct(CombatEncounter enc, Enemy enemy) {
+    private void enemyAct(CombatEncounter enc, Enemy enemy, List<String> beat) {
         UUID sessionId = enc.getSessionId();
         TargetPlayer target = pickTarget(sessionId);
         if (target == null) {                          // guard (c): no valid target
@@ -276,6 +301,9 @@ public class CombatService {
                 RollSummary.of(atk), targetAc, hit, damageSummary,
                 targetHp, targetMax, defeated,
                 toStateDto(enc)));
+
+        beat.add(describeAttack(enemy.getName(), target.player().getCharacterName(), atk,
+                targetAc, hit, damageSummary, targetHp, targetMax, defeated));
     }
 
     private void advanceIndex(CombatEncounter enc) {
@@ -289,9 +317,14 @@ public class CombatService {
         enc.setActiveIndex(next);
     }
 
-    private void endEncounter(CombatEncounter enc, boolean victory) {
+    private void endEncounter(CombatEncounter enc, boolean victory, List<String> beat) {
         enc.setStatus(CombatStatus.ENDED);
         encounterRepository.save(enc);
+        if (beat != null) {
+            beat.add(victory
+                    ? "The last foe falls — the party stands victorious."
+                    : "The party is overwhelmed and falls...");
+        }
         broadcast(enc.getSessionId(), CombatLifecycleEvent.end(enc.getSessionId(), victory, toStateDto(enc)));
         log.info("Combat ended: session={}, victory={}", enc.getSessionId(), victory);
     }
@@ -409,5 +442,68 @@ public class CombatService {
 
     private void broadcast(UUID sessionId, Object event) {
         messagingTemplate.convertAndSend("/topic/game/" + sessionId, event);
+    }
+
+    /* ── combat narration beats ──────────────────────────────────── */
+
+    /**
+     * Persist the accumulated mechanical summary of one combat beat as a TurnEvent (fast,
+     * in this transaction) and fire a {@link CombatNarrationEvent} so the DM narration is
+     * streamed off-thread. The mechanical results have already been broadcast as instant
+     * modals; this never blocks combat on the LLM.
+     */
+    private void flushBeat(UUID sessionId, UUID playerId, List<String> lines) {
+        if (lines.isEmpty()) {
+            return;
+        }
+        if (playerId == null) {
+            // No player to attribute the row to (turn_events.player_id is non-null). A real
+            // encounter always has a player; skip narration rather than fail the transaction.
+            log.warn("Skipping combat narration beat — no player in session={}", sessionId);
+            return;
+        }
+        String summary = String.join(" ", lines);
+        TurnEvent beat = turnService.createCombatBeat(sessionId, playerId, summary);
+        eventProducer.sendCombatNarration(new CombatNarrationEvent(
+                sessionId, beat.getId(), beat.getTurnNumber(), summary));
+    }
+
+    /** One mechanical attack line: "X hits Y (attack 18 vs AC 15) for 7 damage (Y now 4/11 HP)." */
+    private String describeAttack(String attacker, String target, DiceRollResult atk,
+                                  int targetAc, boolean hit, RollSummary dmg,
+                                  int targetHp, int targetMax, boolean defeated) {
+        if (!hit) {
+            String why = atk.fumble() ? " (a fumble)" : "";
+            return attacker + " attacks " + target + " but misses" + why
+                    + " (attack " + atk.total() + " vs AC " + targetAc + ").";
+        }
+        String crit = atk.crit() ? "a critical hit — " : "";
+        String head = attacker + " hits " + target + " (" + crit + "attack " + atk.total()
+                + " vs AC " + targetAc + ") for " + dmg.total() + " damage";
+        if (defeated) {
+            return head + ", defeating " + target + ".";
+        }
+        return head + " (" + target + " now at " + targetHp + "/" + targetMax + " HP).";
+    }
+
+    private String describeItemUse(String actor, PlayerStateService.ItemUseResult r) {
+        if (r.kind() == ItemKind.POTION_HEALING && r.healed() > 0) {
+            return actor + " uses " + r.itemName() + ", recovering " + r.healed()
+                    + " HP (now " + r.state().currentHp() + "/" + r.state().maxHp() + " HP).";
+        }
+        return actor + " uses " + r.itemName() + ".";
+    }
+
+    private String roster(List<Enemy> enemies) {
+        return enemies.stream().map(Enemy::getName).collect(Collectors.joining(", "));
+    }
+
+    /** Any real player in the session — used to attribute start/end beats that have no actor. */
+    private UUID anyPlayerId(UUID sessionId) {
+        return playerRepository.findBySessionId(sessionId).stream()
+                .filter(p -> p.getRole() == PlayerRole.PLAYER)
+                .map(Player::getId)
+                .findFirst()
+                .orElse(null);
     }
 }

@@ -64,6 +64,33 @@ public class DmAiService {
         return response;
     }
 
+    /**
+     * Narrates a combat "beat" whose outcome has already been resolved authoritatively by
+     * the combat engine. The model adds flavor only — it must not change hits, numbers, or
+     * who lives or dies. The {@code beatSummary} carries the mechanical truth (rolls, hits,
+     * damage, current HP) so the narration can describe it accurately ("bloodied", "staggers").
+     */
+    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackCombatNarration")
+    public String generateCombatNarration(UUID sessionId, String beatSummary,
+                                           Consumer<String> onChunk) {
+        log.info("Streaming combat narration for session={}", sessionId);
+
+        String userMessage = """
+                Combat is underway. The following beat has ALREADY been resolved by the game \
+                engine — these dice results, hits, misses, damage values, current HP, and any \
+                deaths are FINAL and authoritative. Narrate what happened vividly and \
+                dramatically, but do NOT change, contradict, or re-roll any outcome, and do \
+                not invent new attacks. Keep it under 120 words. Refer to combatants by name.
+
+                Resolved combat beat:
+                %s""".formatted(beatSummary);
+
+        String response = streamToString(userMessage, onChunk);
+
+        log.info("Combat narration generated for session={}, length={}", sessionId, response.length());
+        return response;
+    }
+
     private String streamToString(String userMessage, Consumer<String> onChunk) {
         StringBuilder assembled = new StringBuilder();
         dmChatClient.prompt()
@@ -132,6 +159,22 @@ public class DmAiService {
                 "[The AI service is temporarily unavailable. " +
                 "Your action '" + playerAction + "' has been recorded. " +
                 "The DM will respond when service is restored. Please try again in a moment.]";
+        if (onChunk != null) {
+            onChunk.accept(message);
+        }
+        return message;
+    }
+
+    @SuppressWarnings("unused")
+    private String fallbackCombatNarration(UUID sessionId, String beatSummary,
+                                           Consumer<String> onChunk, Throwable throwable) {
+        log.error("AI combat narration unavailable, using fallback. session={}, error={}",
+                sessionId, throwable.getMessage());
+        // Fall back to the raw mechanical summary so combat still narrates *something* and
+        // never blocks on the LLM. Combat mechanics have already resolved authoritatively.
+        String message = beatSummary == null || beatSummary.isBlank()
+                ? "The clash of combat rings out."
+                : beatSummary;
         if (onChunk != null) {
             onChunk.accept(message);
         }

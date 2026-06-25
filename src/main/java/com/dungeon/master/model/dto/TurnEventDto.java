@@ -10,6 +10,7 @@ public record TurnEventDto(
         String action,
         String dmResponse,
         LocalDateTime timestamp,
-        int turnNumber
+        int turnNumber,
+        String source
 ) {
 }

@@ -115,7 +115,8 @@ public class GameSessionController {
                             event.getAction(),
                             event.getDmResponse(),
                             event.getTimestamp(),
-                            event.getTurnNumber());
+                            event.getTurnNumber(),
+                            event.getSource().name());
                 })
                 .toList();
 

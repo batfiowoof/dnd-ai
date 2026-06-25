@@ -1,6 +1,7 @@
 package com.dungeon.master.kafka.producer;
 
 import com.dungeon.master.config.KafkaConfig;
+import com.dungeon.master.kafka.event.CombatNarrationEvent;
 import com.dungeon.master.kafka.event.DmResponseEvent;
 import com.dungeon.master.kafka.event.PlayerActionEvent;
 import com.dungeon.master.kafka.event.SessionEvent;
@@ -42,6 +43,13 @@ public class GameEventProducer {
         log.info("Publishing session event: session={}, type={}",
                 event.sessionId(), event.type());
         kafkaTemplate.send(KafkaConfig.TOPIC_SESSION_EVENT,
+                event.sessionId().toString(), event);
+    }
+
+    public void sendCombatNarration(CombatNarrationEvent event) {
+        log.info("Publishing combat narration beat: session={}, turnEvent={}, turn={}",
+                event.sessionId(), event.turnEventId(), event.turnNumber());
+        kafkaTemplate.send(KafkaConfig.TOPIC_COMBAT_NARRATION,
                 event.sessionId().toString(), event);
     }
 }
