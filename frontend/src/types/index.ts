@@ -135,6 +135,8 @@ export interface InventoryItem {
   name: string;
   qty: number;
   kind: ItemKind;
+  /** Display/context flag for weapons & armor; no mechanical effect. */
+  equipped?: boolean;
 }
 
 export interface SpellSlot {
@@ -151,6 +153,8 @@ export interface PlayerRuntimeState {
   spellSlots: SpellSlot[];
   inventory: InventoryItem[];
   conditions: string[];
+  cantrips: string[];
+  knownSpells: string[];
 }
 
 export interface PlayerStateEvent {
@@ -256,6 +260,9 @@ export interface CharacterDto {
   equipment: string[];
   proficiencies: string[];
   features: string[];
+  cantrips: string[];
+  knownSpells: string[];
+  startingInventory: InventoryItem[];
   backstory: string | null;
   imageUrl: string | null;
   createdAt: string;
@@ -281,6 +288,9 @@ export interface CharacterCreateUpdateRequest {
   equipment: string[];
   proficiencies: string[];
   features: string[];
+  cantrips: string[];
+  knownSpells: string[];
+  startingInventory: InventoryItem[];
   backstory: string;
   imageUrl: string;
 }

@@ -11,6 +11,8 @@ public record PlayerRuntimeStateDto(
         int tempHp,
         List<SpellSlot> spellSlots,
         List<InventoryItem> inventory,
-        List<String> conditions
+        List<String> conditions,
+        List<String> cantrips,
+        List<String> knownSpells
 ) {
 }

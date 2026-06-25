@@ -22,6 +22,10 @@ import {
   sendRoll,
   sendCast,
   sendUseItem,
+  sendAddItem,
+  sendDropItem,
+  sendEquipItem,
+  sendLongRest,
   sendStartEncounter,
   sendCombatAttack,
   sendCombatUseItem,
@@ -34,6 +38,7 @@ import type {
   PlayerStateEvent,
   EnemyActionEvent,
   CombatLifecycleEvent,
+  ItemKind,
 } from "@/types";
 import { Button, Panel, Brand, Alert, D20Mark, cn } from "@/components/ui";
 import Portrait from "@/components/Portrait";
@@ -41,6 +46,7 @@ import DiceRollModal from "@/components/dice/DiceRollModal";
 import QuickRollBar from "@/components/dice/QuickRollBar";
 import ActionBar from "@/components/game/ActionBar";
 import CharacterStatus from "@/components/game/CharacterStatus";
+import InventoryManager from "@/components/game/InventoryManager";
 import CombatTracker from "@/components/combat/CombatTracker";
 import EnemyActionModal from "@/components/combat/EnemyActionModal";
 import StartEncounterControl from "@/components/combat/StartEncounterControl";
@@ -90,6 +96,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   /* ── purely-local UI state ──────────────────────────────────── */
   const [copied, setCopied] = useState(false);
   const [actionText, setActionText] = useState("");
+  const [manageOpen, setManageOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Client | null>(null);
@@ -371,6 +378,24 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     sendUseItem(clientRef.current, sessionId, itemName);
   }
 
+  /* ── inventory management & rest ────────────────────────────── */
+  function handleAddItem(item: { name: string; qty: number; kind: ItemKind }) {
+    if (!clientRef.current || !connected) return;
+    sendAddItem(clientRef.current, sessionId, item);
+  }
+  function handleDropItem(itemName: string) {
+    if (!clientRef.current || !connected) return;
+    sendDropItem(clientRef.current, sessionId, itemName);
+  }
+  function handleEquipItem(itemName: string, equipped: boolean) {
+    if (!clientRef.current || !connected) return;
+    sendEquipItem(clientRef.current, sessionId, itemName, equipped);
+  }
+  function handleLongRest() {
+    if (!clientRef.current || !connected) return;
+    sendLongRest(clientRef.current, sessionId);
+  }
+
   /* ── combat handlers ────────────────────────────────────────── */
   function handleStartEncounter(enemyKeys: string[]) {
     if (!clientRef.current || !connected) return;
@@ -566,6 +591,15 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
       {/* Dice + combat-action animation overlays */}
       <DiceRollModal />
       <EnemyActionModal />
+      <InventoryManager
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        state={myState}
+        connected={connected}
+        onDrop={handleDropItem}
+        onEquip={handleEquipItem}
+        onAdd={handleAddItem}
+      />
 
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border bg-surface/80 px-4 py-3 backdrop-blur-sm">
@@ -789,6 +823,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     onAttack={handleAttack}
                     onCast={handleCast}
                     onUseItem={handleUseItem}
+                    onLongRest={handleLongRest}
+                    onManage={() => setManageOpen(true)}
                   />
                 )}
                 <QuickRollBar

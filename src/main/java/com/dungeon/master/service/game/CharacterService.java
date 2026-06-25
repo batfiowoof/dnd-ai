@@ -54,6 +54,9 @@ public class CharacterService {
                 .equipment(request.equipment() != null ? request.equipment() : List.of())
                 .proficiencies(request.proficiencies() != null ? request.proficiencies() : List.of())
                 .features(request.features() != null ? request.features() : List.of())
+                .cantrips(request.cantrips() != null ? request.cantrips() : List.of())
+                .knownSpells(request.knownSpells() != null ? request.knownSpells() : List.of())
+                .startingInventory(request.startingInventory() != null ? request.startingInventory() : List.of())
                 .backstory(request.backstory())
                 .imageUrl(request.imageUrl())
                 .build();
@@ -86,6 +89,9 @@ public class CharacterService {
         if (request.equipment() != null) character.setEquipment(request.equipment());
         if (request.proficiencies() != null) character.setProficiencies(request.proficiencies());
         if (request.features() != null) character.setFeatures(request.features());
+        if (request.cantrips() != null) character.setCantrips(request.cantrips());
+        if (request.knownSpells() != null) character.setKnownSpells(request.knownSpells());
+        if (request.startingInventory() != null) character.setStartingInventory(request.startingInventory());
         character.setBackstory(request.backstory());
         character.setImageUrl(request.imageUrl());
         character.setUpdatedAt(LocalDateTime.now());
@@ -125,6 +131,9 @@ public class CharacterService {
                 c.getEquipment(),
                 c.getProficiencies(),
                 c.getFeatures(),
+                c.getCantrips(),
+                c.getKnownSpells(),
+                c.getStartingInventory(),
                 c.getBackstory(),
                 c.getImageUrl(),
                 c.getCreatedAt(),

@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { useCharacter, useUpdateCharacter } from "@/hooks/useCharacterQueries";
+import { useRaces, useClasses, useAlignments } from "@/hooks/useDnd5eData";
 import {
-  RACES,
-  CLASSES,
   BACKGROUNDS,
-  ALIGNMENTS,
   ABILITY_NAMES,
   getAbilityModifier,
   formatModifier,
@@ -47,6 +45,9 @@ function EditForm({ characterId }: { characterId: string }) {
   const { username } = useAuth();
   const characterQuery = useCharacter(characterId, !!username);
   const updateMutation = useUpdateCharacter();
+  const racesQuery = useRaces();
+  const classesQuery = useClasses();
+  const alignmentsQuery = useAlignments();
 
   const loading = characterQuery.isLoading;
   const saving = updateMutation.isPending;
@@ -95,11 +96,11 @@ function EditForm({ characterId }: { characterId: string }) {
     if (characterQuery.isError) setError("Failed to load character");
   }, [characterQuery.isError]);
 
-  const selectedClass = CLASSES.find((c) => c.name === characterClass);
+  const selectedClass = classesQuery.data?.find((c) => c.name === characterClass);
 
   const derivedHP = useMemo(() => {
     if (!selectedClass) return 10;
-    return calculateHitPoints(selectedClass, abilities.constitution);
+    return calculateHitPoints(selectedClass.hitDie, abilities.constitution);
   }, [selectedClass, abilities.constitution]);
 
   const derivedAC = useMemo(
@@ -107,7 +108,7 @@ function EditForm({ characterId }: { characterId: string }) {
     [abilities.dexterity]
   );
 
-  const selectedRace = RACES.find((r) => r.name === race);
+  const selectedRace = racesQuery.data?.find((r) => r.name === race);
   const derivedSpeed = selectedRace?.speed ?? 30;
 
   async function handleSave() {
@@ -132,9 +133,15 @@ function EditForm({ characterId }: { characterId: string }) {
           hitPoints: derivedHP,
           armorClass: derivedAC,
           speed: derivedSpeed,
-          equipment: selectedClass?.equipment ?? [],
-          proficiencies: selectedClass?.proficiencies ?? [],
-          features: selectedRace?.traits ?? [],
+          // Edit has no equipment step — preserve the stored gear/inventory.
+          equipment: characterQuery.data?.equipment ?? [],
+          proficiencies:
+            selectedClass?.proficiencies ?? characterQuery.data?.proficiencies ?? [],
+          features: selectedRace?.traits ?? characterQuery.data?.features ?? [],
+          // Preserve spell & structured-inventory selections made at creation.
+          cantrips: characterQuery.data?.cantrips ?? [],
+          knownSpells: characterQuery.data?.knownSpells ?? [],
+          startingInventory: characterQuery.data?.startingInventory ?? [],
           backstory,
           imageUrl: imageUrl.trim(),
         },
@@ -220,7 +227,7 @@ function EditForm({ characterId }: { characterId: string }) {
                 className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
-                {RACES.map((r) => (
+                {(racesQuery.data ?? []).map((r) => (
                   <option key={r.name} value={r.name}>
                     {r.name}
                   </option>
@@ -237,7 +244,7 @@ function EditForm({ characterId }: { characterId: string }) {
                 className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
-                {CLASSES.map((c) => (
+                {(classesQuery.data ?? []).map((c) => (
                   <option key={c.name} value={c.name}>
                     {c.name}
                   </option>
@@ -290,7 +297,7 @@ function EditForm({ characterId }: { characterId: string }) {
                 className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
-                {ALIGNMENTS.map((a) => (
+                {(alignmentsQuery.data ?? []).map((a) => (
                   <option key={a} value={a}>
                     {a}
                   </option>

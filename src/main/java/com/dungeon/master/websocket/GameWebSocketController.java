@@ -1,11 +1,15 @@
 package com.dungeon.master.websocket;
 
+import com.dungeon.master.model.dto.AddItemRequest;
 import com.dungeon.master.model.dto.CastRequest;
 import com.dungeon.master.model.dto.CombatActionRequest;
 import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
+import com.dungeon.master.model.dto.DropItemRequest;
+import com.dungeon.master.model.dto.EquipItemRequest;
 import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.HpChangeRequest;
+import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.JoinSessionRequest;
 import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
@@ -174,6 +178,69 @@ public class GameWebSocketController {
             broadcastState(sessionId, state);
         } catch (Exception e) {
             log.error("Error changing HP: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/inventory/add")
+    public void handleAddItem(@DestinationVariable UUID sessionId,
+                              @Payload AddItemRequest request,
+                              Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            int qty = Math.max(1, request.qty());
+            PlayerRuntimeStateDto state = playerStateService.addItem(
+                    player.id(), new InventoryItem(request.name(), qty, request.kind()));
+            broadcastState(sessionId, state);
+        } catch (Exception e) {
+            log.error("Error adding item: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/inventory/drop")
+    public void handleDropItem(@DestinationVariable UUID sessionId,
+                               @Payload DropItemRequest request,
+                               Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            PlayerRuntimeStateDto state = playerStateService.dropItem(player.id(), request.name());
+            broadcastState(sessionId, state);
+        } catch (Exception e) {
+            log.error("Error dropping item: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/inventory/equip")
+    public void handleEquipItem(@DestinationVariable UUID sessionId,
+                                @Payload EquipItemRequest request,
+                                Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            PlayerRuntimeStateDto state =
+                    playerStateService.equipItem(player.id(), request.name(), request.equipped());
+            broadcastState(sessionId, state);
+        } catch (Exception e) {
+            log.error("Error equipping item: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/rest")
+    public void handleLongRest(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            PlayerRuntimeStateDto state = playerStateService.longRest(player.id());
+            broadcastState(sessionId, state);
+            turnService.submitAction(sessionId, username,
+                    player.characterName() + " takes a long rest, recovering hit points and spell slots.");
+        } catch (Exception e) {
+            log.error("Error during long rest: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
     }

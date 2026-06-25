@@ -26,6 +26,9 @@ public record CharacterCreateUpdateRequest(
         List<String> equipment,
         List<String> proficiencies,
         List<String> features,
+        List<String> cantrips,
+        List<String> knownSpells,
+        List<InventoryItem> startingInventory,
         String backstory,
         String imageUrl
 ) {

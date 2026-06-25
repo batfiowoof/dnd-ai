@@ -1,19 +1,28 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { useCreateCharacter } from "@/hooks/useCharacterQueries";
 import {
-  RACES,
-  CLASSES,
+  useRaces,
+  useClasses,
+  useAlignments,
+  useClassSpells,
+  useStartingEquipment,
+  useEquipmentCategory,
+} from "@/hooks/useDnd5eData";
+import {
   BACKGROUNDS,
-  ALIGNMENTS,
   ABILITY_NAMES,
   POINT_BUY_COSTS,
   POINT_BUY_TOTAL,
   STANDARD_ARRAY,
+  resolveEquipment,
+  equipmentToStrings,
+  equipmentSelectionComplete,
+  catKey,
   getAbilityModifier,
   formatModifier,
   calculateHitPoints,
@@ -22,7 +31,8 @@ import {
   type RaceInfo,
   type ClassInfo,
 } from "@/lib/dnd5e";
-import { Button, Alert, cn } from "@/components/ui";
+import { SPELLCASTING, isCaster, type Spell } from "@/lib/spells";
+import { Button, Alert, Spinner, cn } from "@/components/ui";
 import Portrait from "@/components/Portrait";
 
 type AbilityMethod = "standard" | "pointbuy";
@@ -46,14 +56,16 @@ const ABILITY_DESCRIPTIONS: Record<AbilityName, string> = {
 };
 
 /* ── Guide step navigation ───────────────────────────────────── */
-const STEPS = [
-  "Race",
-  "Class",
-  "Abilities",
-  "Details",
-  "Review",
-] as const;
-type Step = (typeof STEPS)[number];
+// The Spells step only appears for classes that pick spells at level 1, so the
+// step list is derived from the chosen class (see `steps` in the component).
+type Step =
+  | "Race"
+  | "Class"
+  | "Abilities"
+  | "Equipment"
+  | "Spells"
+  | "Details"
+  | "Review";
 
 export default function CharacterCreatePage() {
   return (
@@ -68,6 +80,11 @@ function CharacterCreateForm() {
   const { username } = useAuth();
   const createMutation = useCreateCharacter();
   const saving = createMutation.isPending;
+
+  // ── 5e reference data (dnd5eapi.co, cached) ──────────────────
+  const racesQuery = useRaces();
+  const classesQuery = useClasses();
+  const alignmentsQuery = useAlignments();
 
   const [step, setStep] = useState<Step>("Race");
   const [error, setError] = useState("");
@@ -101,6 +118,39 @@ function CharacterCreateForm() {
     wisdom: null,
     charisma: null,
   });
+
+  // Equipment & spells — reset whenever the class changes.
+  const [equipmentSelections, setEquipmentSelections] = useState<number[]>([]);
+  const [categoryChoices, setCategoryChoices] = useState<Record<string, string>>({});
+  const [selectedCantrips, setSelectedCantrips] = useState<string[]>([]);
+  const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
+
+  const caster = selectedClass ? isCaster(selectedClass.name) : false;
+  const spellCaps = selectedClass ? SPELLCASTING[selectedClass.name] : undefined;
+
+  // Class-dependent catalog fetches (gated on a chosen class).
+  const equipmentQuery = useStartingEquipment(selectedClass?.index, !!selectedClass);
+  const spellsQuery = useClassSpells(selectedClass?.index, caster);
+
+  const classEquip = equipmentQuery.data ?? null;
+
+  useEffect(() => {
+    setEquipmentSelections([]);
+    setCategoryChoices({});
+    setSelectedCantrips([]);
+    setSelectedSpells([]);
+  }, [selectedClass?.index]);
+
+  const resolvedItems = useMemo(
+    () =>
+      classEquip
+        ? resolveEquipment(classEquip, equipmentSelections, categoryChoices)
+        : [],
+    [classEquip, equipmentSelections, categoryChoices]
+  );
+
+  const cantripChoices = spellsQuery.data?.cantrips ?? [];
+  const levelOneChoices = spellsQuery.data?.level1 ?? [];
 
   // Computed final abilities (base + racial bonuses)
   const finalAbilities = useMemo(() => {
@@ -140,7 +190,7 @@ function CharacterCreateForm() {
 
   const derivedHP = useMemo(() => {
     if (!selectedClass) return 10;
-    return calculateHitPoints(selectedClass, finalAbilities.constitution);
+    return calculateHitPoints(selectedClass.hitDie, finalAbilities.constitution);
   }, [selectedClass, finalAbilities.constitution]);
 
   const derivedAC = useMemo(
@@ -150,7 +200,20 @@ function CharacterCreateForm() {
 
   const derivedSpeed = selectedRace?.speed ?? 30;
 
-  const stepIndex = STEPS.indexOf(step);
+  const steps = useMemo<Step[]>(() => {
+    const base: Step[] = ["Race", "Class", "Abilities", "Equipment"];
+    if (caster) base.push("Spells");
+    base.push("Details", "Review");
+    return base;
+  }, [caster]);
+
+  const stepIndex = steps.indexOf(step);
+
+  // If the step list shrinks (e.g. switching to a non-caster removes "Spells"),
+  // keep the current step valid.
+  useEffect(() => {
+    if (!steps.includes(step)) setStep("Class");
+  }, [steps, step]);
 
   function canProceed(): boolean {
     switch (step) {
@@ -163,22 +226,50 @@ function CharacterCreateForm() {
           return ABILITY_NAMES.every((a) => standardAssignments[a] !== null);
         }
         return pointBuySpent <= POINT_BUY_TOTAL;
+      case "Equipment":
+        return (
+          !!classEquip &&
+          equipmentSelectionComplete(classEquip, equipmentSelections, categoryChoices)
+        );
+      case "Spells":
+        return (
+          !!spellCaps &&
+          selectedCantrips.length === spellCaps.cantripsKnown &&
+          selectedSpells.length === spellCaps.spellsKnown
+        );
       case "Details":
         return !!name.trim();
       case "Review":
+        return true;
+      default:
         return true;
     }
   }
 
   function nextStep() {
-    if (stepIndex < STEPS.length - 1) {
-      setStep(STEPS[stepIndex + 1]);
+    if (stepIndex < steps.length - 1) {
+      setStep(steps[stepIndex + 1]);
     }
   }
   function prevStep() {
     if (stepIndex > 0) {
-      setStep(STEPS[stepIndex - 1]);
+      setStep(steps[stepIndex - 1]);
     }
+  }
+
+  function toggleCantrip(name: string) {
+    setSelectedCantrips((prev) => {
+      if (prev.includes(name)) return prev.filter((n) => n !== name);
+      if (!spellCaps || prev.length >= spellCaps.cantripsKnown) return prev;
+      return [...prev, name];
+    });
+  }
+  function toggleSpell(name: string) {
+    setSelectedSpells((prev) => {
+      if (prev.includes(name)) return prev.filter((n) => n !== name);
+      if (!spellCaps || prev.length >= spellCaps.spellsKnown) return prev;
+      return [...prev, name];
+    });
   }
 
   async function handleSave() {
@@ -201,9 +292,12 @@ function CharacterCreateForm() {
         hitPoints: derivedHP,
         armorClass: derivedAC,
         speed: derivedSpeed,
-        equipment: selectedClass.equipment,
+        equipment: equipmentToStrings(resolvedItems),
         proficiencies: selectedClass.proficiencies,
         features: selectedRace.traits,
+        cantrips: selectedCantrips,
+        knownSpells: selectedSpells,
+        startingInventory: resolvedItems,
         backstory,
         imageUrl: imageUrl.trim(),
       });
@@ -235,7 +329,7 @@ function CharacterCreateForm() {
 
         {/* Step indicator */}
         <div className="mb-8 flex items-center justify-center gap-1">
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <div key={s} className="flex items-center">
               <button
                 onClick={() => i <= stepIndex && setStep(s)}
@@ -250,7 +344,7 @@ function CharacterCreateForm() {
               >
                 <span className="tabular">{i + 1}.</span> {s}
               </button>
-              {i < STEPS.length - 1 && (
+              {i < steps.length - 1 && (
                 <div
                   className={cn(
                     "mx-1 h-px w-6 transition",
@@ -275,52 +369,60 @@ function CharacterCreateForm() {
                 bonuses, speed, and special racial features. Each race brings
                 unique strengths to your character.
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {RACES.map((race) => (
-                  <button
-                    key={race.name}
-                    onClick={() => setSelectedRace(race)}
-                    className={`rounded-lg border p-4 text-left transition ${
-                      selectedRace?.name === race.name
-                        ? "border-accent bg-accent-glow"
-                        : "border-border bg-bg-elevated hover:border-accent/50"
-                    }`}
-                  >
-                    <div className="mb-1 font-semibold text-text">
-                      {race.name}
-                    </div>
-                    <p className="mb-2 text-xs text-text-muted">
-                      {race.description}
-                    </p>
-                    <div className="text-xs text-accent">
-                      {Object.entries(race.abilityBonuses)
-                        .map(
-                          ([a, b]) =>
-                            `${a.slice(0, 3).toUpperCase()} +${b}`
-                        )
-                        .join(", ")}
-                    </div>
-                    <div className="mt-1 text-xs text-text-muted">
-                      Speed: {race.speed} ft
-                    </div>
-                    {selectedRace?.name === race.name && (
-                      <div className="mt-2 border-t border-border pt-2">
-                        <div className="text-xs font-semibold text-text-muted">
-                          Racial Traits:
-                        </div>
-                        {race.traits.map((t) => (
-                          <span
-                            key={t}
-                            className="mr-1 mt-1 inline-block rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                          >
-                            {t}
-                          </span>
-                        ))}
+
+              <DataGate
+                query={racesQuery}
+                loadingLabel="Loading races…"
+                onRetry={() => racesQuery.refetch()}
+              >
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {racesQuery.data?.map((race) => (
+                    <button
+                      key={race.index}
+                      onClick={() => setSelectedRace(race)}
+                      className={`rounded-lg border p-4 text-left transition ${
+                        selectedRace?.index === race.index
+                          ? "border-accent bg-accent-glow"
+                          : "border-border bg-bg-elevated hover:border-accent/50"
+                      }`}
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="font-semibold text-text">
+                          {race.name}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-text-muted">
+                          {race.size}
+                        </span>
                       </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+                      <div className="text-xs text-accent">
+                        {Object.entries(race.abilityBonuses)
+                          .map(
+                            ([a, b]) => `${a.slice(0, 3).toUpperCase()} +${b}`
+                          )
+                          .join(", ") || "No ability bonuses"}
+                      </div>
+                      <div className="mt-1 text-xs text-text-muted">
+                        Speed: {race.speed} ft
+                      </div>
+                      {selectedRace?.index === race.index && (
+                        <div className="mt-2 border-t border-border pt-2">
+                          <div className="text-xs font-semibold text-text-muted">
+                            Racial Traits:
+                          </div>
+                          {race.traits.map((t) => (
+                            <span
+                              key={t}
+                              className="mr-1 mt-1 inline-block rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </DataGate>
             </div>
           )}
 
@@ -333,66 +435,60 @@ function CharacterCreateForm() {
               <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
                 <strong className="text-text">D&D 5E Guide:</strong> Your class
                 is your primary adventuring role. It determines your hit points,
-                abilities, and equipment. Your class defines how you interact
-                with the world and what you can do in combat.
+                proficiencies, saving throws, and equipment.
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {CLASSES.map((cls) => (
-                  <button
-                    key={cls.name}
-                    onClick={() => setSelectedClass(cls)}
-                    className={`rounded-lg border p-4 text-left transition ${
-                      selectedClass?.name === cls.name
-                        ? "border-accent bg-accent-glow"
-                        : "border-border bg-bg-elevated hover:border-accent/50"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="font-semibold text-text">
-                        {cls.name}
-                      </span>
-                      <span className="text-xs text-accent">
-                        d{cls.hitDie} HD
-                      </span>
-                    </div>
-                    <p className="mb-2 text-xs text-text-muted">
-                      {cls.description}
-                    </p>
-                    <div className="text-xs text-text-muted">
-                      Primary: {cls.primaryAbility}
-                    </div>
-                    <div className="text-xs text-text-muted">
-                      Saves: {cls.savingThrows.join(", ")}
-                    </div>
-                    {selectedClass?.name === cls.name && (
-                      <div className="mt-2 border-t border-border pt-2">
-                        <div className="text-xs font-semibold text-text-muted mb-1">
-                          Starting Equipment:
-                        </div>
-                        {cls.equipment.map((e) => (
-                          <span
-                            key={e}
-                            className="mr-1 mt-1 inline-block rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                          >
-                            {e}
-                          </span>
-                        ))}
-                        <div className="mt-2 text-xs font-semibold text-text-muted mb-1">
-                          Proficiencies:
-                        </div>
-                        {cls.proficiencies.map((p) => (
-                          <span
-                            key={p}
-                            className="mr-1 mt-1 inline-block rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                          >
-                            {p}
-                          </span>
-                        ))}
+
+              <DataGate
+                query={classesQuery}
+                loadingLabel="Loading classes…"
+                onRetry={() => classesQuery.refetch()}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {classesQuery.data?.map((cls) => (
+                    <button
+                      key={cls.index}
+                      onClick={() => setSelectedClass(cls)}
+                      className={`rounded-lg border p-4 text-left transition ${
+                        selectedClass?.index === cls.index
+                          ? "border-accent bg-accent-glow"
+                          : "border-border bg-bg-elevated hover:border-accent/50"
+                      }`}
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="font-semibold text-text">
+                          {cls.name}
+                        </span>
+                        <span className="text-xs text-accent">
+                          d{cls.hitDie} HD
+                        </span>
                       </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+                      <div className="text-xs text-text-muted">
+                        Saves: {cls.savingThrows.join(", ")}
+                      </div>
+                      {isCaster(cls.name) && (
+                        <span className="mt-1 inline-block rounded bg-accent-dark/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-accent-light">
+                          Spellcaster
+                        </span>
+                      )}
+                      {selectedClass?.index === cls.index && (
+                        <div className="mt-2 border-t border-border pt-2">
+                          <div className="mb-1 text-xs font-semibold text-text-muted">
+                            Proficiencies:
+                          </div>
+                          {cls.proficiencies.map((p) => (
+                            <span
+                              key={p}
+                              className="mr-1 mt-1 inline-block rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </DataGate>
             </div>
           )}
 
@@ -554,6 +650,182 @@ function CharacterCreateForm() {
             </div>
           )}
 
+          {/* ── STEP: Equipment ───────────────────────────────── */}
+          {step === "Equipment" && (
+            <div>
+              <h2 className="mb-2 text-lg font-bold text-accent">
+                Starting Equipment
+              </h2>
+              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
+                <strong className="text-text">D&D 5E Guide:</strong> Your class
+                grants a set of starting gear. For each choice below, pick one
+                option; some let you choose a specific weapon. Selected items
+                become your character&apos;s inventory.
+              </div>
+
+              <DataGate
+                query={equipmentQuery}
+                loadingLabel="Loading starting equipment…"
+                onRetry={() => equipmentQuery.refetch()}
+              >
+                {classEquip && (
+                  <>
+                    {classEquip.fixed.length > 0 && (
+                      <div className="mb-5">
+                        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                          Always included
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {classEquip.fixed.map((it) => (
+                            <span
+                              key={`${it.name}-${it.kind}`}
+                              className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
+                            >
+                              {it.name}
+                              {it.qty > 1 && (
+                                <span className="tabular text-text"> ×{it.qty}</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-5">
+                      {classEquip.groups.map((group, gi) => {
+                        const selOpt =
+                          group.options[equipmentSelections[gi] ?? 0];
+                        return (
+                          <div key={group.prompt}>
+                            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                              {group.prompt}
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {group.options.map((opt, oi) => {
+                                const selected =
+                                  (equipmentSelections[gi] ?? 0) === oi;
+                                return (
+                                  <button
+                                    key={opt.label || oi}
+                                    type="button"
+                                    aria-pressed={selected}
+                                    onClick={() =>
+                                      setEquipmentSelections((prev) => {
+                                        const next = [...prev];
+                                        next[gi] = oi;
+                                        return next;
+                                      })
+                                    }
+                                    className={cn(
+                                      "rounded-lg border p-3 text-left transition",
+                                      selected
+                                        ? "border-accent bg-accent-glow"
+                                        : "border-border bg-bg-elevated hover:border-accent/50"
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={cn(
+                                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px]",
+                                          selected
+                                            ? "border-accent bg-accent text-white"
+                                            : "border-border text-transparent"
+                                        )}
+                                      >
+                                        ✓
+                                      </span>
+                                      <span className="text-sm font-semibold text-text">
+                                        {String.fromCharCode(97 + oi)}.{" "}
+                                        {opt.label}
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Specific-item sub-picks for the selected option */}
+                            {selOpt && selOpt.categoryPicks.length > 0 && (
+                              <div className="mt-3 space-y-2 rounded-lg border border-border bg-bg-elevated p-3">
+                                {selOpt.categoryPicks.flatMap((pick, pi) =>
+                                  Array.from({ length: pick.count }).map(
+                                    (_, slot) => {
+                                      const key = catKey(gi, pi, slot);
+                                      return (
+                                        <CategoryPickSelect
+                                          key={key}
+                                          label={
+                                            pick.count > 1
+                                              ? `${pick.categoryName} #${slot + 1}`
+                                              : `Choose a ${pick.categoryName}`
+                                          }
+                                          categoryIndex={pick.categoryIndex}
+                                          value={categoryChoices[key] ?? ""}
+                                          onChange={(itemName) =>
+                                            setCategoryChoices((prev) => ({
+                                              ...prev,
+                                              [key]: itemName,
+                                            }))
+                                          }
+                                        />
+                                      );
+                                    }
+                                  )
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </DataGate>
+            </div>
+          )}
+
+          {/* ── STEP: Spells ──────────────────────────────────── */}
+          {step === "Spells" && spellCaps && (
+            <div>
+              <h2 className="mb-2 text-lg font-bold text-accent">
+                Choose Your Spells
+              </h2>
+              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
+                <strong className="text-text">D&D 5E Guide:</strong> As a{" "}
+                {selectedClass?.name}, you begin knowing{" "}
+                {spellCaps.cantripsKnown} cantrips and {spellCaps.spellsKnown}{" "}
+                level-1 spells. Cantrips are cast at will; leveled spells use
+                spell slots.
+              </div>
+
+              <DataGate
+                query={spellsQuery}
+                loadingLabel="Loading spell list…"
+                onRetry={() => spellsQuery.refetch()}
+              >
+                <SpellPicker
+                  title="Cantrips"
+                  picked={selectedCantrips.length}
+                  max={spellCaps.cantripsKnown}
+                  choices={cantripChoices}
+                  selectedNames={selectedCantrips}
+                  onToggle={toggleCantrip}
+                />
+
+                <div className="mt-5">
+                  <SpellPicker
+                    title="Level 1 Spells"
+                    picked={selectedSpells.length}
+                    max={spellCaps.spellsKnown}
+                    choices={levelOneChoices}
+                    selectedNames={selectedSpells}
+                    onToggle={toggleSpell}
+                  />
+                </div>
+              </DataGate>
+            </div>
+          )}
+
           {/* ── STEP: Details ─────────────────────────────────── */}
           {step === "Details" && (
             <div>
@@ -630,7 +902,7 @@ function CharacterCreateForm() {
                     className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
                   >
                     <option value="">-- Select Alignment --</option>
-                    {ALIGNMENTS.map((a) => (
+                    {(alignmentsQuery.data ?? []).map((a) => (
                       <option key={a} value={a}>
                         {a}
                       </option>
@@ -760,26 +1032,70 @@ function CharacterCreateForm() {
                 </div>
 
                 {/* Equipment */}
-                {selectedClass && (
+                {resolvedItems.length > 0 && (
                   <div className="rounded-lg border border-border bg-bg-elevated p-4">
                     <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                       Equipment
                     </h3>
                     <div className="flex flex-wrap gap-1">
-                      {selectedClass.equipment.map((e) => (
+                      {resolvedItems.map((i) => (
                         <span
-                          key={e}
+                          key={`${i.name}-${i.kind}`}
                           className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
                         >
-                          {e}
+                          {i.qty > 1 ? `${i.name} ×${i.qty}` : i.name}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
 
+                {/* Spells */}
+                {caster &&
+                  (selectedCantrips.length > 0 || selectedSpells.length > 0) && (
+                    <div className="rounded-lg border border-border bg-bg-elevated p-4">
+                      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
+                        Spells
+                      </h3>
+                      {selectedCantrips.length > 0 && (
+                        <div className="mb-2">
+                          <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
+                            Cantrips
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {selectedCantrips.map((s) => (
+                              <span
+                                key={s}
+                                className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {selectedSpells.length > 0 && (
+                        <div>
+                          <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
+                            Level 1
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {selectedSpells.map((s) => (
+                              <span
+                                key={s}
+                                className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 {/* Traits & Features */}
-                {selectedRace && (
+                {selectedRace && selectedRace.traits.length > 0 && (
                   <div className="rounded-lg border border-border bg-bg-elevated p-4">
                     <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
                       Racial Traits
@@ -837,5 +1153,159 @@ function CharacterCreateForm() {
         </div>
       </div>
     </main>
+  );
+}
+
+/* ── Data loading / error gate ───────────────────────────────── */
+function DataGate({
+  query,
+  loadingLabel,
+  onRetry,
+  children,
+}: {
+  query: { isLoading: boolean; isError: boolean };
+  loadingLabel: string;
+  onRetry: () => void;
+  children: React.ReactNode;
+}) {
+  if (query.isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-3 py-12 text-text-muted">
+        <Spinner className="text-accent" /> {loadingLabel}
+      </div>
+    );
+  }
+  if (query.isError) {
+    return (
+      <div className="py-8">
+        <Alert>
+          Couldn&apos;t load D&D data from dnd5eapi.co.{" "}
+          <button
+            onClick={onRetry}
+            className="font-semibold text-accent underline hover:text-accent-light"
+          >
+            Retry
+          </button>
+        </Alert>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
+/* ── Specific-item picker for "choose any X" equipment ───────── */
+function CategoryPickSelect({
+  label,
+  categoryIndex,
+  value,
+  onChange,
+}: {
+  label: string;
+  categoryIndex: string;
+  value: string;
+  onChange: (itemName: string) => void;
+}) {
+  const cat = useEquipmentCategory(categoryIndex);
+  return (
+    <div>
+      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={cat.isLoading}
+        className="w-full rounded border border-border bg-surface px-2 py-1.5 text-sm text-text"
+      >
+        <option value="">
+          {cat.isLoading ? "Loading…" : "-- choose an item --"}
+        </option>
+        {cat.data?.map((it) => (
+          <option key={it.index} value={it.name}>
+            {it.name}
+          </option>
+        ))}
+      </select>
+      {cat.isError && (
+        <span className="mt-1 block text-xs text-danger">
+          Failed to load options.
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ── Spell picker (cantrips / leveled) ───────────────────────── */
+function SpellPicker({
+  title,
+  picked,
+  max,
+  choices,
+  selectedNames,
+  onToggle,
+}: {
+  title: string;
+  picked: number;
+  max: number;
+  choices: Spell[];
+  selectedNames: string[];
+  onToggle: (name: string) => void;
+}) {
+  const atCap = picked >= max;
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="text-sm font-semibold text-text">{title}</span>
+        <span
+          className={cn(
+            "tabular text-xs font-semibold",
+            atCap ? "text-success" : "text-text-muted"
+          )}
+        >
+          {picked}/{max} chosen
+        </span>
+      </div>
+      {choices.length === 0 ? (
+        <p className="text-xs text-text-muted">No options available.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {choices.map((spell) => {
+            const selected = selectedNames.includes(spell.name);
+            const disabled = !selected && atCap;
+            return (
+              <button
+                key={spell.name}
+                type="button"
+                aria-pressed={selected}
+                disabled={disabled}
+                onClick={() => onToggle(spell.name)}
+                className={cn(
+                  "rounded-lg border p-3 text-left transition",
+                  selected
+                    ? "border-accent bg-accent-glow"
+                    : disabled
+                      ? "cursor-not-allowed border-border bg-bg-elevated opacity-40"
+                      : "border-border bg-bg-elevated hover:border-accent/50"
+                )}
+              >
+                <div className="mb-0.5 flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-text">
+                    {spell.name}
+                  </span>
+                  {spell.school && (
+                    <span className="shrink-0 text-[10px] uppercase tracking-wider text-gold">
+                      {spell.school}
+                    </span>
+                  )}
+                </div>
+                {spell.desc && (
+                  <p className="text-xs text-text-muted">{spell.desc}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

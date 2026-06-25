@@ -92,21 +92,55 @@ export default function CharacterStatus({
           </div>
           <ul className="space-y-0.5 text-xs text-text-muted">
             {state.inventory.map((item) => (
-              <li key={`${item.name}-${item.kind}`} className="flex justify-between">
+              <li key={`${item.name}-${item.kind}`} className="flex justify-between gap-2">
                 <span
                   className={cn(
-                    "truncate",
+                    "min-w-0 truncate",
                     item.kind === "POTION_HEALING" && "text-accent-light"
                   )}
                 >
                   {item.name}
+                  {item.equipped && (
+                    <span className="ml-1 text-[9px] uppercase tracking-wider text-accent-light">
+                      ◆ eq
+                    </span>
+                  )}
                 </span>
                 {item.qty > 1 && (
-                  <span className="tabular text-text">×{item.qty}</span>
+                  <span className="tabular shrink-0 text-text">×{item.qty}</span>
                 )}
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Known spells */}
+      {(state.cantrips?.length > 0 || state.knownSpells?.length > 0) && (
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-text-muted">
+            Spells Known
+          </div>
+          {state.cantrips?.length > 0 && (
+            <div className="mb-1">
+              <span className="text-[9px] uppercase tracking-wider text-gold">
+                Cantrips:{" "}
+              </span>
+              <span className="text-xs text-text-muted">
+                {state.cantrips.join(", ")}
+              </span>
+            </div>
+          )}
+          {state.knownSpells?.length > 0 && (
+            <div>
+              <span className="text-[9px] uppercase tracking-wider text-gold">
+                Level 1+:{" "}
+              </span>
+              <span className="text-xs text-text-muted">
+                {state.knownSpells.join(", ")}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

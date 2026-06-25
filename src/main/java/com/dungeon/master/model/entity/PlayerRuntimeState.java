@@ -63,4 +63,16 @@ public class PlayerRuntimeState {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<String> conditions = new ArrayList<>();
+
+    /** Cantrips known, copied from the Character template. Display only (slot-level casting). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> cantrips = new ArrayList<>();
+
+    /** Leveled spells known, copied from the Character template. Display only. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "known_spells", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> knownSpells = new ArrayList<>();
 }

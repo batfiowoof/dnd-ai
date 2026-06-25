@@ -11,6 +11,9 @@ interface ActionBarProps {
   onAttack: () => void;
   onCast: (spellLevel: number) => void;
   onUseItem: (itemName: string) => void;
+  /** Management actions — available regardless of whose turn it is. */
+  onLongRest?: () => void;
+  onManage?: () => void;
 }
 
 /**
@@ -24,6 +27,8 @@ export default function ActionBar({
   onAttack,
   onCast,
   onUseItem,
+  onLongRest,
+  onManage,
 }: ActionBarProps) {
   const [openMenu, setOpenMenu] = useState<"cast" | "item" | null>(null);
   const disabled = !isMyTurn || !connected;
@@ -137,6 +142,34 @@ export default function ActionBar({
           </Menu>
         )}
       </div>
+
+      {/* Management — not turn-gated */}
+      {onManage && (
+        <button
+          type="button"
+          disabled={!connected}
+          onClick={() => {
+            close();
+            onManage();
+          }}
+          className={cn(btn, "border-border text-text-muted hover:border-accent/60 hover:text-accent")}
+        >
+          🎒 Manage
+        </button>
+      )}
+      {onLongRest && (
+        <button
+          type="button"
+          disabled={!connected}
+          onClick={() => {
+            close();
+            onLongRest();
+          }}
+          className={cn(btn, "border-gold/50 text-gold hover:bg-gold hover:text-bg")}
+        >
+          ☾ Long Rest
+        </button>
+      )}
 
       {!isMyTurn && (
         <span className="text-[10px] italic text-text-muted">

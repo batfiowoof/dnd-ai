@@ -52,7 +52,13 @@ public class PlayerStateService {
         int hp = character.getHitPoints();
 
         List<InventoryItem> inventory = new ArrayList<>();
-        if (character.getEquipment() != null) {
+        // Prefer the structured starting inventory (real quantities + kinds); fall back to
+        // the legacy equipment string list with best-effort classification.
+        if (character.getStartingInventory() != null && !character.getStartingInventory().isEmpty()) {
+            for (InventoryItem item : character.getStartingInventory()) {
+                inventory.add(new InventoryItem(item.name(), Math.max(1, item.qty()), item.kind(), item.equipped()));
+            }
+        } else if (character.getEquipment() != null) {
             for (String name : character.getEquipment()) {
                 inventory.add(new InventoryItem(name, 1, classify(name)));
             }
@@ -68,6 +74,8 @@ public class PlayerStateService {
                 .spellSlots(SpellSlotTable.forClass(character.getCharacterClass(), character.getLevel()))
                 .inventory(inventory)
                 .conditions(new ArrayList<>())
+                .cantrips(character.getCantrips() != null ? new ArrayList<>(character.getCantrips()) : new ArrayList<>())
+                .knownSpells(character.getKnownSpells() != null ? new ArrayList<>(character.getKnownSpells()) : new ArrayList<>())
                 .build();
         repository.save(state);
         log.info("Seeded runtime state for player={} hp={}", player.getId(), hp);
@@ -136,7 +144,7 @@ public class PlayerStateService {
         if (item.qty() <= 1) {
             inv.remove(idx);
         } else {
-            inv.set(idx, new InventoryItem(item.name(), item.qty() - 1, item.kind()));
+            inv.set(idx, new InventoryItem(item.name(), item.qty() - 1, item.kind(), item.equipped()));
         }
 
         DiceRollResult healRoll = null;
@@ -158,11 +166,63 @@ public class PlayerStateService {
         for (int i = 0; i < inv.size(); i++) {
             InventoryItem it = inv.get(i);
             if (it.name().equalsIgnoreCase(toAdd.name()) && it.kind() == toAdd.kind()) {
-                inv.set(i, new InventoryItem(it.name(), it.qty() + toAdd.qty(), it.kind()));
+                inv.set(i, new InventoryItem(it.name(), it.qty() + toAdd.qty(), it.kind(), it.equipped()));
                 return toDto(repository.save(s));
             }
         }
         inv.add(toAdd);
+        return toDto(repository.save(s));
+    }
+
+    /** Drop one of the named item (decrement, removing the stack at zero). */
+    @Transactional
+    public PlayerRuntimeStateDto dropItem(UUID playerId, String itemName) {
+        PlayerRuntimeState s = require(playerId);
+        List<InventoryItem> inv = s.getInventory();
+        for (int i = 0; i < inv.size(); i++) {
+            InventoryItem it = inv.get(i);
+            if (it.name().equalsIgnoreCase(itemName) && it.qty() > 0) {
+                if (it.qty() <= 1) {
+                    inv.remove(i);
+                } else {
+                    inv.set(i, new InventoryItem(it.name(), it.qty() - 1, it.kind(), it.equipped()));
+                }
+                return toDto(repository.save(s));
+            }
+        }
+        throw new IllegalStateException("Item not in inventory: " + itemName);
+    }
+
+    /** Toggle the equipped flag on a weapon/armor item. Display/context only — no AC change. */
+    @Transactional
+    public PlayerRuntimeStateDto equipItem(UUID playerId, String itemName, boolean equipped) {
+        PlayerRuntimeState s = require(playerId);
+        List<InventoryItem> inv = s.getInventory();
+        for (int i = 0; i < inv.size(); i++) {
+            InventoryItem it = inv.get(i);
+            if (it.name().equalsIgnoreCase(itemName)) {
+                if (it.kind() != ItemKind.WEAPON && it.kind() != ItemKind.ARMOR) {
+                    throw new IllegalStateException("Only weapons and armor can be equipped: " + itemName);
+                }
+                inv.set(i, new InventoryItem(it.name(), it.qty(), it.kind(), equipped));
+                return toDto(repository.save(s));
+            }
+        }
+        throw new IllegalStateException("Item not in inventory: " + itemName);
+    }
+
+    /** Long rest: recover all spell slots, heal to max HP, and clear conditions. */
+    @Transactional
+    public PlayerRuntimeStateDto longRest(UUID playerId) {
+        PlayerRuntimeState s = require(playerId);
+        List<SpellSlot> refreshed = new ArrayList<>();
+        for (SpellSlot slot : s.getSpellSlots()) {
+            refreshed.add(new SpellSlot(slot.level(), slot.max(), 0));
+        }
+        s.setSpellSlots(refreshed);
+        s.setCurrentHp(s.getMaxHp());
+        s.setTempHp(0);
+        s.getConditions().clear();
         return toDto(repository.save(s));
     }
 
@@ -212,6 +272,8 @@ public class PlayerStateService {
                 s.getTempHp(),
                 s.getSpellSlots(),
                 s.getInventory(),
-                s.getConditions());
+                s.getConditions(),
+                s.getCantrips(),
+                s.getKnownSpells());
     }
 }

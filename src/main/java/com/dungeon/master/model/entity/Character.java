@@ -1,5 +1,6 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.dto.InventoryItem;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -108,6 +109,28 @@ public class Character {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<String> features = new ArrayList<>();
+
+    /** Cantrips chosen at creation (names). Display only — slot-level casting in play. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> cantrips = new ArrayList<>();
+
+    /** Leveled spells chosen at creation (names). Display only. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "known_spells", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> knownSpells = new ArrayList<>();
+
+    /**
+     * Resolved starting equipment with quantities and item kinds. Seeds the session
+     * inventory directly. Preferred over the {@link #equipment} string list, which is
+     * kept for human-readable display.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "starting_inventory", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<InventoryItem> startingInventory = new ArrayList<>();
 
     private String backstory;
 

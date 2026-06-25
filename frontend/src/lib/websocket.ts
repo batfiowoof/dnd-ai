@@ -1,6 +1,6 @@
 import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
-import type { RollMode } from "@/types";
+import type { ItemKind, RollMode } from "@/types";
 
 const WS_URL = "http://localhost:8080/ws";
 
@@ -118,6 +118,45 @@ export function sendHpChange(client: Client, sessionId: string, amount: number) 
   client.publish({
     destination: `/app/game/${sessionId}/hp`,
     body: JSON.stringify({ amount }),
+  });
+}
+
+/* ── Inventory management & rest ──────────────────────────────── */
+
+export function sendAddItem(
+  client: Client,
+  sessionId: string,
+  payload: { name: string; qty: number; kind: ItemKind }
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/inventory/add`,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function sendDropItem(client: Client, sessionId: string, name: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/inventory/drop`,
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function sendEquipItem(
+  client: Client,
+  sessionId: string,
+  name: string,
+  equipped: boolean
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/inventory/equip`,
+    body: JSON.stringify({ name, equipped }),
+  });
+}
+
+export function sendLongRest(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/rest`,
+    body: JSON.stringify({}),
   });
 }
 
