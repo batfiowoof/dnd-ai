@@ -10,6 +10,7 @@ import {
   useJoinByCode,
 } from "@/hooks/useSessionQueries";
 import SessionsPanel from "@/components/SessionsPanel";
+import type { Difficulty, DmLength, DmStyle, TurnMode } from "@/types";
 import {
   Button,
   Panel,
@@ -101,6 +102,98 @@ Fairy-tale logic, moral ambiguity, deals and consequences, shifting landscapes, 
   },
 ];
 
+const TURN_MODES: { value: TurnMode; name: string; desc: string }[] = [
+  {
+    value: "COLLABORATIVE",
+    name: "Collaborative",
+    desc: "Everyone submits each round; the DM resolves all actions in one combined reply.",
+  },
+  {
+    value: "INITIATIVE",
+    name: "Initiative",
+    desc: "Players act one at a time in rolled initiative order.",
+  },
+  {
+    value: "FREEFORM",
+    name: "Freeform",
+    desc: "Anyone can act anytime; input locks only while the DM is replying.",
+  },
+];
+
+/** Segmented single-choice control matching the world-source tab styling. */
+function SegGroup<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+}) {
+  return (
+    <div className="flex rounded-lg border border-border bg-bg-elevated p-1 text-xs">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          className={cn(
+            "flex-1 cursor-pointer rounded-md px-2 py-2 font-medium transition",
+            value === o.value
+              ? "bg-accent text-white shadow-[0_0_16px_var(--color-accent-glow)]"
+              : "text-text-muted hover:text-text"
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Labelled on/off switch (full-width tap target). */
+function ToggleRow({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-bg-elevated px-3 py-2.5 text-left transition hover:border-accent/50"
+    >
+      <span>
+        <span className="block text-sm font-medium text-text">{label}</span>
+        {hint && <span className="block text-xs text-text-muted">{hint}</span>}
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          "relative h-6 w-11 flex-shrink-0 rounded-full border transition",
+          checked ? "border-accent bg-accent/80" : "border-border bg-bg"
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all",
+            checked ? "left-[22px]" : "left-0.5"
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+
 function PlayContent() {
   const router = useRouter();
   const { username } = useAuth();
@@ -127,6 +220,16 @@ function PlayContent() {
   const [selectedPreset, setSelectedPreset] = useState(PRESET_WORLDS[0].id);
   const [customWorldText, setCustomWorldText] = useState("");
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
+
+  // Host session settings
+  const [turnMode, setTurnMode] = useState<TurnMode>("COLLABORATIVE");
+  const [maxPlayers, setMaxPlayers] = useState(4);
+  const [difficulty, setDifficulty] = useState<Difficulty>("NORMAL");
+  const [dmStyle, setDmStyle] = useState<DmStyle>("HEROIC");
+  const [dmLength, setDmLength] = useState<DmLength>("STANDARD");
+  const [allowAiCombat, setAllowAiCombat] = useState(true);
+  const [allowAiRolls, setAllowAiRolls] = useState(true);
+  const [collabWindowSeconds, setCollabWindowSeconds] = useState(10);
 
   // Default-select the first character once the list loads.
   useEffect(() => {
@@ -181,6 +284,14 @@ function PlayContent() {
         playerName: username,
         characterId: selectedCharId,
         worldSetting,
+        turnMode,
+        maxPlayers,
+        difficulty,
+        dmStyle,
+        dmLength,
+        allowAiCombat,
+        allowAiRolls,
+        collabWindowSeconds,
       });
       localStorage.setItem(`dnd-playerId-${res.sessionId}`, res.playerId);
       localStorage.setItem(`dnd-joinCode-${res.sessionId}`, res.joinCode);
@@ -450,6 +561,140 @@ function PlayContent() {
                 )}
               </div>
             )}
+
+            <hr className="ornament my-2" />
+
+            {/* Turn handling */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Turn Handling
+              </label>
+              {TURN_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setTurnMode(m.value)}
+                  className={cn(
+                    "w-full cursor-pointer rounded-lg border px-4 py-3 text-left transition",
+                    turnMode === m.value
+                      ? "border-accent bg-accent/10"
+                      : "border-border bg-bg-elevated hover:border-accent/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p
+                        className="text-sm font-semibold text-text"
+                        style={{ fontFamily: "var(--font-display)" }}
+                      >
+                        {m.name}
+                      </p>
+                      <p className="text-xs text-text-muted">{m.desc}</p>
+                    </div>
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "h-3.5 w-3.5 flex-shrink-0 rounded-full border-2 transition",
+                        turnMode === m.value ? "border-gold bg-gold" : "border-border"
+                      )}
+                    />
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {turnMode === "COLLABORATIVE" && (
+              <Field
+                label="Round window"
+                htmlFor="collab-window"
+                hint="How long the round collects actions before the DM resolves it."
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    id="collab-window"
+                    type="range"
+                    min={3}
+                    max={30}
+                    step={1}
+                    value={collabWindowSeconds}
+                    onChange={(e) => setCollabWindowSeconds(Number(e.target.value))}
+                    className="flex-1 accent-[var(--color-accent)]"
+                  />
+                  <span className="tabular w-12 text-right text-sm text-gold">
+                    {collabWindowSeconds}s
+                  </span>
+                </div>
+              </Field>
+            )}
+
+            {/* Party size + difficulty */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Party Size" htmlFor="party-size">
+                <select
+                  id="party-size"
+                  value={maxPlayers}
+                  onChange={(e) => setMaxPlayers(Number(e.target.value))}
+                  className={controlClass}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n} player{n > 1 ? "s" : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Difficulty">
+                <SegGroup<Difficulty>
+                  value={difficulty}
+                  onChange={setDifficulty}
+                  options={[
+                    { value: "EASY", label: "Easy" },
+                    { value: "NORMAL", label: "Normal" },
+                    { value: "DEADLY", label: "Deadly" },
+                  ]}
+                />
+              </Field>
+            </div>
+
+            {/* DM voice */}
+            <Field label="DM Style">
+              <SegGroup<DmStyle>
+                value={dmStyle}
+                onChange={setDmStyle}
+                options={[
+                  { value: "HEROIC", label: "Heroic" },
+                  { value: "GRIMDARK", label: "Grimdark" },
+                  { value: "COMEDIC", label: "Comedic" },
+                ]}
+              />
+            </Field>
+            <Field label="Narration Length">
+              <SegGroup<DmLength>
+                value={dmLength}
+                onChange={setDmLength}
+                options={[
+                  { value: "CONCISE", label: "Concise" },
+                  { value: "STANDARD", label: "Standard" },
+                  { value: "RICH", label: "Rich" },
+                ]}
+              />
+            </Field>
+
+            {/* Feature toggles */}
+            <div className="space-y-2">
+              <ToggleRow
+                label="DM can start combat"
+                hint="Lets the DM trigger encounters from the story."
+                checked={allowAiCombat}
+                onChange={setAllowAiCombat}
+              />
+              <ToggleRow
+                label="DM can request rolls"
+                hint="Lets the DM call for ability checks on uncertain actions."
+                checked={allowAiRolls}
+                onChange={setAllowAiRolls}
+              />
+            </div>
 
             <Button
               onClick={handleCreate}

@@ -85,6 +85,26 @@ export function sendAction(
   });
 }
 
+/** Pass for the current collaborative round (no action). */
+export function sendPass(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/pass`,
+    body: JSON.stringify({}),
+  });
+}
+
+/** Resolve the DM-requested ability check pending for the player. */
+export function sendRollCheck(
+  client: Client,
+  sessionId: string,
+  rollMode: RollMode
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/roll-check`,
+    body: JSON.stringify({ rollMode }),
+  });
+}
+
 export function sendRoll(
   client: Client,
   sessionId: string,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, use } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, use } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
@@ -31,6 +31,8 @@ import {
   sendCombatUseItem,
   sendCombatEndTurn,
   sendEndCombat,
+  sendPass,
+  sendRollCheck,
 } from "@/lib/websocket";
 import type { Client } from "@stomp/stompjs";
 import type {
@@ -38,12 +40,16 @@ import type {
   PlayerStateEvent,
   EnemyActionEvent,
   CombatLifecycleEvent,
+  RoundStatusEvent,
+  RollRequestEvent,
   ItemKind,
   PlayerRuntimeState,
   PlayerDto,
 } from "@/types";
+import type { RollMode } from "@/types";
 import { Button, Panel, Brand, Alert, D20Mark, Tooltip, cn } from "@/components/ui";
 import Portrait from "@/components/Portrait";
+import RollPromptModal from "@/components/RollPromptModal";
 import DiceRollModal from "@/components/dice/DiceRollModal";
 import QuickRollBar from "@/components/dice/QuickRollBar";
 import ActionBar from "@/components/game/ActionBar";
@@ -86,6 +92,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const dmThinking = useSessionStore((s) => s.dmThinking);
   const currentTurnPlayerId = useSessionStore((s) => s.currentTurnPlayerId);
   const turnNumber = useSessionStore((s) => s.turnNumber);
+  const turnMode = useSessionStore((s) => s.turnMode);
+  const round = useSessionStore((s) => s.round);
+  const pendingCheck = useSessionStore((s) => s.pendingCheck);
   const runtimeByPlayerId = useSessionStore((s) => s.runtimeByPlayerId);
   const combat = useSessionStore((s) => s.combat);
   const setError = useSessionStore((s) => s.setError);
@@ -152,6 +161,28 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (gameStateQuery.data) hydrateFromGameState(gameStateQuery.data);
   }, [gameStateQuery.data, hydrateFromGameState]);
+
+  /* ── re-open the roll prompt on (re)hydration ─────────────────
+     ROLL_REQUEST is a transient WebSocket event, so a reload/reconnect would miss it and
+     leave the modal closed while the pending_checks row keeps holding the turn. The open
+     check now travels on the game state — re-apply ours so the prompt comes back. */
+  useEffect(() => {
+    const gs = gameStateQuery.data;
+    if (!gs || !playerId) return;
+    const mine = gs.pendingChecks?.find((c) => c.playerId === playerId);
+    if (mine) {
+      useSessionStore.getState().applyRollRequest({
+        type: "ROLL_REQUEST",
+        sessionId,
+        playerId: mine.playerId,
+        ability: mine.ability,
+        dc: mine.dc,
+        skill: mine.skill,
+        reason: mine.reason,
+        suggestedModifier: mine.suggestedModifier,
+      });
+    }
+  }, [gameStateQuery.data, playerId, sessionId]);
 
   useEffect(() => {
     if (gameStateQuery.isError) setError("Failed to load session");
@@ -297,6 +328,15 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             case "ENEMY_ACTION":
               s.applyEnemyAction(data as unknown as EnemyActionEvent);
               break;
+            case "ROUND_STATUS":
+              s.applyRoundStatus(data as unknown as RoundStatusEvent);
+              break;
+            case "ROLL_REQUEST": {
+              const evt = data as unknown as RollRequestEvent;
+              // Only the targeted player is prompted (and soft-locked).
+              if (evt.playerId === playerId) s.applyRollRequest(evt);
+              break;
+            }
           }
         });
 
@@ -320,7 +360,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
       }
       clientRef.current = null;
     };
-  }, [sessionId, username, getToken, scrollToBottom]);
+  }, [sessionId, username, getToken, scrollToBottom, playerId]);
 
   /* ── lobby actions ──────────────────────────────────────────── */
   async function handleStart() {
@@ -356,7 +396,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   /* ── game actions ───────────────────────────────────────────── */
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!actionText.trim() || !clientRef.current || !isMyTurn) return;
+    // Gating is mode-aware (canType): initiative requires your turn; collaborative
+    // and freeform let you act now. Collaborative submissions join the current round.
+    if (!actionText.trim() || !clientRef.current || !canType) return;
 
     sendAction(clientRef.current, sessionId, actionText.trim());
 
@@ -364,6 +406,18 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     // so every client (including this one) renders it once, in order.
     setActionText("");
     scrollToBottom();
+  }
+
+  function handlePass() {
+    if (!clientRef.current || !connected) return;
+    sendPass(clientRef.current, sessionId);
+  }
+
+  function handleRollCheck(mode: RollMode) {
+    if (!clientRef.current || !connected) return;
+    // Close the prompt optimistically; the resolving dice + DM narration follow.
+    useSessionStore.getState().clearPendingCheck();
+    sendRollCheck(clientRef.current, sessionId, mode);
   }
 
   function handleRoll(notation: string, label: string) {
@@ -436,6 +490,74 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const myState = playerId ? runtimeByPlayerId[playerId] ?? null : null;
   const myPlayer = humanPlayers.find((p) => p.id === playerId);
   const inCombat = combat?.status === "ACTIVE";
+
+  /* ── turn/combat-aware activity signals ─────────────────────────
+     During combat the single source of truth is combat.active.refId, not the
+     frozen narrative pointer. Out of combat, behaviour depends on the turn mode. */
+  const combatActive = inCombat ? combat?.active ?? null : null;
+
+  // Who the sidebar/header should highlight as "active" right now.
+  const highlightedPlayerId = inCombat
+    ? combatActive?.kind === "PLAYER"
+      ? combatActive.refId
+      : null
+    : turnMode === "INITIATIVE"
+      ? currentTurnPlayerId
+      : null;
+
+  // Initiative value per combatant ref id (for the d20 chips during combat).
+  const initiativeByRefId = useMemo(() => {
+    const m: Record<string, number> = {};
+    combat?.order.forEach((c) => {
+      m[c.refId] = c.initiative;
+    });
+    return m;
+  }, [combat]);
+
+  const hasPendingCheck = !!pendingCheck;
+
+  // Narrative input permission, branched by mode (combat uses combat actions).
+  const canType =
+    status === "ACTIVE" &&
+    connected &&
+    !inCombat &&
+    !hasPendingCheck &&
+    !dmThinking &&
+    (turnMode === "INITIATIVE" ? isMyTurn : true);
+
+  // Header status line, mode/combat aware.
+  const activeLabel = inCombat
+    ? combatActive
+      ? `${combatActive.name}'s turn`
+      : null
+    : turnMode === "INITIATIVE"
+      ? currentPlayer
+        ? `${currentPlayer.characterName}'s turn`
+        : null
+      : turnMode === "COLLABORATIVE"
+        ? round?.open
+          ? "Round collecting…"
+          : dmThinking
+            ? "DM is resolving the round…"
+            : null
+        : dmThinking
+          ? "DM is responding…"
+          : null;
+
+  // Local countdown ticker for the collaborative round window.
+  const [roundSeconds, setRoundSeconds] = useState(0);
+  useEffect(() => {
+    if (!round?.open) {
+      setRoundSeconds(0);
+      return;
+    }
+    setRoundSeconds(round.secondsLeft);
+    const id = setInterval(
+      () => setRoundSeconds((s) => Math.max(0, s - 1)),
+      1000
+    );
+    return () => clearInterval(id);
+  }, [round?.open, round?.secondsLeft]);
 
   /* ── character-sheet dialog target (any player) ─────────────── */
   const sheetPlayer = sheetPlayerId
@@ -606,6 +728,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
       {/* Dice + combat-action animation overlays */}
       <DiceRollModal />
       <EnemyActionModal />
+      <RollPromptModal
+        request={pendingCheck}
+        connected={connected}
+        onRoll={handleRollCheck}
+      />
       <InventoryManager
         open={manageOpen}
         onClose={() => setManageOpen(false)}
@@ -644,9 +771,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           )}
           <span className="text-xs text-text-muted">
             <span className="tabular text-gold">Turn {turnNumber}</span>
-            {currentPlayer && (
-              <> &middot; {currentPlayer.characterName}&apos;s turn</>
-            )}
+            {activeLabel && <> &middot; {activeLabel}</>}
           </span>
           <span
             className={cn(
@@ -680,17 +805,25 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                 key={p.id}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition",
-                  p.id === currentTurnPlayerId
+                  p.id === highlightedPlayerId
                     ? "border border-gold/60 bg-gold-muted text-gold"
                     : "border border-transparent text-text-muted"
                 )}
               >
-                <AvatarTrigger
-                  player={p}
-                  state={runtimeByPlayerId[p.id]}
-                  active={p.id === currentTurnPlayerId}
-                  onOpen={() => setSheetPlayerId(p.id)}
-                />
+                <div className="relative flex-shrink-0">
+                  <AvatarTrigger
+                    player={p}
+                    state={runtimeByPlayerId[p.id]}
+                    active={p.id === highlightedPlayerId}
+                    onOpen={() => setSheetPlayerId(p.id)}
+                  />
+                  {inCombat && initiativeByRefId[p.id] !== undefined && (
+                    <InitiativeChip
+                      value={initiativeByRefId[p.id]}
+                      active={p.id === highlightedPlayerId}
+                    />
+                  )}
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{p.characterName}</div>
                   <div className="truncate text-[10px] opacity-60">
@@ -850,7 +983,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                 {!inCombat && (
                   <ActionBar
                     state={myState}
-                    isMyTurn={isMyTurn}
+                    isMyTurn={canType}
                     connected={connected}
                     onAttack={handleAttack}
                     onCast={handleCast}
@@ -864,6 +997,30 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                   disabled={!connected || inCombat}
                 />
               </div>
+
+              {/* Collaborative round-collection indicator + Pass */}
+              {turnMode === "COLLABORATIVE" && !inCombat && round?.open && (
+                <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-gold/40 bg-gold-muted px-3 py-2 text-xs">
+                  <span className="flex items-center gap-2 text-gold">
+                    <D20Mark className="h-3.5 w-3.5 animate-spin" />
+                    <span className="font-medium">Round collecting…</span>
+                    <span className="tabular text-text-muted">
+                      {round.submitted}/{round.total} submitted &middot;{" "}
+                      {roundSeconds}s
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!connected}
+                    onClick={handlePass}
+                  >
+                    Pass
+                  </Button>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -872,22 +1029,28 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                   placeholder={
                     inCombat
                       ? "In combat — use combat actions above"
-                      : isMyTurn
-                        ? "Describe your action..."
-                        : "Waiting for your turn..."
+                      : hasPendingCheck
+                        ? "Roll the check the DM asked for…"
+                        : turnMode === "INITIATIVE" && !isMyTurn
+                          ? "Waiting for your turn..."
+                          : dmThinking
+                            ? "The DM is responding…"
+                            : turnMode === "COLLABORATIVE"
+                              ? "Describe your action for this round..."
+                              : "Describe your action..."
                   }
-                  disabled={!isMyTurn || !connected || inCombat}
+                  disabled={!canType}
                   className="flex-1 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-40"
                 />
                 <Button
                   type="submit"
-                  disabled={!isMyTurn || !connected || !actionText.trim()}
+                  disabled={!canType || !actionText.trim()}
                   size="lg"
                 >
-                  Send
+                  {turnMode === "COLLABORATIVE" && round?.open ? "Add" : "Send"}
                 </Button>
               </div>
-              {isMyTurn && (
+              {turnMode === "INITIATIVE" && isMyTurn && !inCombat && (
                 <p className="mt-1.5 text-xs font-medium text-gold">
                   It&apos;s your turn!
                 </p>
@@ -913,6 +1076,23 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Small d20 initiative badge shown on a combatant's avatar during combat. */
+function InitiativeChip({ value, active }: { value: number; active?: boolean }) {
+  return (
+    <span
+      title={`Initiative ${value}`}
+      className={cn(
+        "tabular absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border px-1 text-[10px] font-bold shadow",
+        active
+          ? "border-gold bg-gold text-bg"
+          : "border-border-accent bg-surface text-gold"
+      )}
+    >
+      {value}
+    </span>
   );
 }
 

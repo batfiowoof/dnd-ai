@@ -50,6 +50,10 @@ public class Enemy {
     @Builder.Default
     private int initiative = 0;
 
+    @Column(name = "dex_mod", nullable = false)
+    @Builder.Default
+    private int dexMod = 0;
+
     @Column(nullable = false)
     @Builder.Default
     private boolean alive = true;

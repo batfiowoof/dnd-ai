@@ -1,6 +1,12 @@
 export type GameStatus = "WAITING" | "ACTIVE" | "FINISHED";
 export type PlayerRole = "PLAYER" | "DM_AI";
 
+/* ── Host session settings ────────────────────────────────────── */
+export type TurnMode = "COLLABORATIVE" | "INITIATIVE" | "FREEFORM";
+export type Difficulty = "EASY" | "NORMAL" | "DEADLY";
+export type DmStyle = "HEROIC" | "GRIMDARK" | "COMEDIC";
+export type DmLength = "CONCISE" | "STANDARD" | "RICH";
+
 export interface PlayerDto {
   id: string;
   username: string;
@@ -21,12 +27,40 @@ export interface GameStateDto {
   turnNumber: number;
   createdBy: string | null;
   worldSetting: string | null;
+  turnMode: TurnMode;
+  maxPlayers: number;
+  difficulty: Difficulty;
+  dmStyle: DmStyle;
+  dmLength: DmLength;
+  allowAiCombat: boolean;
+  allowAiRolls: boolean;
+  collabWindowSeconds: number;
+  /** Open ability checks, so a reconnecting client can re-open its roll prompt. */
+  pendingChecks: PendingCheckDto[];
+}
+
+/** An open ability check surfaced on game state (the transient ROLL_REQUEST is missed on reload). */
+export interface PendingCheckDto {
+  playerId: string;
+  ability: string;
+  dc: number;
+  skill: string | null;
+  reason: string | null;
+  suggestedModifier: number;
 }
 
 export interface CreateSessionRequest {
   playerName: string;
   characterId: string;
   worldSetting?: string;
+  turnMode?: TurnMode;
+  maxPlayers?: number;
+  difficulty?: Difficulty;
+  dmStyle?: DmStyle;
+  dmLength?: DmLength;
+  allowAiCombat?: boolean;
+  allowAiRolls?: boolean;
+  collabWindowSeconds?: number;
 }
 
 export interface CreateSessionResponse {
@@ -190,6 +224,7 @@ export interface Combatant {
   refId: string;
   name: string;
   initiative: number;
+  dexMod: number;
 }
 
 export interface EnemyDto {
@@ -243,6 +278,28 @@ export interface CombatLifecycleEvent {
   combat: CombatStateDto;
 }
 
+/* ── Collaborative round + LLM-requested checks ───────────────── */
+export interface RoundStatusEvent {
+  type: "ROUND_STATUS";
+  sessionId: string;
+  secondsLeft: number;
+  submitted: number;
+  total: number;
+  /** false once the window has flushed (the DM is now resolving the round). */
+  open: boolean;
+}
+
+export interface RollRequestEvent {
+  type: "ROLL_REQUEST";
+  sessionId: string;
+  playerId: string;
+  ability: string;
+  dc: number;
+  skill: string | null;
+  reason: string | null;
+  suggestedModifier: number;
+}
+
 export type WebSocketMessage =
   | DmResponseDto
   | SessionEvent
@@ -253,7 +310,9 @@ export type WebSocketMessage =
   | DiceRollEvent
   | PlayerStateEvent
   | EnemyActionEvent
-  | CombatLifecycleEvent;
+  | CombatLifecycleEvent
+  | RoundStatusEvent
+  | RollRequestEvent;
 
 /* ── Character types ──────────────────────────────────────────── */
 

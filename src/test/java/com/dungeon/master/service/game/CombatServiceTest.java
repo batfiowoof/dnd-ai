@@ -5,6 +5,7 @@ import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.kafka.producer.GameEventProducer;
+import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
 import com.dungeon.master.model.entity.Player;
@@ -16,6 +17,7 @@ import com.dungeon.master.model.enums.RollMode;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
+import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +44,7 @@ class CombatServiceTest {
     private CombatEncounterRepository encounterRepo;
     private PlayerRepository playerRepo;
     private CharacterRepository characterRepo;
+    private GameSessionRepository sessionRepo;
     private PlayerStateService playerStateService;
     private DiceService diceService;
     private TurnService turnService;
@@ -57,13 +60,14 @@ class CombatServiceTest {
         encounterRepo = mock(CombatEncounterRepository.class);
         playerRepo = mock(PlayerRepository.class);
         characterRepo = mock(CharacterRepository.class);
+        sessionRepo = mock(GameSessionRepository.class);
         playerStateService = mock(PlayerStateService.class);
         diceService = mock(DiceService.class);
         turnService = mock(TurnService.class);
         eventProducer = mock(GameEventProducer.class);
         messaging = mock(SimpMessagingTemplate.class);
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
-                playerStateService, diceService, turnService, eventProducer, messaging);
+                sessionRepo, playerStateService, diceService, turnService, eventProducer, messaging);
 
         // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
         when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))
@@ -94,6 +98,20 @@ class CombatServiceTest {
         return Player.builder()
                 .id(id).username(name).characterName(name)
                 .sessionId(sessionId).role(PlayerRole.PLAYER).turnIndex(0)
+                .build();
+    }
+
+    private Player playerWithChar(UUID id, String name, UUID characterId) {
+        return Player.builder()
+                .id(id).username(name).characterName(name).characterId(characterId)
+                .sessionId(sessionId).role(PlayerRole.PLAYER).turnIndex(0)
+                .build();
+    }
+
+    private Character charWithDex(int dex) {
+        return Character.builder()
+                .id(UUID.randomUUID()).ownerUsername("u").name("C")
+                .race("Human").characterClass("Fighter").dexterity(dex)
                 .build();
     }
 
@@ -146,8 +164,8 @@ class CombatServiceTest {
                 .sessionId(sessionId)
                 .status(CombatStatus.ACTIVE)
                 .initiativeOrder(List.of(
-                        new Combatant(CombatantKind.PLAYER, pid, "Aria", 18),
-                        new Combatant(CombatantKind.ENEMY, enemyId, "Goblin", 5)))
+                        new Combatant(CombatantKind.PLAYER, pid, "Aria", 18, 0),
+                        new Combatant(CombatantKind.ENEMY, enemyId, "Goblin", 5, 2)))
                 .activeIndex(0)
                 .round(1)
                 .build();
@@ -181,5 +199,78 @@ class CombatServiceTest {
                 .anyMatch(e -> CombatLifecycleEvent.END.equals(e.type())
                         && Boolean.TRUE.equals(e.victory()));
         assertTrue(victory, "expected a COMBAT_END victory event");
+    }
+
+    @Test
+    void equalInitiativeRollsBreakDeterministicallyByDexMod() {
+        UUID p1 = UUID.randomUUID();   // Aria — DEX 14 (+2)
+        UUID p2 = UUID.randomUUID();   // Borin — DEX 10 (0)
+        UUID cA = UUID.randomUUID();
+        UUID cB = UUID.randomUUID();
+        when(playerRepo.findBySessionId(sessionId))
+                .thenReturn(List.of(playerWithChar(p1, "Aria", cA), playerWithChar(p2, "Borin", cB)));
+        when(characterRepo.findById(cA)).thenReturn(Optional.of(charWithDex(14)));
+        when(characterRepo.findById(cB)).thenReturn(Optional.of(charWithDex(10)));
+        // enemy roll (3 + goblin dex 2 = 5), Aria (8 + 2 = 10), Borin (10 + 0 = 10) → tie at 10.
+        when(diceService.roll("1d20")).thenReturn(res(3), res(8), res(10));
+        when(playerStateService.getSessionStates(sessionId))
+                .thenReturn(List.of(stateFor(p1, 20), stateFor(p2, 20)));
+        when(playerStateService.getState(p1)).thenReturn(stateFor(p1, 20));
+        when(enemyRepo.findBySessionId(eq(sessionId))).thenAnswer(inv ->
+                List.of(Enemy.builder().id(UUID.randomUUID()).sessionId(sessionId)
+                        .name("Goblin").maxHp(7).currentHp(7).armorClass(15)
+                        .attackBonus(4).damageDice("1d6+2").initiative(5).dexMod(2).alive(true).build()));
+
+        combat.startEncounter(sessionId, List.of("GOBLIN"));
+
+        ArgumentCaptor<CombatEncounter> captor = ArgumentCaptor.forClass(CombatEncounter.class);
+        verify(encounterRepo, atLeastOnce()).save(captor.capture());
+        List<Combatant> order = captor.getValue().getInitiativeOrder();
+
+        // Tie at initiative 10 is broken by DEX mod (Aria +2 before Borin +0).
+        assertEquals(10, order.get(0).initiative());
+        assertEquals(10, order.get(1).initiative());
+        assertEquals("Aria", order.get(0).name());
+        assertEquals("Borin", order.get(1).name());
+        assertEquals(2, order.get(0).dexMod());
+    }
+
+    @Test
+    void fullRoundAdvancesThroughEveryCombatantAndWraps() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        Player aria = player(pid, "Aria");
+
+        CombatEncounter enc = CombatEncounter.builder()
+                .id(UUID.randomUUID())
+                .sessionId(sessionId)
+                .status(CombatStatus.ACTIVE)
+                .initiativeOrder(List.of(
+                        new Combatant(CombatantKind.PLAYER, pid, "Aria", 20, 0),
+                        new Combatant(CombatantKind.ENEMY, enemyId, "Goblin", 5, 2)))
+                .activeIndex(0)
+                .round(1)
+                .build();
+
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(7).currentHp(7).armorClass(15)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).dexMod(2).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE))
+                .thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(aria));
+        when(playerRepo.findById(pid)).thenReturn(Optional.of(aria));
+        when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin)); // alive → fight continues
+        when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
+        when(playerStateService.getState(pid)).thenReturn(stateFor(pid, 20));
+        // Goblin's attack (1d20+4) totals 5 vs Aria's AC 10 → a miss, so no one drops.
+        when(diceService.roll("1d20+4")).thenReturn(res(5));
+
+        combat.playerEndTurn(sessionId, "Aria");
+
+        // Aria ends turn → goblin auto-acts → order wraps back to Aria at the top of round 2.
+        assertEquals(0, enc.getActiveIndex(), "active index should wrap back to the first combatant");
+        assertEquals(2, enc.getRound(), "round should increment when the order wraps");
     }
 }

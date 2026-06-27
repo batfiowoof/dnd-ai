@@ -4,6 +4,7 @@ import com.dungeon.master.config.KafkaConfig;
 import com.dungeon.master.kafka.event.CombatNarrationEvent;
 import com.dungeon.master.kafka.event.DmResponseEvent;
 import com.dungeon.master.kafka.event.PlayerActionEvent;
+import com.dungeon.master.kafka.event.RoundActionEvent;
 import com.dungeon.master.kafka.event.SessionEvent;
 import com.dungeon.master.kafka.event.TurnNextEvent;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,13 @@ public class GameEventProducer {
         log.info("Publishing player action: session={}, player={}, turn={}",
                 event.sessionId(), event.playerId(), event.turnNumber());
         kafkaTemplate.send(KafkaConfig.TOPIC_PLAYER_ACTION,
+                event.sessionId().toString(), event);
+    }
+
+    public void sendRoundAction(RoundActionEvent event) {
+        log.info("Publishing collaborative round: session={}, turn={}, actions={}",
+                event.sessionId(), event.turnNumber(), event.actions().size());
+        kafkaTemplate.send(KafkaConfig.TOPIC_ROUND_ACTION,
                 event.sessionId().toString(), event);
     }
 

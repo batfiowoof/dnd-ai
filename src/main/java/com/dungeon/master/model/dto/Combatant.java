@@ -9,6 +9,7 @@ public record Combatant(
         CombatantKind kind,
         UUID refId,
         String name,
-        int initiative
+        int initiative,
+        int dexMod
 ) {
 }

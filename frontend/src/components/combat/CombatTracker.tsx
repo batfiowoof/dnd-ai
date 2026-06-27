@@ -37,6 +37,12 @@ export default function CombatTracker({
     combat.active?.kind === "PLAYER" && combat.active.refId === myPlayerId;
   const usableItems = myState?.inventory.filter((i) => i.qty > 0) ?? [];
 
+  // Initiative value per enemy id (for the d20 badge on each enemy card).
+  const initiativeByEnemyId: Record<string, number> = {};
+  combat.order.forEach((c) => {
+    if (c.kind === "ENEMY") initiativeByEnemyId[c.refId] = c.initiative;
+  });
+
   return (
     <div className="border-b border-border-accent bg-accent-glow/40 p-3">
       {/* Header + initiative */}
@@ -60,7 +66,7 @@ export default function CombatTracker({
           <span
             key={`${c.refId}-${i}`}
             className={cn(
-              "rounded px-2 py-0.5 text-[10px] tabular transition",
+              "inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] tabular transition",
               i === combat.activeIndex
                 ? "bg-accent text-white"
                 : c.kind === "ENEMY"
@@ -69,6 +75,16 @@ export default function CombatTracker({
             )}
             title={`Initiative ${c.initiative}`}
           >
+            <span
+              className={cn(
+                "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold",
+                i === combat.activeIndex
+                  ? "bg-white/25 text-white"
+                  : "bg-bg/60 text-gold"
+              )}
+            >
+              {c.initiative}
+            </span>
             {c.name}
           </span>
         ))}
@@ -104,7 +120,17 @@ export default function CombatTracker({
                 >
                   {e.name}
                 </span>
-                <span className="text-[9px] text-text-muted">AC {e.armorClass}</span>
+                <span className="flex items-center gap-1 text-[9px] text-text-muted">
+                  {initiativeByEnemyId[e.id] !== undefined && (
+                    <span
+                      className="tabular inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-bg/60 px-1 font-bold text-gold"
+                      title={`Initiative ${initiativeByEnemyId[e.id]}`}
+                    >
+                      {initiativeByEnemyId[e.id]}
+                    </span>
+                  )}
+                  AC {e.armorClass}
+                </span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-light">
                 <div

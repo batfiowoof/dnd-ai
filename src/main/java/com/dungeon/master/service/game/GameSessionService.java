@@ -9,16 +9,23 @@ import com.dungeon.master.model.dto.CreateSessionRequest;
 import com.dungeon.master.model.dto.CreateSessionResponse;
 import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.JoinSessionRequest;
+import com.dungeon.master.model.dto.PendingCheckDto;
 import com.dungeon.master.model.dto.PlayerDto;
+import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.TurnEvent;
+import com.dungeon.master.model.enums.Difficulty;
+import com.dungeon.master.model.enums.DmLength;
+import com.dungeon.master.model.enums.DmStyle;
 import com.dungeon.master.model.enums.GameStatus;
 import com.dungeon.master.model.enums.PlayerRole;
+import com.dungeon.master.model.enums.TurnMode;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.GameSessionRepository;
+import com.dungeon.master.repository.PendingCheckRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,11 +44,20 @@ import java.util.concurrent.ThreadLocalRandom;
 @Slf4j
 public class GameSessionService {
 
+    /** Collaborative round window is clamped to this range (seconds). */
+    private static final int MIN_COLLAB_WINDOW = 3;
+    private static final int MAX_COLLAB_WINDOW = 60;
+    /** Party size cap, inclusive. */
+    private static final int MIN_PARTY = 1;
+    private static final int MAX_PARTY = 8;
+
     private final GameSessionRepository sessionRepository;
     private final PlayerRepository playerRepository;
     private final TurnEventRepository turnEventRepository;
     private final CharacterRepository characterRepository;
     private final PlayerStateService playerStateService;
+    private final PendingCheckRepository pendingCheckRepository;
+    private final DiceService diceService;
     private final GameEventProducer eventProducer;
 
     @Transactional
@@ -54,6 +70,16 @@ public class GameSessionService {
                 .status(GameStatus.WAITING)
                 .createdBy(username)
                 .worldSetting(request.worldSetting())
+                .maxPlayers(clamp(request.maxPlayers() == null ? 4 : request.maxPlayers(),
+                        MIN_PARTY, MAX_PARTY))
+                .turnMode(request.turnMode() == null ? TurnMode.COLLABORATIVE : request.turnMode())
+                .difficulty(request.difficulty() == null ? Difficulty.NORMAL : request.difficulty())
+                .dmStyle(request.dmStyle() == null ? DmStyle.HEROIC : request.dmStyle())
+                .dmLength(request.dmLength() == null ? DmLength.STANDARD : request.dmLength())
+                .allowAiCombat(request.allowAiCombat() == null || request.allowAiCombat())
+                .allowAiRolls(request.allowAiRolls() == null || request.allowAiRolls())
+                .collabWindowSeconds(clamp(request.collabWindowSeconds() == null ? 10
+                        : request.collabWindowSeconds(), MIN_COLLAB_WINDOW, MAX_COLLAB_WINDOW))
                 .build();
         session = sessionRepository.save(session);
 
@@ -146,14 +172,55 @@ public class GameSessionService {
             throw new IllegalStateException("No players in session");
         }
 
+        // Initiative mode seeds the narrative rotation by a 1d20 + DEX-mod roll (same as
+        // combat), so out-of-combat play follows initiative order. Other modes keep the
+        // join order. Either way currentTurnPlayerId points at the head of turnOrder.
+        if (session.getTurnMode() == TurnMode.INITIATIVE) {
+            session.setTurnOrder(rollNarrativeInitiative(sessionId));
+        }
+
         session.setStatus(GameStatus.ACTIVE);
-        session.setCurrentTurnPlayerId(session.getTurnOrder().get(0));
+        session.setCurrentTurnPlayerId(session.getTurnOrder().isEmpty()
+                ? null : session.getTurnOrder().get(0));
         sessionRepository.save(session);
 
         eventProducer.sendSessionEvent(new SessionEvent(
                 sessionId, null, SessionEvent.Type.GAME_STARTED));
 
-        log.info("Session {} started with {} players", sessionId, session.getTurnOrder().size());
+        log.info("Session {} started ({} mode) with {} players",
+                sessionId, session.getTurnMode(), session.getTurnOrder().size());
+    }
+
+    /**
+     * Roll narrative initiative (1d20 + DEX modifier) for every human player and return the
+     * ordered player ids: initiative desc, then DEX mod desc, then a stable name fallback —
+     * the same deterministic ranking combat uses.
+     */
+    private List<UUID> rollNarrativeInitiative(UUID sessionId) {
+        record Seed(UUID playerId, String name, int initiative, int dexMod) {}
+        List<Seed> seeds = new java.util.ArrayList<>();
+        for (Player p : playerRepository.findBySessionId(sessionId)) {
+            if (p.getRole() != PlayerRole.PLAYER) continue;
+            int dex = dexMod(p);
+            int init = diceService.roll("1d20").total() + dex;
+            seeds.add(new Seed(p.getId(), p.getCharacterName(), init, dex));
+        }
+        seeds.sort(Comparator.comparingInt(Seed::initiative).reversed()
+                .thenComparing(Comparator.comparingInt(Seed::dexMod).reversed())
+                .thenComparing(s -> s.name() == null ? "" : s.name()));
+        return seeds.stream().map(Seed::playerId).collect(java.util.stream.Collectors.toList());
+    }
+
+    /** DEX modifier from the player's character template (0 if none). */
+    private int dexMod(Player player) {
+        if (player.getCharacterId() == null) return 0;
+        return characterRepository.findById(player.getCharacterId())
+                .map(c -> Math.floorDiv(c.getDexterity() - 10, 2))
+                .orElse(0);
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     @Transactional
@@ -189,6 +256,14 @@ public class GameSessionService {
                 .map(TurnEvent::getTurnNumber)
                 .orElse(0);
 
+        // Open ability checks travel on the game state so a reconnecting client can re-open its
+        // roll prompt (the ROLL_REQUEST event is transient and missed on reload).
+        List<PendingCheckDto> pendingChecks = pendingCheckRepository.findBySessionId(sessionId).stream()
+                .map(pc -> new PendingCheckDto(
+                        pc.getPlayerId(), pc.getAbility(), pc.getDc(), pc.getSkill(),
+                        pc.getReason(), abilityModHint(pc.getPlayerId(), pc.getAbility())))
+                .toList();
+
         return new GameStateDto(
                 session.getId(),
                 session.getCode(),
@@ -197,7 +272,31 @@ public class GameSessionService {
                 session.getCurrentTurnPlayerId(),
                 turnNumber,
                 session.getCreatedBy(),
-                session.getWorldSetting());
+                session.getWorldSetting(),
+                session.getTurnMode(),
+                session.getMaxPlayers(),
+                session.getDifficulty(),
+                session.getDmStyle(),
+                session.getDmLength(),
+                session.isAllowAiCombat(),
+                session.isAllowAiRolls(),
+                session.getCollabWindowSeconds(),
+                pendingChecks);
+    }
+
+    /**
+     * Informational ability-mod hint for a re-opened roll prompt (display only — the
+     * authoritative modifier, including proficiency, is computed when the check resolves).
+     */
+    private int abilityModHint(UUID playerId, String ability) {
+        try {
+            PlayerRuntimeStateDto st = playerStateService.getState(playerId);
+            int score = st.abilities() == null ? 10
+                    : st.abilities().getOrDefault(ability.toUpperCase(java.util.Locale.ROOT), 10);
+            return Math.floorDiv(score - 10, 2);
+        } catch (RuntimeException e) {
+            return 0;
+        }
     }
 
     public List<PlayerDto> getPlayers(UUID sessionId) {

@@ -49,6 +49,56 @@ public class PlayerStateService {
 
     /* ── seeding ─────────────────────────────────────────────────── */
 
+    /**
+     * Ensure a runtime state row exists for the player, seeding it if missing. Combat reads
+     * runtime HP to decide who is up; a player whose state was never seeded (or whose seeding
+     * failed) would otherwise be treated as "down" and silently skipped — an instant TPK.
+     * Seeds from the {@code Character} template when available, else neutral defaults.
+     */
+    @Transactional
+    public void ensureSeeded(Player player, Character character) {
+        if (repository.existsById(player.getId())) {
+            return;
+        }
+        if (character != null) {
+            seedForPlayer(player, character);
+        } else {
+            seedDefaultsForPlayer(player);
+        }
+    }
+
+    /**
+     * Seed neutral default runtime state for a player with no linked character (HP 10/10,
+     * AC 10, all abilities 10, no spell slots, a single stack of healing potions). Keeps
+     * combat and checks functional rather than crashing on a null character template.
+     */
+    @Transactional
+    public void seedDefaultsForPlayer(Player player) {
+        Map<String, Integer> abilities = new LinkedHashMap<>();
+        for (String a : List.of("STR", "DEX", "CON", "INT", "WIS", "CHA")) {
+            abilities.put(a, 10);
+        }
+        List<InventoryItem> inventory = new ArrayList<>();
+        inventory.add(new InventoryItem("Potion of Healing", 2, ItemKind.POTION_HEALING));
+
+        PlayerRuntimeState state = PlayerRuntimeState.builder()
+                .playerId(player.getId())
+                .sessionId(player.getSessionId())
+                .currentHp(10)
+                .maxHp(10)
+                .tempHp(0)
+                .armorClass(10)
+                .abilities(abilities)
+                .spellSlots(new ArrayList<>())
+                .inventory(inventory)
+                .conditions(new ArrayList<>())
+                .cantrips(new ArrayList<>())
+                .knownSpells(new ArrayList<>())
+                .build();
+        repository.save(state);
+        log.info("Seeded default runtime state for player={} (no character)", player.getId());
+    }
+
     @Transactional
     public void seedForPlayer(Player player, Character character) {
         int hp = character.getHitPoints();

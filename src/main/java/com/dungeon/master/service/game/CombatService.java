@@ -15,15 +15,18 @@ import com.dungeon.master.model.dto.RollSummary;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
+import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.TurnEvent;
 import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.CombatantKind;
+import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
+import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +56,7 @@ public class CombatService {
     private final CombatEncounterRepository encounterRepository;
     private final PlayerRepository playerRepository;
     private final CharacterRepository characterRepository;
+    private final GameSessionRepository sessionRepository;
     private final PlayerStateService playerStateService;
     private final DiceService diceService;
     private final TurnService turnService;
@@ -77,7 +81,12 @@ public class CombatService {
             throw new IllegalArgumentException("Specify at least one enemy");
         }
 
-        // Create enemies, numbering duplicates (Goblin 1, Goblin 2, ...).
+        Difficulty difficulty = sessionRepository.findById(sessionId)
+                .map(GameSession::getDifficulty)
+                .orElse(Difficulty.NORMAL);
+
+        // Create enemies, numbering duplicates (Goblin 1, Goblin 2, ...). Difficulty scales
+        // HP and attack bonus so the same key is tougher on DEADLY and softer on EASY.
         List<Enemy> enemies = new ArrayList<>();
         java.util.Map<String, Integer> counts = new java.util.HashMap<>();
         for (String key : enemyKeys) {
@@ -85,32 +94,51 @@ public class CombatService {
             long sameType = enemyKeys.stream().filter(k -> k.equalsIgnoreCase(key)).count();
             int n = counts.merge(key.toLowerCase(), 1, Integer::sum);
             String name = sameType > 1 ? t.name() + " " + n : t.name();
+            int hp = scaleHp(t.hp(), difficulty);
+            int atk = t.attackBonus() + attackBonusDelta(difficulty);
             enemies.add(Enemy.builder()
                     .id(UUID.randomUUID())
                     .sessionId(sessionId)
                     .name(name)
-                    .maxHp(t.hp())
-                    .currentHp(t.hp())
+                    .maxHp(hp)
+                    .currentHp(hp)
                     .armorClass(t.armorClass())
-                    .attackBonus(t.attackBonus())
+                    .attackBonus(atk)
                     .damageDice(t.damageDice())
-                    .initiative(diceService.roll("1d20").total())
+                    .initiative(diceService.roll("1d20").total() + t.dexMod())
+                    .dexMod(t.dexMod())
                     .alive(true)
                     .build());
         }
         enemyRepository.saveAll(enemies);
 
+        // Ensure every player has runtime state BEFORE building initiative — a missing state
+        // makes playerDown()/noLivingPlayers() treat the player as down (an instant TPK).
+        List<Player> players = playerRepository.findBySessionId(sessionId);
+        for (Player p : players) {
+            if (p.getRole() == PlayerRole.PLAYER) {
+                playerStateService.ensureSeeded(p, character(p));
+            }
+        }
+
         // Build initiative order: players (1d20 + DEX mod) + enemies.
         List<Combatant> order = new ArrayList<>();
-        for (Player p : playerRepository.findBySessionId(sessionId)) {
+        for (Player p : players) {
             if (p.getRole() != PlayerRole.PLAYER) continue;
-            int init = diceService.roll("1d20").total() + dexMod(p);
-            order.add(new Combatant(CombatantKind.PLAYER, p.getId(), p.getCharacterName(), init));
+            int dex = dexMod(p);
+            int init = diceService.roll("1d20").total() + dex;
+            order.add(new Combatant(CombatantKind.PLAYER, p.getId(), p.getCharacterName(), init, dex));
         }
         for (Enemy e : enemies) {
-            order.add(new Combatant(CombatantKind.ENEMY, e.getId(), e.getName(), e.getInitiative()));
+            order.add(new Combatant(CombatantKind.ENEMY, e.getId(), e.getName(),
+                    e.getInitiative(), e.getDexMod()));
         }
-        order.sort(Comparator.comparingInt(Combatant::initiative).reversed());
+        // D&D 5e: rank initiative high→low; ties broken by DEX mod (also high→low), then a
+        // stable fallback (players before enemies, then name) so ordering is reproducible.
+        order.sort(Comparator.comparingInt(Combatant::initiative).reversed()
+                .thenComparing(Comparator.comparingInt(Combatant::dexMod).reversed())
+                .thenComparingInt(c -> c.kind() == CombatantKind.PLAYER ? 0 : 1)
+                .thenComparing(c -> c.name() == null ? "" : c.name()));
 
         CombatEncounter enc = CombatEncounter.builder()
                 .sessionId(sessionId)
@@ -392,6 +420,25 @@ public class CombatService {
     private int dexMod(Player player) {
         Character c = character(player);
         return c == null ? 0 : Math.floorDiv(c.getDexterity() - 10, 2);
+    }
+
+    /** Scale an enemy's base HP by difficulty (EASY 0.75×, NORMAL 1×, DEADLY 1.4×), min 1. */
+    private int scaleHp(int baseHp, Difficulty difficulty) {
+        double factor = switch (difficulty) {
+            case EASY -> 0.75;
+            case NORMAL -> 1.0;
+            case DEADLY -> 1.4;
+        };
+        return Math.max(1, (int) Math.round(baseHp * factor));
+    }
+
+    /** Difficulty adjustment to enemy attack bonus (EASY −1, NORMAL 0, DEADLY +2). */
+    private int attackBonusDelta(Difficulty difficulty) {
+        return switch (difficulty) {
+            case EASY -> -1;
+            case NORMAL -> 0;
+            case DEADLY -> 2;
+        };
     }
 
     private int armorClass(Player player) {

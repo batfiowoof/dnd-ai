@@ -1,6 +1,10 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.enums.Difficulty;
+import com.dungeon.master.model.enums.DmLength;
+import com.dungeon.master.model.enums.DmStyle;
 import com.dungeon.master.model.enums.GameStatus;
+import com.dungeon.master.model.enums.TurnMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -57,6 +61,38 @@ public class GameSession {
 
     @Column(name = "world_setting", columnDefinition = "text")
     private String worldSetting;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "turn_mode", nullable = false)
+    @Builder.Default
+    private TurnMode turnMode = TurnMode.COLLABORATIVE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private Difficulty difficulty = Difficulty.NORMAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dm_style", nullable = false)
+    @Builder.Default
+    private DmStyle dmStyle = DmStyle.HEROIC;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dm_length", nullable = false)
+    @Builder.Default
+    private DmLength dmLength = DmLength.STANDARD;
+
+    @Column(name = "allow_ai_combat", nullable = false)
+    @Builder.Default
+    private boolean allowAiCombat = true;
+
+    @Column(name = "allow_ai_rolls", nullable = false)
+    @Builder.Default
+    private boolean allowAiRolls = true;
+
+    @Column(name = "collab_window_seconds", nullable = false)
+    @Builder.Default
+    private int collabWindowSeconds = 10;
 
     @Column(name = "created_by")
     private String createdBy;

@@ -8,8 +8,19 @@ import type {
   GameStateDto,
   PlayerDto,
   PlayerRuntimeState,
+  RollRequestEvent,
+  RoundStatusEvent,
   TurnEventDto,
+  TurnMode,
 } from "@/types";
+
+/* ─── Collaborative round collection status ──────────────────── */
+export interface RoundStatus {
+  secondsLeft: number;
+  submitted: number;
+  total: number;
+  open: boolean;
+}
 
 /* ─── Chat log entry ─────────────────────────────────────────── */
 export interface LogEntry {
@@ -18,6 +29,8 @@ export interface LogEntry {
   playerName?: string;
   text: string;
   turnNumber: number;
+  /** Raw streamed accumulation for DM entries (keeps the [[ tag anchor so live-strip is stable). */
+  raw?: string;
 }
 
 /* ─── Live dice roll (drives the roll modal animation) ────────── */
@@ -42,6 +55,7 @@ interface SessionState {
   createdBy: string | null;
   currentTurnPlayerId: string | null;
   turnNumber: number;
+  turnMode: TurnMode;
   logs: LogEntry[];
   dmThinking: boolean;
   connected: boolean;
@@ -50,6 +64,10 @@ interface SessionState {
   runtimeByPlayerId: Record<string, PlayerRuntimeState>;
   combat: CombatStateDto | null;
   lastEnemyAction: (EnemyActionEvent & { eventId: string }) | null;
+  /** Collaborative round collection status (null when no window is open). */
+  round: RoundStatus | null;
+  /** DM-requested ability check addressed to the local player (null when none). */
+  pendingCheck: RollRequestEvent | null;
 
   /* server-state seeding (React Query → store) */
   hydrateFromGameState: (gs: GameStateDto) => void;
@@ -88,6 +106,11 @@ interface SessionState {
   applyGameStarted: (gs: GameStateDto) => void;
   applyGameEnded: () => void;
 
+  /* collaborative round + LLM-requested checks */
+  applyRoundStatus: (evt: RoundStatusEvent) => void;
+  applyRollRequest: (evt: RollRequestEvent) => void;
+  clearPendingCheck: () => void;
+
   setConnected: (connected: boolean) => void;
   setError: (error: string) => void;
   reset: () => void;
@@ -99,6 +122,7 @@ const initialState = {
   createdBy: null as string | null,
   currentTurnPlayerId: null as string | null,
   turnNumber: 0,
+  turnMode: "COLLABORATIVE" as TurnMode,
   logs: [] as LogEntry[],
   dmThinking: false,
   connected: false,
@@ -107,6 +131,8 @@ const initialState = {
   runtimeByPlayerId: {} as Record<string, PlayerRuntimeState>,
   combat: null as CombatStateDto | null,
   lastEnemyAction: null as (EnemyActionEvent & { eventId: string }) | null,
+  round: null as RoundStatus | null,
+  pendingCheck: null as RollRequestEvent | null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -119,6 +145,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       createdBy: gs.createdBy,
       currentTurnPlayerId: gs.currentTurnPlayerId,
       turnNumber: gs.turnNumber,
+      turnMode: gs.turnMode ?? "COLLABORATIVE",
     }),
 
   seedLogsFromHistory: (history) =>
@@ -164,9 +191,11 @@ export const useSessionStore = create<SessionState>((set) => ({
      action line first, so order is consistent across all clients. */
   beginDmTurn: ({ turnNumber, playerId, playerName, action }) =>
     set((state) => {
-      if (!action) return { dmThinking: true };
+      // The DM is now resolving — the collaborative collection window has flushed.
+      if (!action) return { dmThinking: true, round: null };
       const actionId = `ws-action-${turnNumber}-${playerId}`;
-      if (state.logs.some((e) => e.id === actionId)) return { dmThinking: true };
+      if (state.logs.some((e) => e.id === actionId))
+        return { dmThinking: true, round: null };
       const entry: LogEntry = {
         id: actionId,
         type: "action",
@@ -174,22 +203,32 @@ export const useSessionStore = create<SessionState>((set) => ({
         text: action,
         turnNumber,
       };
-      return { dmThinking: true, logs: [...state.logs, entry] };
+      return { dmThinking: true, round: null, logs: [...state.logs, entry] };
     }),
 
-  /* DM_CHUNK — append a streamed token to the live DM entry (create on first chunk). */
+  /* DM_CHUNK — append a streamed token to the live DM entry (create on first chunk).
+     Directive tags ([[ENCOUNTER…]] / [[ROLL…]]) are stripped from the live view so the raw
+     marker never flashes; the final DmResponse reconciles with the authoritative clean text. */
   appendDmChunk: ({ turnNumber, playerId, delta }) =>
     set((state) => {
       const dmId = `ws-dm-${turnNumber}-${playerId}`;
       if (state.logs.some((e) => e.id === dmId)) {
         return {
           dmThinking: false,
-          logs: state.logs.map((e) =>
-            e.id === dmId ? { ...e, text: e.text + delta } : e
-          ),
+          logs: state.logs.map((e) => {
+            if (e.id !== dmId) return e;
+            const raw = (e.raw ?? "") + delta;
+            return { ...e, raw, text: stripTags(raw) };
+          }),
         };
       }
-      const entry: LogEntry = { id: dmId, type: "dm", text: delta, turnNumber };
+      const entry: LogEntry = {
+        id: dmId,
+        type: "dm",
+        raw: delta,
+        text: stripTags(delta),
+        turnNumber,
+      };
       return { dmThinking: false, logs: [...state.logs, entry] };
     }),
 
@@ -221,10 +260,14 @@ export const useSessionStore = create<SessionState>((set) => ({
       const actionId = `ws-action-${dm.turnNumber}-${dm.playerId}`;
       const dmId = `ws-dm-${dm.turnNumber}-${dm.playerId}`;
 
+      // Only initiative mode rotates a pointer — the backend sends nextTurnPlayerId for it and
+      // null for collaborative/freeform. Keep the existing pointer when none is given. Always
+      // clear the round-collection indicator (this round has resolved).
       const turnFields = {
-        currentTurnPlayerId: dm.nextTurnPlayerId,
+        currentTurnPlayerId: dm.nextTurnPlayerId ?? state.currentTurnPlayerId,
         turnNumber: dm.turnNumber + 1,
         dmThinking: false,
+        round: null as RoundStatus | null,
       };
 
       let logs = state.logs;
@@ -361,6 +404,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       players: gs.players,
       currentTurnPlayerId: gs.currentTurnPlayerId,
       turnNumber: gs.turnNumber,
+      turnMode: gs.turnMode ?? state.turnMode,
       createdBy: gs.createdBy,
       status: "ACTIVE",
       logs: [
@@ -389,7 +433,45 @@ export const useSessionStore = create<SessionState>((set) => ({
       ],
     })),
 
+  /* ROUND_STATUS — live collaborative collection indicator. */
+  applyRoundStatus: (evt) =>
+    set({
+      round: evt.open
+        ? {
+            secondsLeft: evt.secondsLeft,
+            submitted: evt.submitted,
+            total: evt.total,
+            open: true,
+          }
+        : null,
+    }),
+
+  /* ROLL_REQUEST — the DM asks the local player for an ability check. */
+  applyRollRequest: (evt) => set({ pendingCheck: evt }),
+
+  clearPendingCheck: () => set({ pendingCheck: null }),
+
   setConnected: (connected) => set({ connected }),
   setError: (error) => set({ error }),
   reset: () => set({ ...initialState }),
 }));
+
+/**
+ * Strip a directive tag from streamed DM text so the raw [[ENCOUNTER…]] / [[ROLL…]] marker
+ * never flashes mid-stream. Tags are emitted as the final line, so everything from a complete
+ * opening marker to the end is hidden; a trailing PARTIAL marker still being streamed (e.g.
+ * "[", "[[", "[[RO") is also suppressed so a split bracket can't leak character-by-character.
+ * Run on the retained raw accumulation (which keeps the "[[" anchor) — the final, authoritative
+ * text comes from the DmResponseDto, so aggressive live stripping is safe.
+ */
+function stripTags(text: string): string {
+  return text
+    // complete opening marker → end of text
+    .replace(/\n?\[\[\s*(?:ENCOUNTER|ROLL)\b[\s\S]*$/i, "")
+    // trailing partial opening still streaming ("[", "[[", "[[E", "[[ROL", …)
+    .replace(
+      /\[\[?\s*(?:E(?:N(?:C(?:O(?:U(?:N(?:T(?:E(?:R)?)?)?)?)?)?)?)?|R(?:O(?:L(?:L)?)?)?)?$/i,
+      ""
+    )
+    .trimEnd();
+}

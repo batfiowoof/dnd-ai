@@ -9,6 +9,7 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaConfig {
 
     public static final String TOPIC_PLAYER_ACTION = "game.player.action";
+    public static final String TOPIC_ROUND_ACTION = "game.round.action";
     public static final String TOPIC_DM_RESPONSE = "game.dm.response";
     public static final String TOPIC_TURN_NEXT = "game.turn.next";
     public static final String TOPIC_SESSION_EVENT = "game.session.event";
@@ -17,6 +18,14 @@ public class KafkaConfig {
     @Bean
     public NewTopic playerActionTopic() {
         return TopicBuilder.name(TOPIC_PLAYER_ACTION)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic roundActionTopic() {
+        return TopicBuilder.name(TOPIC_ROUND_ACTION)
                 .partitions(3)
                 .replicas(1)
                 .build();

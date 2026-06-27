@@ -15,12 +15,14 @@ import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
+import com.dungeon.master.model.dto.RollCheckRequest;
 import com.dungeon.master.model.dto.RollRequest;
 import com.dungeon.master.model.dto.StartEncounterRequest;
 import com.dungeon.master.model.dto.UseItemRequest;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.enums.RollMode;
+import com.dungeon.master.service.game.CheckService;
 import com.dungeon.master.service.game.CombatService;
 import com.dungeon.master.service.game.DiceService;
 import com.dungeon.master.service.game.GameSessionService;
@@ -50,6 +52,7 @@ public class GameWebSocketController {
     private final PlayerService playerService;
     private final PlayerStateService playerStateService;
     private final CombatService combatService;
+    private final CheckService checkService;
     private final DiceService diceService;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -69,6 +72,32 @@ public class GameWebSocketController {
             messagingTemplate.convertAndSendToUser(
                     username, "/queue/errors",
                     (Object) Map.of("error", e.getMessage()));
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/pass")
+    public void handlePass(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            turnService.passAction(sessionId, username);
+        } catch (Exception e) {
+            log.error("Error passing turn: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/roll-check")
+    public void handleRollCheck(@DestinationVariable UUID sessionId,
+                                @Payload RollCheckRequest request,
+                                Principal principal) {
+        String username = principal.getName();
+        try {
+            RollMode mode = request == null || request.rollMode() == null
+                    ? RollMode.NORMAL : request.rollMode();
+            checkService.resolveCheck(sessionId, username, mode);
+        } catch (Exception e) {
+            log.error("Error resolving check: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
         }
     }
 
