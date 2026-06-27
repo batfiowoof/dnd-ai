@@ -6,33 +6,41 @@ import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { useCreateCharacter } from "@/hooks/useCharacterQueries";
 import {
-  useRaces,
+  useSpecies,
   useClasses,
+  useBackgrounds,
   useAlignments,
   useClassSpells,
-  useStartingEquipment,
-  useEquipmentCategory,
+  useFeat,
+  useEquipmentKindMap,
 } from "@/hooks/useDnd5eData";
 import {
-  BACKGROUNDS,
   ABILITY_NAMES,
   POINT_BUY_COSTS,
   POINT_BUY_TOTAL,
   STANDARD_ARRAY,
-  resolveEquipment,
+  classSkillOptions,
+  EMPTY_ASI,
+  backgroundTargets,
+  backgroundBonuses,
+  asiValid,
+  parseClassEquipmentOptions,
+  parseEquipmentItems,
   equipmentToStrings,
-  equipmentSelectionComplete,
-  catKey,
   getAbilityModifier,
   formatModifier,
   calculateHitPoints,
   calculateArmorClass,
   type AbilityName,
-  type RaceInfo,
+  type AsiAssignment,
+  type AsiMode,
+  type SpeciesInfo,
   type ClassInfo,
+  type BackgroundInfo,
 } from "@/lib/dnd5e";
+import { featIndexFromName } from "@/lib/dnd5eapi";
 import { SPELLCASTING, isCaster, type Spell } from "@/lib/spells";
-import { Button, Alert, Spinner, cn } from "@/components/ui";
+import { Button, Alert, Spinner, Field, controlClass, cn } from "@/components/ui";
 import Portrait from "@/components/Portrait";
 
 type AbilityMethod = "standard" | "pointbuy";
@@ -47,23 +55,23 @@ const ABILITY_LABELS: Record<AbilityName, string> = {
 };
 
 const ABILITY_DESCRIPTIONS: Record<AbilityName, string> = {
-  strength: "Physical power. Affects melee attacks, carrying capacity, and Athletics checks.",
-  dexterity: "Agility and reflexes. Affects AC, ranged attacks, initiative, and Acrobatics/Stealth.",
-  constitution: "Endurance and health. Affects hit points and Constitution saving throws.",
-  intelligence: "Learning and reasoning. Affects Arcana, History, Investigation, Nature, Religion.",
-  wisdom: "Perception and insight. Affects Perception, Insight, Medicine, Survival, Animal Handling.",
-  charisma: "Force of personality. Affects Deception, Intimidation, Performance, Persuasion.",
+  strength: "Physical power. Melee attacks, carrying capacity, Athletics.",
+  dexterity: "Agility and reflexes. AC, ranged attacks, initiative, Stealth.",
+  constitution: "Endurance and health. Hit points and CON saves.",
+  intelligence: "Learning and reasoning. Arcana, History, Investigation.",
+  wisdom: "Perception and insight. Perception, Insight, Medicine, Survival.",
+  charisma: "Force of personality. Deception, Persuasion, Performance.",
 };
 
-/* ── Guide step navigation ───────────────────────────────────── */
-// The Spells step only appears for classes that pick spells at level 1, so the
-// step list is derived from the chosen class (see `steps` in the component).
+/* ── Step navigation (2024-canonical order) ──────────────────────── */
+// Spells only appears for caster classes (derived from the chosen class below).
 type Step =
-  | "Race"
   | "Class"
+  | "Background"
+  | "Species"
   | "Abilities"
-  | "Equipment"
   | "Spells"
+  | "Equipment"
   | "Details"
   | "Review";
 
@@ -81,24 +89,30 @@ function CharacterCreateForm() {
   const createMutation = useCreateCharacter();
   const saving = createMutation.isPending;
 
-  // ── 5e reference data (dnd5eapi.co, cached) ──────────────────
-  const racesQuery = useRaces();
+  // ── SRD reference data (app backend /api/srd, cached) ────────────
   const classesQuery = useClasses();
+  const backgroundsQuery = useBackgrounds();
+  const speciesQuery = useSpecies();
   const alignmentsQuery = useAlignments();
+  const equipKindMapQuery = useEquipmentKindMap();
 
-  const [step, setStep] = useState<Step>("Race");
+  const [step, setStep] = useState<Step>("Class");
   const [error, setError] = useState("");
 
   // Character state
   const [name, setName] = useState("");
-  const [selectedRace, setSelectedRace] = useState<RaceInfo | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
-  const [background, setBackground] = useState("");
+  const [selectedBackground, setSelectedBackground] =
+    useState<BackgroundInfo | null>(null);
+  const [selectedSpecies, setSelectedSpecies] = useState<SpeciesInfo | null>(null);
   const [alignment, setAlignment] = useState("");
   const [backstory, setBackstory] = useState("");
   const [imageUrl, setImageUrl] = useState("");
 
-  // Abilities
+  // Class skill proficiency choices (cap = class.skillProficiencies.choose)
+  const [classSkills, setClassSkills] = useState<string[]>([]);
+
+  // Abilities — base method + the background ASI split
   const [abilityMethod, setAbilityMethod] = useState<AbilityMethod>("standard");
   const [baseAbilities, setBaseAbilities] = useState<Record<AbilityName, number>>({
     strength: 10,
@@ -118,61 +132,72 @@ function CharacterCreateForm() {
     wisdom: null,
     charisma: null,
   });
+  const [asi, setAsi] = useState<AsiAssignment>(EMPTY_ASI);
 
-  // Equipment & spells — reset whenever the class changes.
-  const [equipmentSelections, setEquipmentSelections] = useState<number[]>([]);
-  const [categoryChoices, setCategoryChoices] = useState<Record<string, string>>({});
+  // Equipment A/B(/C) selections (letters) + spells
+  const [classEquipLetter, setClassEquipLetter] = useState("A");
+  const [bgEquipLetter, setBgEquipLetter] = useState<"A" | "B">("A");
   const [selectedCantrips, setSelectedCantrips] = useState<string[]>([]);
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
 
   const caster = selectedClass ? isCaster(selectedClass.name) : false;
   const spellCaps = selectedClass ? SPELLCASTING[selectedClass.name] : undefined;
 
-  // Class-dependent catalog fetches (gated on a chosen class).
-  const equipmentQuery = useStartingEquipment(selectedClass?.index, !!selectedClass);
   const spellsQuery = useClassSpells(selectedClass?.index, caster);
+  const featIndex = selectedBackground
+    ? featIndexFromName(selectedBackground.feat)
+    : undefined;
+  const featQuery = useFeat(featIndex, !!featIndex);
 
-  const classEquip = equipmentQuery.data ?? null;
-
+  // Reset class-dependent choices when the class changes.
   useEffect(() => {
-    setEquipmentSelections([]);
-    setCategoryChoices({});
+    setClassSkills([]);
+    setClassEquipLetter("A");
     setSelectedCantrips([]);
     setSelectedSpells([]);
   }, [selectedClass?.index]);
 
-  const resolvedItems = useMemo(
-    () =>
-      classEquip
-        ? resolveEquipment(classEquip, equipmentSelections, categoryChoices)
-        : [],
-    [classEquip, equipmentSelections, categoryChoices]
+  // Reset the ASI split + background equipment when the background changes
+  // (its target abilities change, so a prior assignment may be invalid).
+  useEffect(() => {
+    setAsi(EMPTY_ASI);
+    setBgEquipLetter("A");
+  }, [selectedBackground?.index]);
+
+  const bgTargets = useMemo(
+    () => backgroundTargets(selectedBackground),
+    [selectedBackground]
   );
 
-  const cantripChoices = spellsQuery.data?.cantrips ?? [];
-  const levelOneChoices = spellsQuery.data?.level1 ?? [];
+  const bgBonuses = useMemo(
+    () => backgroundBonuses(selectedBackground, asi),
+    [selectedBackground, asi]
+  );
 
-  // Computed final abilities (base + racial bonuses)
+  // Final abilities = chosen base + background ASI bonus.
   const finalAbilities = useMemo(() => {
     const base =
       abilityMethod === "standard"
-        ? Object.fromEntries(
+        ? (Object.fromEntries(
             ABILITY_NAMES.map((a) => [a, standardAssignments[a] ?? 8])
-          )
+          ) as Record<AbilityName, number>)
         : { ...baseAbilities };
+    for (const a of ABILITY_NAMES) base[a] += bgBonuses[a];
+    return base;
+  }, [baseAbilities, standardAssignments, abilityMethod, bgBonuses]);
 
-    if (selectedRace) {
-      for (const [ability, bonus] of Object.entries(
-        selectedRace.abilityBonuses
-      )) {
-        if (ability in base) {
-          (base as Record<string, number>)[ability] += bonus;
-        }
-      }
-    }
-
-    return base as Record<AbilityName, number>;
-  }, [baseAbilities, standardAssignments, abilityMethod, selectedRace]);
+  const baseScore = useMemo(
+    () =>
+      (Object.fromEntries(
+        ABILITY_NAMES.map((a) => [
+          a,
+          abilityMethod === "standard"
+            ? standardAssignments[a] ?? 8
+            : baseAbilities[a],
+        ])
+      ) as Record<AbilityName, number>),
+    [abilityMethod, standardAssignments, baseAbilities]
+  );
 
   const pointBuySpent = useMemo(() => {
     if (abilityMethod !== "pointbuy") return 0;
@@ -182,11 +207,11 @@ function CharacterCreateForm() {
     );
   }, [baseAbilities, abilityMethod]);
 
-  const usedStandardValues = useMemo(() => {
-    return Object.values(standardAssignments).filter(
-      (v) => v !== null
-    ) as number[];
-  }, [standardAssignments]);
+  const usedStandardValues = useMemo(
+    () =>
+      Object.values(standardAssignments).filter((v) => v !== null) as number[],
+    [standardAssignments]
+  );
 
   const derivedHP = useMemo(() => {
     if (!selectedClass) return 10;
@@ -198,45 +223,79 @@ function CharacterCreateForm() {
     [finalAbilities.dexterity]
   );
 
-  const derivedSpeed = selectedRace?.speed ?? 30;
+  const derivedSpeed = selectedSpecies?.speed ?? 30;
+
+  // ── Equipment resolution (best-effort parse of SRD free text) ────
+  const classEquipOptions = useMemo(
+    () =>
+      selectedClass
+        ? parseClassEquipmentOptions(selectedClass.startingEquipment)
+        : [],
+    [selectedClass]
+  );
+
+  const resolvedItems = useMemo(() => {
+    const kindMap = equipKindMapQuery.data;
+    const classRaw =
+      classEquipOptions.find((o) => o.letter === classEquipLetter)?.raw ??
+      classEquipOptions[0]?.raw ??
+      "";
+    const bgRaw =
+      bgEquipLetter === "A"
+        ? selectedBackground?.equipment.optionA ?? ""
+        : selectedBackground?.equipment.optionB ?? "";
+    const combined = [classRaw, bgRaw].filter(Boolean).join(", ");
+    return combined ? parseEquipmentItems(combined, kindMap) : [];
+  }, [
+    classEquipOptions,
+    classEquipLetter,
+    bgEquipLetter,
+    selectedBackground,
+    equipKindMapQuery.data,
+  ]);
+
+  const cantripChoices = spellsQuery.data?.cantrips ?? [];
+  const levelOneChoices = spellsQuery.data?.level1 ?? [];
 
   const steps = useMemo<Step[]>(() => {
-    const base: Step[] = ["Race", "Class", "Abilities", "Equipment"];
+    const base: Step[] = ["Class", "Background", "Species", "Abilities"];
     if (caster) base.push("Spells");
-    base.push("Details", "Review");
+    base.push("Equipment", "Details", "Review");
     return base;
   }, [caster]);
 
   const stepIndex = steps.indexOf(step);
 
-  // If the step list shrinks (e.g. switching to a non-caster removes "Spells"),
-  // keep the current step valid.
   useEffect(() => {
     if (!steps.includes(step)) setStep("Class");
   }, [steps, step]);
 
+  const baseAbilitiesValid =
+    abilityMethod === "standard"
+      ? ABILITY_NAMES.every((a) => standardAssignments[a] !== null)
+      : pointBuySpent <= POINT_BUY_TOTAL;
+
   function canProceed(): boolean {
     switch (step) {
-      case "Race":
-        return !!selectedRace;
       case "Class":
-        return !!selectedClass;
-      case "Abilities":
-        if (abilityMethod === "standard") {
-          return ABILITY_NAMES.every((a) => standardAssignments[a] !== null);
-        }
-        return pointBuySpent <= POINT_BUY_TOTAL;
-      case "Equipment":
         return (
-          !!classEquip &&
-          equipmentSelectionComplete(classEquip, equipmentSelections, categoryChoices)
+          !!selectedClass &&
+          classSkills.length === selectedClass.skillProficiencies.choose
         );
+      case "Background":
+        return !!selectedBackground;
+      case "Species":
+        return !!selectedSpecies;
+      case "Abilities":
+        return baseAbilitiesValid && asiValid(selectedBackground, asi);
       case "Spells":
         return (
           !!spellCaps &&
           selectedCantrips.length === spellCaps.cantripsKnown &&
           selectedSpells.length === spellCaps.spellsKnown
         );
+      case "Equipment":
+        return !!selectedClass && !!selectedBackground;
       case "Details":
         return !!name.trim();
       case "Review":
@@ -247,41 +306,59 @@ function CharacterCreateForm() {
   }
 
   function nextStep() {
-    if (stepIndex < steps.length - 1) {
-      setStep(steps[stepIndex + 1]);
-    }
+    if (stepIndex < steps.length - 1) setStep(steps[stepIndex + 1]);
   }
   function prevStep() {
-    if (stepIndex > 0) {
-      setStep(steps[stepIndex - 1]);
-    }
+    if (stepIndex > 0) setStep(steps[stepIndex - 1]);
   }
 
-  function toggleCantrip(name: string) {
-    setSelectedCantrips((prev) => {
-      if (prev.includes(name)) return prev.filter((n) => n !== name);
-      if (!spellCaps || prev.length >= spellCaps.cantripsKnown) return prev;
-      return [...prev, name];
+  function toggleClassSkill(skill: string) {
+    if (!selectedClass) return;
+    setClassSkills((prev) => {
+      if (prev.includes(skill)) return prev.filter((s) => s !== skill);
+      if (prev.length >= selectedClass.skillProficiencies.choose) return prev;
+      return [...prev, skill];
     });
   }
-  function toggleSpell(name: string) {
+  function toggleCantrip(n: string) {
+    setSelectedCantrips((prev) => {
+      if (prev.includes(n)) return prev.filter((x) => x !== n);
+      if (!spellCaps || prev.length >= spellCaps.cantripsKnown) return prev;
+      return [...prev, n];
+    });
+  }
+  function toggleSpell(n: string) {
     setSelectedSpells((prev) => {
-      if (prev.includes(name)) return prev.filter((n) => n !== name);
+      if (prev.includes(n)) return prev.filter((x) => x !== n);
       if (!spellCaps || prev.length >= spellCaps.spellsKnown) return prev;
-      return [...prev, name];
+      return [...prev, n];
     });
   }
 
   async function handleSave() {
-    if (!username || !selectedRace || !selectedClass || !name.trim()) return;
+    if (!username || !selectedSpecies || !selectedClass || !selectedBackground)
+      return;
+    if (!name.trim()) return;
     setError("");
     try {
+      const proficiencies = Array.from(
+        new Set([
+          ...selectedBackground.skillProficiencies,
+          selectedBackground.toolProficiency,
+          ...classSkills,
+        ])
+      ).filter(Boolean);
+      const features = [
+        ...selectedSpecies.traits.map((t) => t.name),
+        selectedBackground.feat,
+      ];
+
       await createMutation.mutateAsync({
         name: name.trim(),
-        race: selectedRace.name,
+        race: selectedSpecies.name,
         characterClass: selectedClass.name,
         level: 1,
-        background,
+        background: selectedBackground.name,
         alignment,
         strength: finalAbilities.strength,
         dexterity: finalAbilities.dexterity,
@@ -293,8 +370,8 @@ function CharacterCreateForm() {
         armorClass: derivedAC,
         speed: derivedSpeed,
         equipment: equipmentToStrings(resolvedItems),
-        proficiencies: selectedClass.proficiencies,
-        features: selectedRace.traits,
+        proficiencies,
+        features,
         cantrips: selectedCantrips,
         knownSpells: selectedSpells,
         startingInventory: resolvedItems,
@@ -328,7 +405,7 @@ function CharacterCreateForm() {
         </div>
 
         {/* Step indicator */}
-        <div className="mb-8 flex items-center justify-center gap-1">
+        <div className="mb-8 flex flex-wrap items-center justify-center gap-1">
           {steps.map((s, i) => (
             <div key={s} className="flex items-center">
               <button
@@ -347,7 +424,7 @@ function CharacterCreateForm() {
               {i < steps.length - 1 && (
                 <div
                   className={cn(
-                    "mx-1 h-px w-6 transition",
+                    "mx-1 h-px w-5 transition",
                     i < stepIndex ? "bg-accent" : "bg-border"
                   )}
                 />
@@ -357,137 +434,209 @@ function CharacterCreateForm() {
         </div>
 
         <div className="rounded-xl border border-border-accent bg-surface p-6 panel-corners">
-          {/* ── STEP: Race ────────────────────────────────────── */}
-          {step === "Race" && (
+          {/* ── STEP: Class ───────────────────────────────────── */}
+          {step === "Class" && (
             <div>
-              <h2 className="mb-2 text-lg font-bold text-accent">
-                Choose Your Race
-              </h2>
-              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
-                <strong className="text-text">D&D 5E Guide:</strong> Your race
-                determines your character&apos;s physical traits, ability score
-                bonuses, speed, and special racial features. Each race brings
-                unique strengths to your character.
-              </div>
+              <StepHeading>Choose Your Class</StepHeading>
+              <Guide>
+                Your class is your primary adventuring role. It sets your hit
+                points, weapon &amp; armor training, saving throws, and the skills
+                you train. Pick a class, then choose your trained skills.
+              </Guide>
 
-              <DataGate
-                query={racesQuery}
-                loadingLabel="Loading races…"
-                onRetry={() => racesQuery.refetch()}
-              >
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {racesQuery.data?.map((race) => (
-                    <button
-                      key={race.index}
-                      onClick={() => setSelectedRace(race)}
-                      className={`rounded-lg border p-4 text-left transition ${
-                        selectedRace?.index === race.index
-                          ? "border-accent bg-accent-glow"
-                          : "border-border bg-bg-elevated hover:border-accent/50"
-                      }`}
-                    >
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="font-semibold text-text">
-                          {race.name}
-                        </span>
-                        <span className="text-[10px] uppercase tracking-wider text-text-muted">
-                          {race.size}
-                        </span>
-                      </div>
-                      <div className="text-xs text-accent">
-                        {Object.entries(race.abilityBonuses)
-                          .map(
-                            ([a, b]) => `${a.slice(0, 3).toUpperCase()} +${b}`
-                          )
-                          .join(", ") || "No ability bonuses"}
-                      </div>
-                      <div className="mt-1 text-xs text-text-muted">
-                        Speed: {race.speed} ft
-                      </div>
-                      {selectedRace?.index === race.index && (
-                        <div className="mt-2 border-t border-border pt-2">
-                          <div className="text-xs font-semibold text-text-muted">
-                            Racial Traits:
-                          </div>
-                          {race.traits.map((t) => (
-                            <span
-                              key={t}
-                              className="mr-1 mt-1 inline-block rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                            >
-                              {t}
-                            </span>
-                          ))}
+              <DataGate query={classesQuery} loadingLabel="Loading classes…" onRetry={() => classesQuery.refetch()}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {classesQuery.data?.map((cls) => {
+                    const selected = selectedClass?.index === cls.index;
+                    return (
+                      <OptionCard
+                        key={cls.index}
+                        selected={selected}
+                        onClick={() => setSelectedClass(cls)}
+                        title={cls.name}
+                        badge={`d${cls.hitDie} HD`}
+                      >
+                        <div className="text-xs text-text-muted">
+                          Primary: <span className="text-text">{cls.primaryAbility}</span>
                         </div>
-                      )}
-                    </button>
-                  ))}
+                        <div className="text-xs text-text-muted">
+                          Saves: {cls.savingThrows.join(", ")}
+                        </div>
+                        {isCaster(cls.name) && (
+                          <span className="mt-1 inline-block rounded bg-accent-dark/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-accent-light">
+                            Spellcaster
+                          </span>
+                        )}
+                      </OptionCard>
+                    );
+                  })}
                 </div>
+
+                {selectedClass && (
+                  <div className="mt-5 rounded-lg border border-border bg-bg-elevated p-4">
+                    <ChoicePicker
+                      title={`Trained Skills — choose ${selectedClass.skillProficiencies.choose}`}
+                      picked={classSkills.length}
+                      max={selectedClass.skillProficiencies.choose}
+                      options={classSkillOptions(selectedClass)}
+                      selected={classSkills}
+                      onToggle={toggleClassSkill}
+                    />
+                  </div>
+                )}
               </DataGate>
             </div>
           )}
 
-          {/* ── STEP: Class ───────────────────────────────────── */}
-          {step === "Class" && (
+          {/* ── STEP: Background ──────────────────────────────── */}
+          {step === "Background" && (
             <div>
-              <h2 className="mb-2 text-lg font-bold text-accent">
-                Choose Your Class
-              </h2>
-              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
-                <strong className="text-text">D&D 5E Guide:</strong> Your class
-                is your primary adventuring role. It determines your hit points,
-                proficiencies, saving throws, and equipment.
-              </div>
+              <StepHeading>Choose Your Background</StepHeading>
+              <Guide>
+                In the 2024 rules your background is mechanical: it grants an
+                ability-score increase (assigned in the Abilities step), an{" "}
+                <strong className="text-text">origin feat</strong>, skill and tool
+                proficiencies, and starting equipment.
+              </Guide>
 
-              <DataGate
-                query={classesQuery}
-                loadingLabel="Loading classes…"
-                onRetry={() => classesQuery.refetch()}
-              >
+              <DataGate query={backgroundsQuery} loadingLabel="Loading backgrounds…" onRetry={() => backgroundsQuery.refetch()}>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {classesQuery.data?.map((cls) => (
-                    <button
-                      key={cls.index}
-                      onClick={() => setSelectedClass(cls)}
-                      className={`rounded-lg border p-4 text-left transition ${
-                        selectedClass?.index === cls.index
-                          ? "border-accent bg-accent-glow"
-                          : "border-border bg-bg-elevated hover:border-accent/50"
-                      }`}
-                    >
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="font-semibold text-text">
-                          {cls.name}
-                        </span>
-                        <span className="text-xs text-accent">
-                          d{cls.hitDie} HD
-                        </span>
-                      </div>
-                      <div className="text-xs text-text-muted">
-                        Saves: {cls.savingThrows.join(", ")}
-                      </div>
-                      {isCaster(cls.name) && (
-                        <span className="mt-1 inline-block rounded bg-accent-dark/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-accent-light">
-                          Spellcaster
-                        </span>
-                      )}
-                      {selectedClass?.index === cls.index && (
-                        <div className="mt-2 border-t border-border pt-2">
-                          <div className="mb-1 text-xs font-semibold text-text-muted">
-                            Proficiencies:
-                          </div>
-                          {cls.proficiencies.map((p) => (
-                            <span
-                              key={p}
-                              className="mr-1 mt-1 inline-block rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                            >
-                              {p}
-                            </span>
-                          ))}
+                  {backgroundsQuery.data?.map((bg) => {
+                    const selected = selectedBackground?.index === bg.index;
+                    return (
+                      <OptionCard
+                        key={bg.index}
+                        selected={selected}
+                        onClick={() => setSelectedBackground(bg)}
+                        title={bg.name}
+                      >
+                        <div className="text-xs text-accent">
+                          {bg.abilityScores
+                            .map((a) => a.slice(0, 3).toUpperCase())
+                            .join(" / ")}{" "}
+                          increase
                         </div>
-                      )}
-                    </button>
-                  ))}
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
+                          <FeatIcon className="h-3.5 w-3.5 text-gold" />
+                          {bg.feat}
+                        </div>
+                      </OptionCard>
+                    );
+                  })}
                 </div>
+
+                {selectedBackground && (
+                  <div className="mt-5 space-y-4">
+                    {/* Origin feat callout */}
+                    <FeatCallout
+                      featName={selectedBackground.feat}
+                      desc={featQuery.data?.desc}
+                      loading={featQuery.isLoading}
+                    />
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <DetailPanel title="Proficiencies">
+                        <div className="text-xs text-text-muted">Skills</div>
+                        <ChipRow items={selectedBackground.skillProficiencies} />
+                        <div className="mt-2 text-xs text-text-muted">Tool</div>
+                        <ChipRow items={[selectedBackground.toolProficiency]} />
+                      </DetailPanel>
+
+                      <DetailPanel title="Ability Increase">
+                        <p className="text-xs text-text-muted">
+                          Boosts one of these three abilities (you choose how in
+                          the Abilities step):
+                        </p>
+                        <ChipRow items={selectedBackground.abilityScores} accent />
+                      </DetailPanel>
+                    </div>
+
+                    {/* Equipment A/B choice */}
+                    <DetailPanel title="Starting Equipment">
+                      <div className="space-y-2">
+                        <EquipRadio
+                          name="bg-equip"
+                          label="Option A"
+                          value="A"
+                          checked={bgEquipLetter === "A"}
+                          onChange={() => setBgEquipLetter("A")}
+                          text={selectedBackground.equipment.optionA}
+                        />
+                        <EquipRadio
+                          name="bg-equip"
+                          label="Option B"
+                          value="B"
+                          checked={bgEquipLetter === "B"}
+                          onChange={() => setBgEquipLetter("B")}
+                          text={selectedBackground.equipment.optionB}
+                        />
+                      </div>
+                    </DetailPanel>
+                  </div>
+                )}
+              </DataGate>
+            </div>
+          )}
+
+          {/* ── STEP: Species ─────────────────────────────────── */}
+          {step === "Species" && (
+            <div>
+              <StepHeading>Choose Your Species</StepHeading>
+              <Guide>
+                Your species defines your character&apos;s lineage and grants
+                special traits, size, and speed. Under the 2024 rules species no
+                longer changes your ability scores — those come from your
+                background.
+              </Guide>
+
+              <DataGate query={speciesQuery} loadingLabel="Loading species…" onRetry={() => speciesQuery.refetch()}>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {speciesQuery.data?.map((sp) => {
+                    const selected = selectedSpecies?.index === sp.index;
+                    return (
+                      <OptionCard
+                        key={sp.index}
+                        selected={selected}
+                        onClick={() => setSelectedSpecies(sp)}
+                        title={sp.name}
+                        badge={`${sp.speed} ft`}
+                      >
+                        <div className="text-xs text-text-muted">
+                          {[sp.creatureType, sp.size.split("(")[0].trim()]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                        <div className="mt-0.5 text-xs text-text-muted">
+                          {sp.traits.length} trait
+                          {sp.traits.length === 1 ? "" : "s"}
+                        </div>
+                      </OptionCard>
+                    );
+                  })}
+                </div>
+
+                {selectedSpecies && (
+                  <div className="mt-5 rounded-lg border border-border bg-bg-elevated p-4">
+                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
+                      {selectedSpecies.name} Traits
+                    </h3>
+                    <div className="space-y-2">
+                      {selectedSpecies.traits.map((t) => (
+                        <details
+                          key={t.name}
+                          className="rounded-md border border-border bg-surface"
+                        >
+                          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-text">
+                            {t.name}
+                          </summary>
+                          <p className="border-t border-border px-3 py-2 text-xs leading-relaxed text-text-muted">
+                            {t.desc}
+                          </p>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </DataGate>
             </div>
           )}
@@ -495,52 +644,35 @@ function CharacterCreateForm() {
           {/* ── STEP: Abilities ───────────────────────────────── */}
           {step === "Abilities" && (
             <div>
-              <h2 className="mb-2 text-lg font-bold text-accent">
-                Ability Scores
-              </h2>
-              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
-                <strong className="text-text">D&D 5E Guide:</strong> Six
-                abilities define your character: Strength, Dexterity,
-                Constitution, Intelligence, Wisdom, and Charisma. Higher scores
-                give bonuses to rolls. Choose{" "}
-                <strong>Standard Array</strong> (assign the values 15, 14, 13,
-                12, 10, 8) or <strong>Point Buy</strong> (spend 27 points to
-                set scores from 8-15). Racial bonuses are added automatically.
-              </div>
+              <StepHeading>Ability Scores</StepHeading>
+              <Guide>
+                Set a <strong className="text-text">base</strong> for each ability
+                with <strong>Standard Array</strong> (15, 14, 13, 12, 10, 8) or{" "}
+                <strong>Point Buy</strong> (27 points). Then assign your{" "}
+                <strong className="text-text">background increase</strong> below —
+                the final score is base + bonus.
+              </Guide>
 
-              {/* Method toggle */}
-              <div className="mb-4 flex gap-2">
-                <button
-                  onClick={() => setAbilityMethod("standard")}
-                  className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                    abilityMethod === "standard"
-                      ? "bg-accent text-white"
-                      : "border border-border text-text-muted hover:text-text"
-                  }`}
-                >
-                  Standard Array
-                </button>
-                <button
-                  onClick={() => setAbilityMethod("pointbuy")}
-                  className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                    abilityMethod === "pointbuy"
-                      ? "bg-accent text-white"
-                      : "border border-border text-text-muted hover:text-text"
-                  }`}
-                >
-                  Point Buy
-                </button>
-              </div>
+              {/* Base method toggle */}
+              <Segmented
+                className="mb-4"
+                ariaLabel="Ability score method"
+                options={[
+                  { value: "standard", label: "Standard Array" },
+                  { value: "pointbuy", label: "Point Buy" },
+                ]}
+                value={abilityMethod}
+                onChange={(v) => setAbilityMethod(v as AbilityMethod)}
+              />
 
               {abilityMethod === "pointbuy" && (
                 <div className="mb-4 text-sm">
                   Points spent:{" "}
                   <span
-                    className={
-                      pointBuySpent > POINT_BUY_TOTAL
-                        ? "text-red-500 font-bold"
-                        : "text-accent font-bold"
-                    }
+                    className={cn(
+                      "font-bold tabular",
+                      pointBuySpent > POINT_BUY_TOTAL ? "text-danger" : "text-accent"
+                    )}
                   >
                     {pointBuySpent}
                   </span>{" "}
@@ -548,13 +680,19 @@ function CharacterCreateForm() {
                 </div>
               )}
 
+              {/* Background ASI sub-panel */}
+              <AsiPanel
+                background={selectedBackground}
+                targets={bgTargets}
+                asi={asi}
+                onChange={setAsi}
+              />
+
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {ABILITY_NAMES.map((ability) => {
-                  const racialBonus =
-                    selectedRace?.abilityBonuses[ability] ?? 0;
+                  const bonus = bgBonuses[ability];
                   const finalScore = finalAbilities[ability];
                   const mod = getAbilityModifier(finalScore);
-
                   return (
                     <div
                       key={ability}
@@ -564,7 +702,7 @@ function CharacterCreateForm() {
                         <span className="text-sm font-bold text-accent">
                           {ABILITY_LABELS[ability]}
                         </span>
-                        <span className="text-lg font-bold text-text">
+                        <span className="text-lg font-bold text-text tabular">
                           {finalScore}{" "}
                           <span className="text-sm text-text-muted">
                             ({formatModifier(mod)})
@@ -577,17 +715,16 @@ function CharacterCreateForm() {
 
                       {abilityMethod === "standard" ? (
                         <select
+                          aria-label={`Assign value to ${ABILITY_LABELS[ability]}`}
                           value={standardAssignments[ability] ?? ""}
                           onChange={(e) => {
-                            const val = e.target.value
-                              ? Number(e.target.value)
-                              : null;
+                            const val = e.target.value ? Number(e.target.value) : null;
                             setStandardAssignments((prev) => ({
                               ...prev,
                               [ability]: val,
                             }));
                           }}
-                          className="w-full rounded border border-border bg-surface px-2 py-1.5 text-sm text-text"
+                          className={controlClass}
                         >
                           <option value="">-- Assign --</option>
                           {STANDARD_ARRAY.map((v) => (
@@ -606,6 +743,7 @@ function CharacterCreateForm() {
                       ) : (
                         <div className="flex items-center gap-2">
                           <button
+                            aria-label={`Decrease ${ABILITY_LABELS[ability]}`}
                             onClick={() =>
                               setBaseAbilities((prev) => ({
                                 ...prev,
@@ -613,14 +751,15 @@ function CharacterCreateForm() {
                               }))
                             }
                             disabled={baseAbilities[ability] <= 8}
-                            className="rounded bg-surface-light px-2 py-1 text-sm font-bold text-text-muted hover:text-accent disabled:opacity-30"
+                            className="rounded bg-surface-light px-2.5 py-1 text-sm font-bold text-text-muted hover:text-accent disabled:opacity-30"
                           >
-                            -
+                            −
                           </button>
-                          <span className="w-8 text-center text-sm font-bold">
+                          <span className="w-8 text-center text-sm font-bold tabular">
                             {baseAbilities[ability]}
                           </span>
                           <button
+                            aria-label={`Increase ${ABILITY_LABELS[ability]}`}
                             onClick={() =>
                               setBaseAbilities((prev) => ({
                                 ...prev,
@@ -628,7 +767,7 @@ function CharacterCreateForm() {
                               }))
                             }
                             disabled={baseAbilities[ability] >= 15}
-                            className="rounded bg-surface-light px-2 py-1 text-sm font-bold text-text-muted hover:text-accent disabled:opacity-30"
+                            className="rounded bg-surface-light px-2.5 py-1 text-sm font-bold text-text-muted hover:text-accent disabled:opacity-30"
                           >
                             +
                           </button>
@@ -638,11 +777,15 @@ function CharacterCreateForm() {
                         </div>
                       )}
 
-                      {racialBonus > 0 && (
-                        <div className="mt-1 text-xs text-accent">
-                          +{racialBonus} from {selectedRace?.name}
-                        </div>
-                      )}
+                      <div className="mt-1.5 text-xs text-text-muted tabular">
+                        base {baseScore[ability]}
+                        {bonus > 0 && (
+                          <span className="font-semibold text-gold">
+                            {" "}
+                            +{bonus} background
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -650,159 +793,18 @@ function CharacterCreateForm() {
             </div>
           )}
 
-          {/* ── STEP: Equipment ───────────────────────────────── */}
-          {step === "Equipment" && (
-            <div>
-              <h2 className="mb-2 text-lg font-bold text-accent">
-                Starting Equipment
-              </h2>
-              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
-                <strong className="text-text">D&D 5E Guide:</strong> Your class
-                grants a set of starting gear. For each choice below, pick one
-                option; some let you choose a specific weapon. Selected items
-                become your character&apos;s inventory.
-              </div>
-
-              <DataGate
-                query={equipmentQuery}
-                loadingLabel="Loading starting equipment…"
-                onRetry={() => equipmentQuery.refetch()}
-              >
-                {classEquip && (
-                  <>
-                    {classEquip.fixed.length > 0 && (
-                      <div className="mb-5">
-                        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                          Always included
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {classEquip.fixed.map((it) => (
-                            <span
-                              key={`${it.name}-${it.kind}`}
-                              className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                            >
-                              {it.name}
-                              {it.qty > 1 && (
-                                <span className="tabular text-text"> ×{it.qty}</span>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-5">
-                      {classEquip.groups.map((group, gi) => {
-                        const selOpt =
-                          group.options[equipmentSelections[gi] ?? 0];
-                        return (
-                          <div key={group.prompt}>
-                            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                              {group.prompt}
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {group.options.map((opt, oi) => {
-                                const selected =
-                                  (equipmentSelections[gi] ?? 0) === oi;
-                                return (
-                                  <button
-                                    key={opt.label || oi}
-                                    type="button"
-                                    aria-pressed={selected}
-                                    onClick={() =>
-                                      setEquipmentSelections((prev) => {
-                                        const next = [...prev];
-                                        next[gi] = oi;
-                                        return next;
-                                      })
-                                    }
-                                    className={cn(
-                                      "rounded-lg border p-3 text-left transition",
-                                      selected
-                                        ? "border-accent bg-accent-glow"
-                                        : "border-border bg-bg-elevated hover:border-accent/50"
-                                    )}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className={cn(
-                                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px]",
-                                          selected
-                                            ? "border-accent bg-accent text-white"
-                                            : "border-border text-transparent"
-                                        )}
-                                      >
-                                        ✓
-                                      </span>
-                                      <span className="text-sm font-semibold text-text">
-                                        {String.fromCharCode(97 + oi)}.{" "}
-                                        {opt.label}
-                                      </span>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/* Specific-item sub-picks for the selected option */}
-                            {selOpt && selOpt.categoryPicks.length > 0 && (
-                              <div className="mt-3 space-y-2 rounded-lg border border-border bg-bg-elevated p-3">
-                                {selOpt.categoryPicks.flatMap((pick, pi) =>
-                                  Array.from({ length: pick.count }).map(
-                                    (_, slot) => {
-                                      const key = catKey(gi, pi, slot);
-                                      return (
-                                        <CategoryPickSelect
-                                          key={key}
-                                          label={
-                                            pick.count > 1
-                                              ? `${pick.categoryName} #${slot + 1}`
-                                              : `Choose a ${pick.categoryName}`
-                                          }
-                                          categoryIndex={pick.categoryIndex}
-                                          value={categoryChoices[key] ?? ""}
-                                          onChange={(itemName) =>
-                                            setCategoryChoices((prev) => ({
-                                              ...prev,
-                                              [key]: itemName,
-                                            }))
-                                          }
-                                        />
-                                      );
-                                    }
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </DataGate>
-            </div>
-          )}
-
           {/* ── STEP: Spells ──────────────────────────────────── */}
           {step === "Spells" && spellCaps && (
             <div>
-              <h2 className="mb-2 text-lg font-bold text-accent">
-                Choose Your Spells
-              </h2>
-              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
-                <strong className="text-text">D&D 5E Guide:</strong> As a{" "}
-                {selectedClass?.name}, you begin knowing{" "}
+              <StepHeading>Choose Your Spells</StepHeading>
+              <Guide>
+                As a {selectedClass?.name}, you begin knowing{" "}
                 {spellCaps.cantripsKnown} cantrips and {spellCaps.spellsKnown}{" "}
-                level-1 spells. Cantrips are cast at will; leveled spells use
-                spell slots.
-              </div>
+                level-1 spells. Cantrips are cast at will; leveled spells use spell
+                slots.
+              </Guide>
 
-              <DataGate
-                query={spellsQuery}
-                loadingLabel="Loading spell list…"
-                onRetry={() => spellsQuery.refetch()}
-              >
+              <DataGate query={spellsQuery} loadingLabel="Loading spell list…" onRetry={() => spellsQuery.refetch()}>
                 <SpellPicker
                   title="Cantrips"
                   picked={selectedCantrips.length}
@@ -811,7 +813,6 @@ function CharacterCreateForm() {
                   selectedNames={selectedCantrips}
                   onToggle={toggleCantrip}
                 />
-
                 <div className="mt-5">
                   <SpellPicker
                     title="Level 1 Spells"
@@ -826,217 +827,62 @@ function CharacterCreateForm() {
             </div>
           )}
 
-          {/* ── STEP: Details ─────────────────────────────────── */}
-          {step === "Details" && (
+          {/* ── STEP: Equipment ───────────────────────────────── */}
+          {step === "Equipment" && (
             <div>
-              <h2 className="mb-2 text-lg font-bold text-accent">
-                Character Details
-              </h2>
-              <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
-                <strong className="text-text">D&D 5E Guide:</strong> Give your
-                character a name, choose a background that describes their life
-                before adventuring, select an alignment that reflects their
-                moral compass, and write a short backstory to bring them to
-                life.
-              </div>
+              <StepHeading>Starting Equipment</StepHeading>
+              <Guide>
+                Your class and background each grant a starting equipment bundle.
+                Pick one option from each; the selected items become your starting
+                inventory.
+              </Guide>
 
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <Portrait src={imageUrl} name={name} size="xl" />
-                  <div className="flex-1 space-y-4">
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                        Character Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. Thorin Ironforge"
-                        className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
+              {selectedClass && (
+                <DetailPanel title={`${selectedClass.name} — choose one`}>
+                  <div className="space-y-2">
+                    {classEquipOptions.map((opt) => (
+                      <EquipRadio
+                        key={opt.letter}
+                        name="class-equip"
+                        label={`Option ${opt.letter}`}
+                        value={opt.letter}
+                        checked={classEquipLetter === opt.letter}
+                        onChange={() => setClassEquipLetter(opt.letter)}
+                        text={opt.raw}
+                      />
+                    ))}
+                  </div>
+                </DetailPanel>
+              )}
+
+              {selectedBackground && (
+                <div className="mt-4">
+                  <DetailPanel title={`${selectedBackground.name} — choose one`}>
+                    <div className="space-y-2">
+                      <EquipRadio
+                        name="bg-equip-2"
+                        label="Option A"
+                        value="A"
+                        checked={bgEquipLetter === "A"}
+                        onChange={() => setBgEquipLetter("A")}
+                        text={selectedBackground.equipment.optionA}
+                      />
+                      <EquipRadio
+                        name="bg-equip-2"
+                        label="Option B"
+                        value="B"
+                        checked={bgEquipLetter === "B"}
+                        onChange={() => setBgEquipLetter("B")}
+                        text={selectedBackground.equipment.optionB}
                       />
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                        Portrait URL
-                      </label>
-                      <input
-                        type="url"
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        placeholder="https://example.com/portrait.png"
-                        className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-                      />
-                      <p className="mt-1 text-xs text-text-muted">
-                        Optional. Paste a link to an image; leave empty for initials.
-                      </p>
-                    </div>
-                  </div>
+                  </DetailPanel>
                 </div>
+              )}
 
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    Background
-                  </label>
-                  <select
-                    value={background}
-                    onChange={(e) => setBackground(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
-                  >
-                    <option value="">-- Select Background --</option>
-                    {BACKGROUNDS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    Alignment
-                  </label>
-                  <select
-                    value={alignment}
-                    onChange={(e) => setAlignment(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
-                  >
-                    <option value="">-- Select Alignment --</option>
-                    {(alignmentsQuery.data ?? []).map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    Backstory
-                  </label>
-                  <textarea
-                    value={backstory}
-                    onChange={(e) => setBackstory(e.target.value)}
-                    placeholder="Describe your character's history, motivations, and goals..."
-                    rows={4}
-                    className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text placeholder-text-muted outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── STEP: Review ──────────────────────────────────── */}
-          {step === "Review" && (
-            <div>
-              <h2 className="mb-4 text-lg font-bold text-accent">
-                Review Your Character
-              </h2>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Identity */}
-                <div className="rounded-lg border border-border bg-bg-elevated p-4">
-                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
-                    Identity
-                  </h3>
-                  <div className="space-y-1 text-sm">
-                    <div>
-                      <span className="text-text-muted">Name:</span>{" "}
-                      <span className="font-semibold text-text">
-                        {name || "Unnamed"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-text-muted">Race:</span>{" "}
-                      <span className="text-text">
-                        {selectedRace?.name ?? "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-text-muted">Class:</span>{" "}
-                      <span className="text-text">
-                        {selectedClass?.name ?? "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-text-muted">Background:</span>{" "}
-                      <span className="text-text">{background || "—"}</span>
-                    </div>
-                    <div>
-                      <span className="text-text-muted">Alignment:</span>{" "}
-                      <span className="text-text">{alignment || "—"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Combat Stats */}
-                <div className="rounded-lg border border-border bg-bg-elevated p-4">
-                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
-                    Combat
-                  </h3>
-                  <div className="flex justify-around text-center">
-                    <div>
-                      <div className="tabular text-2xl font-bold text-gold">
-                        {derivedHP}
-                      </div>
-                      <div className="text-xs text-text-muted">HP</div>
-                    </div>
-                    <div>
-                      <div className="tabular text-2xl font-bold text-gold">
-                        {derivedAC}
-                      </div>
-                      <div className="text-xs text-text-muted">AC</div>
-                    </div>
-                    <div>
-                      <div className="tabular text-2xl font-bold text-gold">
-                        {derivedSpeed}
-                      </div>
-                      <div className="text-xs text-text-muted">Speed</div>
-                    </div>
-                    <div>
-                      <div className="tabular text-2xl font-bold text-gold">
-                        d{selectedClass?.hitDie ?? "?"}
-                      </div>
-                      <div className="text-xs text-text-muted">Hit Die</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Ability Scores */}
-                <div className="rounded-lg border border-border bg-bg-elevated p-4 sm:col-span-2">
-                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
-                    Ability Scores
-                  </h3>
-                  <div className="grid grid-cols-6 gap-2 text-center">
-                    {ABILITY_NAMES.map((a) => {
-                      const score = finalAbilities[a];
-                      const mod = getAbilityModifier(score);
-                      return (
-                        <div
-                          key={a}
-                          className="rounded border border-border p-2"
-                        >
-                          <div className="text-xs font-bold text-accent">
-                            {ABILITY_LABELS[a]}
-                          </div>
-                          <div className="text-lg font-bold text-text">
-                            {score}
-                          </div>
-                          <div className="text-xs text-text-muted">
-                            {formatModifier(mod)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Equipment */}
-                {resolvedItems.length > 0 && (
-                  <div className="rounded-lg border border-border bg-bg-elevated p-4">
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
-                      Equipment
-                    </h3>
+              {resolvedItems.length > 0 && (
+                <div className="mt-4">
+                  <DetailPanel title="Resulting Inventory">
                     <div className="flex flex-wrap gap-1">
                       {resolvedItems.map((i) => (
                         <span
@@ -1047,81 +893,184 @@ function CharacterCreateForm() {
                         </span>
                       ))}
                     </div>
+                  </DetailPanel>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP: Details ─────────────────────────────────── */}
+          {step === "Details" && (
+            <div>
+              <StepHeading>Character Details</StepHeading>
+              <Guide>
+                Name your character, choose an alignment that reflects their moral
+                compass, and write a short backstory to bring them to life.
+              </Guide>
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-4">
+                  <Portrait src={imageUrl} name={name} size="xl" />
+                  <div className="flex-1 space-y-4">
+                    <Field label="Character Name" htmlFor="char-name" required>
+                      <input
+                        id="char-name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Thorin Ironforge"
+                        className={controlClass}
+                      />
+                    </Field>
+                    <Field
+                      label="Portrait URL"
+                      htmlFor="char-portrait"
+                      hint="Optional. Paste a link to an image; leave empty for initials."
+                    >
+                      <input
+                        id="char-portrait"
+                        type="url"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        placeholder="https://example.com/portrait.png"
+                        className={controlClass}
+                      />
+                    </Field>
                   </div>
+                </div>
+
+                <Field label="Alignment" htmlFor="char-alignment">
+                  <select
+                    id="char-alignment"
+                    value={alignment}
+                    onChange={(e) => setAlignment(e.target.value)}
+                    className={controlClass}
+                  >
+                    <option value="">-- Select Alignment --</option>
+                    {(alignmentsQuery.data ?? []).map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Backstory" htmlFor="char-backstory">
+                  <textarea
+                    id="char-backstory"
+                    value={backstory}
+                    onChange={(e) => setBackstory(e.target.value)}
+                    placeholder="Describe your character's history, motivations, and goals..."
+                    rows={4}
+                    className={controlClass}
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP: Review ──────────────────────────────────── */}
+          {step === "Review" && (
+            <div>
+              <StepHeading>Review Your Character</StepHeading>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <DetailPanel title="Identity">
+                  <ReviewRow label="Name" value={name || "Unnamed"} strong />
+                  <ReviewRow label="Species" value={selectedSpecies?.name ?? "—"} />
+                  <ReviewRow label="Class" value={selectedClass?.name ?? "—"} />
+                  <ReviewRow
+                    label="Background"
+                    value={selectedBackground?.name ?? "—"}
+                  />
+                  <ReviewRow
+                    label="Origin Feat"
+                    value={selectedBackground?.feat ?? "—"}
+                  />
+                  <ReviewRow label="Alignment" value={alignment || "—"} />
+                </DetailPanel>
+
+                <DetailPanel title="Combat">
+                  <div className="flex justify-around text-center">
+                    <Stat value={derivedHP} label="HP" />
+                    <Stat value={derivedAC} label="AC" />
+                    <Stat value={derivedSpeed} label="Speed" />
+                    <Stat value={`d${selectedClass?.hitDie ?? "?"}`} label="Hit Die" />
+                  </div>
+                </DetailPanel>
+
+                <div className="sm:col-span-2">
+                  <DetailPanel title="Ability Scores">
+                    <div className="grid grid-cols-6 gap-2 text-center">
+                      {ABILITY_NAMES.map((a) => {
+                        const score = finalAbilities[a];
+                        const mod = getAbilityModifier(score);
+                        const bonus = bgBonuses[a];
+                        return (
+                          <div key={a} className="rounded border border-border p-2">
+                            <div className="text-xs font-bold text-accent">
+                              {ABILITY_LABELS[a]}
+                            </div>
+                            <div className="text-lg font-bold text-text tabular">
+                              {score}
+                            </div>
+                            <div className="text-xs text-text-muted">
+                              {formatModifier(mod)}
+                            </div>
+                            {bonus > 0 && (
+                              <div className="text-[10px] font-semibold text-gold">
+                                +{bonus}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </DetailPanel>
+                </div>
+
+                {resolvedItems.length > 0 && (
+                  <DetailPanel title="Equipment">
+                    <ChipRow items={resolvedItems.map((i) =>
+                      i.qty > 1 ? `${i.name} ×${i.qty}` : i.name
+                    )} />
+                  </DetailPanel>
                 )}
 
-                {/* Spells */}
-                {caster &&
-                  (selectedCantrips.length > 0 || selectedSpells.length > 0) && (
-                    <div className="rounded-lg border border-border bg-bg-elevated p-4">
-                      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
-                        Spells
-                      </h3>
-                      {selectedCantrips.length > 0 && (
-                        <div className="mb-2">
-                          <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
-                            Cantrips
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {selectedCantrips.map((s) => (
-                              <span
-                                key={s}
-                                className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                              >
-                                {s}
-                              </span>
-                            ))}
-                          </div>
+                {caster && (selectedCantrips.length > 0 || selectedSpells.length > 0) && (
+                  <DetailPanel title="Spells">
+                    {selectedCantrips.length > 0 && (
+                      <div className="mb-2">
+                        <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
+                          Cantrips
                         </div>
-                      )}
-                      {selectedSpells.length > 0 && (
-                        <div>
-                          <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
-                            Level 1
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {selectedSpells.map((s) => (
-                              <span
-                                key={s}
-                                className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                              >
-                                {s}
-                              </span>
-                            ))}
-                          </div>
+                        <ChipRow items={selectedCantrips} />
+                      </div>
+                    )}
+                    {selectedSpells.length > 0 && (
+                      <div>
+                        <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
+                          Level 1
                         </div>
-                      )}
-                    </div>
-                  )}
-
-                {/* Traits & Features */}
-                {selectedRace && selectedRace.traits.length > 0 && (
-                  <div className="rounded-lg border border-border bg-bg-elevated p-4">
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
-                      Racial Traits
-                    </h3>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedRace.traits.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded bg-surface-light px-2 py-0.5 text-xs text-text-muted"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                        <ChipRow items={selectedSpells} />
+                      </div>
+                    )}
+                  </DetailPanel>
                 )}
 
-                {/* Backstory */}
+                {selectedSpecies && selectedSpecies.traits.length > 0 && (
+                  <DetailPanel title="Species Traits">
+                    <ChipRow items={selectedSpecies.traits.map((t) => t.name)} />
+                  </DetailPanel>
+                )}
+
                 {backstory && (
-                  <div className="rounded-lg border border-border bg-bg-elevated p-4 sm:col-span-2">
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
-                      Backstory
-                    </h3>
-                    <p className="text-sm text-text-muted whitespace-pre-wrap">
-                      {backstory}
-                    </p>
+                  <div className="sm:col-span-2">
+                    <DetailPanel title="Backstory">
+                      <p className="whitespace-pre-wrap text-sm text-text-muted">
+                        {backstory}
+                      </p>
+                    </DetailPanel>
                   </div>
                 )}
               </div>
@@ -1132,11 +1081,7 @@ function CharacterCreateForm() {
           {error && <Alert className="mt-4">{error}</Alert>}
 
           <div className="mt-6 flex items-center justify-between">
-            <Button
-              onClick={prevStep}
-              disabled={stepIndex === 0}
-              variant="ghost"
-            >
+            <Button onClick={prevStep} disabled={stepIndex === 0} variant="ghost">
               &larr; Back
             </Button>
 
@@ -1156,7 +1101,419 @@ function CharacterCreateForm() {
   );
 }
 
-/* ── Data loading / error gate ───────────────────────────────── */
+/* ── Small presentational helpers ────────────────────────────────── */
+
+function StepHeading({ children }: { children: React.ReactNode }) {
+  return <h2 className="mb-2 text-lg font-bold text-accent">{children}</h2>;
+}
+
+function Guide({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-4 rounded-lg bg-bg-elevated p-3 text-xs text-text-muted">
+      <strong className="text-text">D&amp;D 2024 Guide:</strong> {children}
+    </div>
+  );
+}
+
+function DetailPanel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-bg-elevated p-4">
+      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-muted">
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function ChipRow({ items, accent }: { items: string[]; accent?: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {items.filter(Boolean).map((it) => (
+        <span
+          key={it}
+          className={cn(
+            "rounded px-2 py-0.5 text-xs",
+            accent
+              ? "bg-accent-dark/30 text-accent-light"
+              : "bg-surface-light text-text-muted"
+          )}
+        >
+          {it}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ReviewRow({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="text-sm">
+      <span className="text-text-muted">{label}:</span>{" "}
+      <span className={strong ? "font-semibold text-text" : "text-text"}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div>
+      <div className="text-2xl font-bold text-gold tabular">{value}</div>
+      <div className="text-xs text-text-muted">{label}</div>
+    </div>
+  );
+}
+
+/** A selectable card used by the Class / Background / Species grids. */
+function OptionCard({
+  selected,
+  onClick,
+  title,
+  badge,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  title: string;
+  badge?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cn(
+        "min-h-[44px] rounded-lg border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+        selected
+          ? "border-accent bg-accent-glow"
+          : "border-border bg-bg-elevated hover:border-accent/50"
+      )}
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="font-semibold text-text">{title}</span>
+        {badge && (
+          <span className="shrink-0 text-xs text-accent tabular">{badge}</span>
+        )}
+      </div>
+      {children}
+    </button>
+  );
+}
+
+/** A capped multi-select chip list (class skills). Mirrors SpellPicker's cap UX. */
+function ChoicePicker({
+  title,
+  picked,
+  max,
+  options,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  picked: number;
+  max: number;
+  options: string[];
+  selected: string[];
+  onToggle: (v: string) => void;
+}) {
+  const atCap = picked >= max;
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="text-sm font-semibold text-text">{title}</span>
+        <span
+          className={cn(
+            "text-xs font-semibold tabular",
+            atCap ? "text-success" : "text-text-muted"
+          )}
+        >
+          {picked}/{max} chosen
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const isSel = selected.includes(opt);
+          const disabled = !isSel && atCap;
+          return (
+            <button
+              key={opt}
+              type="button"
+              aria-pressed={isSel}
+              disabled={disabled}
+              onClick={() => onToggle(opt)}
+              className={cn(
+                "min-h-[44px] rounded-lg border px-3 py-2 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                isSel
+                  ? "border-accent bg-accent-glow text-text"
+                  : disabled
+                    ? "cursor-not-allowed border-border bg-bg-elevated text-text-muted opacity-40"
+                    : "border-border bg-bg-elevated text-text-muted hover:border-accent/50"
+              )}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Single-select toggle (base ability method, ASI split). It's a radiogroup, not
+ * ARIA tabs — there are no tabpanels/roving-tabindex, so radio semantics are the
+ * correct fit and keep each option keyboard-reachable.
+ */
+function Segmented({
+  options,
+  value,
+  onChange,
+  className,
+  ariaLabel,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className={cn(
+        "inline-flex rounded-lg border border-border bg-bg-elevated p-1",
+        className
+      )}
+    >
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "min-h-[40px] rounded-md px-4 py-1.5 text-sm font-semibold transition",
+              active
+                ? "bg-accent text-white"
+                : "text-text-muted hover:text-text"
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A radio row for an equipment option (text-heavy, full-width target). */
+function EquipRadio({
+  name,
+  label,
+  value,
+  checked,
+  onChange,
+  text,
+}: {
+  name: string;
+  label: string;
+  value: string;
+  checked: boolean;
+  onChange: () => void;
+  text: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition",
+        checked
+          ? "border-accent bg-accent-glow"
+          : "border-border bg-surface hover:border-accent/50"
+      )}
+    >
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+        className="mt-0.5 accent-[var(--color-accent)]"
+      />
+      <span>
+        <span className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+          {label}
+        </span>
+        <span className="text-sm text-text">{text}</span>
+      </span>
+    </label>
+  );
+}
+
+/** The origin-feat callout card shown when a background is selected. */
+function FeatCallout({
+  featName,
+  desc,
+  loading,
+}: {
+  featName: string;
+  desc?: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-gold/40 bg-gold/5 p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <FeatIcon className="h-4 w-4 text-gold" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
+          Origin Feat
+        </span>
+      </div>
+      <div className="mb-1 text-sm font-bold text-text">{featName}</div>
+      {loading ? (
+        <span className="flex items-center gap-2 text-xs text-text-muted">
+          <Spinner className="h-3 w-3" /> Consulting the tomes…
+        </span>
+      ) : desc ? (
+        <p className="text-xs leading-relaxed text-text-muted">{desc}</p>
+      ) : (
+        <p className="text-xs text-text-muted">
+          Grants the {featName} origin feat.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The background ability-score-increase sub-panel (the ASI split + validation). */
+function AsiPanel({
+  background,
+  targets,
+  asi,
+  onChange,
+}: {
+  background: BackgroundInfo | null;
+  targets: AbilityName[];
+  asi: AsiAssignment;
+  onChange: (next: AsiAssignment) => void;
+}) {
+  if (!background) {
+    return (
+      <div className="mb-4 rounded-lg border border-dashed border-border bg-bg-elevated p-4 text-xs text-text-muted">
+        Choose a background first to assign its ability-score increase.
+      </div>
+    );
+  }
+
+  const valid = asiValid(background, asi);
+  const setMode = (mode: AsiMode) =>
+    onChange({ ...asi, mode, plusTwo: null, plusOne: null });
+
+  return (
+    <div className="mb-4 rounded-lg border border-border bg-bg-elevated p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+          {background.name} Ability Increase
+        </h3>
+        <Segmented
+          ariaLabel="Background ability increase split"
+          options={[
+            { value: "two-one", label: "+2 / +1" },
+            { value: "all-one", label: "+1 / +1 / +1" },
+          ]}
+          value={asi.mode}
+          onChange={(v) => setMode(v as AsiMode)}
+        />
+      </div>
+
+      {asi.mode === "all-one" ? (
+        <p className="text-xs text-text-muted">
+          Each of{" "}
+          <span className="font-semibold text-gold">
+            {background.abilityScores.join(", ")}
+          </span>{" "}
+          gains +1.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="+2 to" htmlFor="asi-plus-two">
+            <select
+              id="asi-plus-two"
+              value={asi.plusTwo ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...asi,
+                  plusTwo: (e.target.value || null) as AbilityName | null,
+                })
+              }
+              className={controlClass}
+            >
+              <option value="">-- choose --</option>
+              {targets.map((a) => (
+                <option key={a} value={a} disabled={asi.plusOne === a}>
+                  {ABILITY_LABELS[a]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="+1 to" htmlFor="asi-plus-one">
+            <select
+              id="asi-plus-one"
+              value={asi.plusOne ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...asi,
+                  plusOne: (e.target.value || null) as AbilityName | null,
+                })
+              }
+              className={controlClass}
+            >
+              <option value="">-- choose --</option>
+              {targets.map((a) => (
+                <option key={a} value={a} disabled={asi.plusTwo === a}>
+                  {ABILITY_LABELS[a]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      )}
+
+      <p role="status" className="mt-2 text-xs">
+        {valid ? (
+          <span className="text-success">Ability increase assigned.</span>
+        ) : (
+          <span className="text-text-muted">
+            {asi.mode === "two-one"
+              ? "Assign +2 and +1 to two different abilities to continue."
+              : "Select a split to continue."}
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/* ── Data loading / error gate ───────────────────────────────────── */
 function DataGate({
   query,
   loadingLabel,
@@ -1179,7 +1536,7 @@ function DataGate({
     return (
       <div className="py-8">
         <Alert>
-          Couldn&apos;t load D&D data from dnd5eapi.co.{" "}
+          Couldn&apos;t load reference data.{" "}
           <button
             onClick={onRetry}
             className="font-semibold text-accent underline hover:text-accent-light"
@@ -1193,49 +1550,7 @@ function DataGate({
   return <>{children}</>;
 }
 
-/* ── Specific-item picker for "choose any X" equipment ───────── */
-function CategoryPickSelect({
-  label,
-  categoryIndex,
-  value,
-  onChange,
-}: {
-  label: string;
-  categoryIndex: string;
-  value: string;
-  onChange: (itemName: string) => void;
-}) {
-  const cat = useEquipmentCategory(categoryIndex);
-  return (
-    <div>
-      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-        {label}
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={cat.isLoading}
-        className="w-full rounded border border-border bg-surface px-2 py-1.5 text-sm text-text"
-      >
-        <option value="">
-          {cat.isLoading ? "Loading…" : "-- choose an item --"}
-        </option>
-        {cat.data?.map((it) => (
-          <option key={it.index} value={it.name}>
-            {it.name}
-          </option>
-        ))}
-      </select>
-      {cat.isError && (
-        <span className="mt-1 block text-xs text-danger">
-          Failed to load options.
-        </span>
-      )}
-    </div>
-  );
-}
-
-/* ── Spell picker (cantrips / leveled) ───────────────────────── */
+/* ── Spell picker (cantrips / leveled) ───────────────────────────── */
 function SpellPicker({
   title,
   picked,
@@ -1258,7 +1573,7 @@ function SpellPicker({
         <span className="text-sm font-semibold text-text">{title}</span>
         <span
           className={cn(
-            "tabular text-xs font-semibold",
+            "text-xs font-semibold tabular",
             atCap ? "text-success" : "text-text-muted"
           )}
         >
@@ -1280,7 +1595,7 @@ function SpellPicker({
                 disabled={disabled}
                 onClick={() => onToggle(spell.name)}
                 className={cn(
-                  "rounded-lg border p-3 text-left transition",
+                  "rounded-lg border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
                   selected
                     ? "border-accent bg-accent-glow"
                     : disabled
@@ -1307,5 +1622,24 @@ function SpellPicker({
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Inline icon (no icon-lib dependency in this codebase) ───────── */
+function FeatIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M12 3l1.9 4.6L18.5 9.5 14 11.4 12 16l-2-4.6L5.5 9.5 10.1 7.6z" />
+      <path d="M19 14l.7 1.7L21.5 16.5 20 17.2 19 19l-1-1.8L16.5 16.5 18.3 15.7z" />
+    </svg>
   );
 }

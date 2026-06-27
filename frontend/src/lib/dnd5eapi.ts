@@ -1,168 +1,150 @@
-/* ── dnd5eapi.co REST client (SRD 5.1, 2014 ruleset) ──────────────
- * Public, no-auth, CORS-enabled (`access-control-allow-origin: *`). Used at
- * character-creation time to source races, classes, spells, and equipment.
- * This module is framework-free — React Query hooks live in
- * `hooks/useDnd5eData.ts`, which maps these raw shapes to the wizard's UI models.
+/* ── App SRD reference client (2024 SRD 5.2.1) ────────────────────
+ * The character-creation reference data (species, backgrounds, classes, feats,
+ * spells, equipment) is served by the app's own backend under `/api/srd/*` —
+ * this replaced the external dnd5eapi.co (2014 ruleset) dependency in J2.
+ *
+ * `/api/srd/**` is public (permitted without auth in the security config) and is
+ * proxied to the backend by `next.config.ts` (`/api/:path* → backend`), so a
+ * plain relative `fetch` with no token works in both dev and prod. List
+ * endpoints return a plain JSON array of full records; detail endpoints return
+ * the single record (404 on an unknown index). React Query hooks live in
+ * `hooks/useDnd5eData.ts` / `hooks/useSrdInfo.ts`, which map these to UI models.
  */
 
 import type { ItemKind } from "@/types";
 
-const DND_API = "https://www.dnd5eapi.co/api/2014";
+const SRD_API = "/api/srd";
 
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${DND_API}${path}`);
+  const res = await fetch(`${SRD_API}${path}`);
   if (!res.ok) {
-    throw new Error(`dnd5eapi ${path} failed: ${res.status}`);
+    throw new Error(`/api/srd${path} failed: ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
 
-/* ── Raw API response shapes ─────────────────────────────────────── */
+/* ── Raw record shapes (as stored in srd-5.2.1-structured.json) ───── */
 
-export interface ApiRef {
-  index: string;
+export interface SrdTrait {
   name: string;
-  url: string;
-}
-
-export interface ApiList<T> {
-  count: number;
-  results: T[];
-}
-
-export interface ApiRace {
-  index: string;
-  name: string;
-  speed: number;
-  size: string;
-  ability_bonuses: { ability_score: ApiRef; bonus: number }[];
-  traits: ApiRef[];
-}
-
-export interface ApiClass {
-  index: string;
-  name: string;
-  hit_die: number;
-  proficiencies: ApiRef[];
-  saving_throws: ApiRef[];
-  starting_equipment: { equipment: ApiRef; quantity: number }[];
-  starting_equipment_options: ApiEquipOptionGroup[];
-  spellcasting?: { level: number };
-}
-
-export interface ApiSpellRef {
-  index: string;
-  name: string;
-  level: number;
-  url: string;
-}
-
-export interface ApiSpell {
-  index: string;
-  name: string;
-  level: number;
-  school: ApiRef;
-  desc: string[];
-}
-
-export interface ApiDamage {
-  damage_dice: string;
-  damage_type?: ApiRef;
-}
-
-export interface ApiEquipment {
-  index: string;
-  name: string;
-  equipment_category: ApiRef;
-  /** Free-text rules (gear, potions, magic items). Weapons/armor are usually sparse. */
-  desc?: string[];
-  /** Weapons. */
-  weapon_category?: string;
-  weapon_range?: string;
-  damage?: ApiDamage;
-  two_handed_damage?: ApiDamage;
-  range?: { normal: number; long?: number | null };
-  throw_range?: { normal: number; long?: number | null };
-  properties?: ApiRef[];
-  /** Armor. */
-  armor_category?: string;
-  armor_class?: { base: number; dex_bonus?: boolean; max_bonus?: number | null };
-  str_minimum?: number;
-  stealth_disadvantage?: boolean;
-  /** Magic items (potions, scrolls, wondrous items) — served from /magic-items. */
-  rarity?: { name: string };
-  /** Common. */
-  cost?: { quantity: number; unit: string };
-  weight?: number;
-}
-
-export interface ApiEquipCategory {
-  index: string;
-  name: string;
-  equipment: ApiRef[];
-}
-
-/* starting_equipment_options is a small tagged union (see /classes/{idx}). */
-
-export interface ApiCountedRef {
-  option_type: "counted_reference";
-  count: number;
-  of: ApiRef;
-}
-
-/** "choose N from an equipment category" (e.g. any martial weapon). */
-export interface ApiCategoryChoice {
-  option_type: "choice";
-  choice: {
-    desc: string;
-    choose: number;
-    type: string;
-    from: {
-      option_set_type: "equipment_category";
-      equipment_category: ApiRef;
-    };
-  };
-}
-
-/** A bundle resolved together (e.g. leather armor + longbow + 20 arrows). */
-export interface ApiMultiple {
-  option_type: "multiple";
-  items: Array<ApiCountedRef | ApiCategoryChoice>;
-}
-
-export type ApiEquipOption = ApiCountedRef | ApiCategoryChoice | ApiMultiple;
-
-export interface ApiEquipOptionGroup {
   desc: string;
-  choose: number;
-  type: string;
-  from:
-    | { option_set_type: "options_array"; options: ApiEquipOption[] }
-    | { option_set_type: "equipment_category"; equipment_category: ApiRef };
+}
+
+export interface SrdSpecies {
+  index: string;
+  name: string;
+  creatureType: string;
+  size: string;
+  /** Free text, e.g. "30 feet" (empty for some species). Parse with `parseSpeed`. */
+  speed: string;
+  traits: SrdTrait[];
+}
+
+export interface SrdBackground {
+  index: string;
+  name: string;
+  /** The three abilities this background's score increase may be assigned to. */
+  abilityScores: string[];
+  /** Origin feat, e.g. "Magic Initiate (Cleric)". */
+  feat: string;
+  skillProficiencies: string[];
+  toolProficiency: string;
+  equipment: { optionA: string; optionB: string };
+}
+
+export interface SrdClass {
+  index: string;
+  name: string;
+  primaryAbility: string;
+  hitDie: number;
+  savingThrows: string[];
+  skillProficiencies: { choose: number; from: string[] };
+  weaponProficiencies: string;
+  armorTraining: string[];
+  /** Free text, e.g. "Choose A or B: (A) …; or (B) 75 GP". Parse with `parseEquipmentOptions`. */
+  startingEquipment: string;
+}
+
+export interface SrdFeat {
+  index: string;
+  name: string;
+  category: string;
+  prerequisite?: string | null;
+  desc: string;
+}
+
+export interface SrdSpell {
+  index: string;
+  name: string;
+  level: number;
+  school: string;
+  classes: string[];
+  castingTime: string;
+  range: string;
+  components: string;
+  duration: string;
+  concentration: boolean;
+  ritual: boolean;
+  desc: string;
+  higherLevel?: string;
+}
+
+export interface SrdEquipment {
+  index: string;
+  name: string;
+  /** "weapon" | "armor" | "gear". */
+  category: string;
+  /** Weapons. */
+  weaponType?: string;
+  damage?: string;
+  damageType?: string;
+  mastery?: string;
+  /** Armor. */
+  armorCategory?: string;
+  ac?: string;
+  baseAc?: number;
+  /** Common. */
+  weight?: string;
+  cost?: string;
+}
+
+export interface SrdAlignment {
+  index: string;
+  name: string;
 }
 
 /* ── Endpoints ───────────────────────────────────────────────────── */
 
-export const listClasses = () => apiGet<ApiList<ApiRef>>("/classes");
-export const getClass = (index: string) => apiGet<ApiClass>(`/classes/${index}`);
+export const listSpecies = () => apiGet<SrdSpecies[]>("/species");
+export const getSpecies = (index: string) =>
+  apiGet<SrdSpecies>(`/species/${index}`);
+
+export const listBackgrounds = () => apiGet<SrdBackground[]>("/backgrounds");
+export const getBackground = (index: string) =>
+  apiGet<SrdBackground>(`/backgrounds/${index}`);
+
+export const listClasses = () => apiGet<SrdClass[]>("/classes");
+export const getClass = (index: string) => apiGet<SrdClass>(`/classes/${index}`);
 export const listClassSpells = (index: string) =>
-  apiGet<ApiList<ApiSpellRef>>(`/classes/${index}/spells`);
-export const getSpell = (index: string) => apiGet<ApiSpell>(`/spells/${index}`);
-export const listRaces = () => apiGet<ApiList<ApiRef>>("/races");
-export const getRace = (index: string) => apiGet<ApiRace>(`/races/${index}`);
+  apiGet<SrdSpell[]>(`/classes/${index}/spells`);
+
+export const listFeats = () => apiGet<SrdFeat[]>("/feats");
+export const getFeat = (index: string) => apiGet<SrdFeat>(`/feats/${index}`);
+
+export const getSpell = (index: string) => apiGet<SrdSpell>(`/spells/${index}`);
+
+export const listEquipment = () => apiGet<SrdEquipment[]>("/equipment");
 export const getEquipment = (index: string) =>
-  apiGet<ApiEquipment>(`/equipment/${index}`);
-/** Magic items (potions, scrolls, wondrous) live on a separate endpoint. */
-export const getMagicItem = (index: string) =>
-  apiGet<ApiEquipment>(`/magic-items/${index}`);
-export const getEquipmentCategory = (index: string) =>
-  apiGet<ApiEquipCategory>(`/equipment-categories/${index}`);
-export const listAlignments = () => apiGet<ApiList<ApiRef>>("/alignments");
+  apiGet<SrdEquipment>(`/equipment/${index}`);
+
+export const listAlignments = () => apiGet<SrdAlignment[]>("/alignments");
+
+/* ── Helpers ─────────────────────────────────────────────────────── */
 
 /**
- * Best-effort SRD index from a display name (e.g. "Potion of Healing" →
- * "potion-of-healing"). The 2014 API derives indexes this way, so it resolves
- * most SRD content; non-SRD / custom names simply 404 (callers fail silently).
+ * Best-effort SRD index from a display name (e.g. "Acid Arrow" → "acid-arrow").
+ * The structured corpus derives indexes this way, so it resolves most content;
+ * unknown / custom names simply 404 (callers fail silently).
  */
 export function nameToIndex(name: string): string {
   return name
@@ -172,18 +154,30 @@ export function nameToIndex(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/* ── Mappers ─────────────────────────────────────────────────────── */
+/** Parse a species speed string ("30 feet") to a number; falls back to 30. */
+export function parseSpeed(speed: string | undefined): number {
+  const m = /(\d+)/.exec(speed ?? "");
+  return m ? Number(m[1]) : 30;
+}
 
 /**
- * Map an equipment-category index to our inventory `ItemKind`. Works for both
- * concrete-item categories (literal `"weapon"`/`"armor"`) and the broader
- * category-pick indexes (`"martial-weapons"`, `"light-armor"`, …). Anything that
- * isn't a weapon/armor/shield is generic `GEAR`. Potions/scrolls don't appear in
- * starting gear (the backend seeds the two healing potions on join).
+ * Resolve a background feat string to a feat index. The structured feats carry
+ * the base name ("Magic Initiate"); backgrounds qualify it ("Magic Initiate
+ * (Cleric)"), so strip the parenthetical before deriving the index.
  */
-export function kindFromCategory(categoryIndex: string): ItemKind {
-  const lc = categoryIndex.toLowerCase();
-  if (lc.includes("armor") || lc.includes("shield")) return "ARMOR";
-  if (lc.includes("weapon")) return "WEAPON";
-  return "GEAR";
+export function featIndexFromName(featName: string): string {
+  const base = featName.split("(")[0].trim();
+  return nameToIndex(base);
+}
+
+/** Map an SRD equipment category to our inventory `ItemKind`. */
+export function kindFromCategory(category: string | undefined): ItemKind {
+  switch ((category ?? "").toLowerCase()) {
+    case "weapon":
+      return "WEAPON";
+    case "armor":
+      return "ARMOR";
+    default:
+      return "GEAR";
+  }
 }

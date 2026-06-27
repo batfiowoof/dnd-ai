@@ -17,19 +17,36 @@ public interface WorldDocumentRepository extends JpaRepository<WorldDocument, UU
 
     List<WorldDocument> findByCategory(DocumentCategory category);
 
+    /**
+     * Nearest world-knowledge documents — RULES are excluded so the bundled SRD reference can't
+     * crowd out lore / session-history retrieval (rules are surfaced separately via
+     * {@link #findSimilarRuleIds}).
+     */
     @Query(value = """
             SELECT id FROM world_documents
+            WHERE category <> 'RULES'
             ORDER BY embedding <=> cast(:queryVector as vector)
             LIMIT :limit
             """, nativeQuery = true)
     List<UUID> findSimilarDocumentIds(@Param("queryVector") String queryVector,
                                       @Param("limit") int limit);
 
+    /** Nearest RULES documents only — the SRD reference block injected into the DM prompt. */
+    @Query(value = """
+            SELECT id FROM world_documents
+            WHERE category = 'RULES'
+            ORDER BY embedding <=> cast(:queryVector as vector)
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<UUID> findSimilarRuleIds(@Param("queryVector") String queryVector,
+                                  @Param("limit") int limit);
+
     @Modifying
     @Transactional
     @Query(value = """
             INSERT INTO world_documents (id, title, content, category, embedding)
             VALUES (:id, :title, :content, :category, cast(:embedding as vector))
+            ON CONFLICT (id) DO NOTHING
             """, nativeQuery = true)
     void insertWithEmbedding(@Param("id") UUID id,
                               @Param("title") String title,

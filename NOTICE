@@ -1,0 +1,24 @@
+D&D AI — Third-party content attribution
+=========================================
+
+System Reference Document 5.2.1 (SRD 5.2.1)
+-------------------------------------------
+This work includes material from the System Reference Document 5.2.1 ("SRD
+5.2.1") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd.
+The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0
+International License, available at
+https://creativecommons.org/licenses/by/4.0/legalcode.
+
+The bundled rules reference used to ground the AI Dungeon Master's narration
+(the `src/main/resources/srd/srd-5.2.1.json` file: spells, monsters, magic
+items, equipment, conditions, rules glossary, classes, species, feats, and
+backgrounds) is derived from the SRD 5.2.1. It is generated from the official
+SRD 5.2.1 PDF by `tools/extract-srd.py`. Monster entries are reduced to
+behavioural lore — their numeric stat blocks (Armor Class, Hit Points, ability
+scores, to-hit bonuses, damage, and Challenge Rating) are intentionally omitted
+so the lore cannot contradict the game engine's authoritative combat math. These
+adaptations are likewise made available under CC-BY-4.0.
+
+Dungeons & Dragons and D&D are trademarks of Wizards of the Coast. This project
+is an unofficial, non-commercial educational work and is not affiliated with,
+endorsed, or sponsored by Wizards of the Coast.

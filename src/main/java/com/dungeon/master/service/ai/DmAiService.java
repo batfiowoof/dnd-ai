@@ -1,15 +1,22 @@
 package com.dungeon.master.service.ai;
 
 import com.dungeon.master.kafka.event.RoundActionEvent.Contribution;
+import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.entity.Character;
+import com.dungeon.master.model.entity.Enemy;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
+import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.DmStyle;
+import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.repository.CharacterRepository;
+import com.dungeon.master.repository.CombatEncounterRepository;
+import com.dungeon.master.repository.EnemyRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
+import com.dungeon.master.service.game.PlayerStateService;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +38,10 @@ public class DmAiService {
     private final PlayerRepository playerRepository;
     private final CharacterRepository characterRepository;
     private final GameSessionRepository sessionRepository;
+    private final EnemyRepository enemyRepository;
+    private final CombatEncounterRepository encounterRepository;
+    private final PlayerStateService playerStateService;
+    private final SrdContent srdContent;
 
     /**
      * Generates a DM response to a player's action, streaming each token to {@code onChunk}
@@ -44,6 +55,7 @@ public class DmAiService {
         String context = ragService.buildContext(sessionId, playerAction);
         String characterBlock = characterContext(playerId);
         String userMessage = sessionDirectives(sessionId)
+                + partySituation(sessionId)
                 + buildUserMessage(context, characterBlock, playerName, playerAction);
 
         String response = streamToString(userMessage, onChunk);
@@ -84,6 +96,7 @@ public class DmAiService {
 
         StringBuilder message = new StringBuilder();
         message.append(sessionDirectives(sessionId));
+        message.append(partySituation(sessionId));
         if (!context.isBlank()) {
             message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
         }
@@ -160,6 +173,73 @@ public class DmAiService {
     }
 
     /**
+     * Narrates the outcome of a GROUP check the engine has already rolled and adjudicated. The
+     * {@code checksSummary} lists each participant's authoritative result; {@code successes}/{@code
+     * total} and {@code groupSucceeded} carry the engine's half-the-party verdict. The model honors
+     * the verdict — it never re-rolls or overturns it.
+     */
+    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackGroupCheckResolution")
+    public String generateGroupCheckResolution(UUID sessionId, String checksSummary, int successes,
+                                               int total, boolean groupSucceeded,
+                                               Consumer<String> onChunk) {
+        log.info("Streaming group check resolution for session={}, succeeded={}", sessionId, groupSucceeded);
+
+        String context = ragService.buildContext(sessionId, checksSummary == null ? "" : checksSummary);
+
+        StringBuilder message = new StringBuilder();
+        message.append(sessionDirectives(sessionId));
+        if (!context.isBlank()) {
+            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
+        }
+        message.append("The whole party attempted a GROUP check together. The game engine has ALREADY ")
+                .append("rolled each participant authoritatively:\n")
+                .append(checksSummary).append("\n")
+                .append("By the group rule (the party succeeds only if at least half its members succeed), ")
+                .append(successes).append(" of ").append(total).append(" succeeded, so the group ")
+                .append(groupSucceeded ? "SUCCEEDS" : "FAILS").append(" as a whole. ")
+                .append("Narrate this collective outcome in one cohesive scene, addressing members by name ")
+                .append("and showing how the strong carried (or the weak undid) the effort. The rolls and ")
+                .append("the group verdict are FINAL — do not change, re-roll, or contradict them. End by ")
+                .append("inviting the party to continue.");
+
+        String response = streamToString(message.toString(), onChunk);
+        log.info("Group check resolution generated for session={}, length={}", sessionId, response.length());
+        return response;
+    }
+
+    /**
+     * Narrates the outcome of a CONTEST the engine has already adjudicated by rolling BOTH sides.
+     * {@code actorTotal} vs {@code targetTotal} and {@code actorWon} are authoritative (ties favour
+     * the defender). The model adds flavour only — it never overturns the winner.
+     */
+    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackContestResolution")
+    public String generateContestResolution(UUID sessionId, String actorName, int actorTotal,
+                                            String targetLabel, int targetTotal, boolean actorWon,
+                                            Consumer<String> onChunk) {
+        log.info("Streaming contest resolution for session={}, actorWon={}", sessionId, actorWon);
+
+        String context = ragService.buildContext(sessionId, actorName + " vs " + targetLabel);
+
+        StringBuilder message = new StringBuilder();
+        message.append(sessionDirectives(sessionId));
+        if (!context.isBlank()) {
+            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
+        }
+        message.append("A contested roll pitted ").append(actorName).append(" directly against ")
+                .append(targetLabel).append(". The game engine rolled BOTH sides authoritatively: ")
+                .append(actorName).append(" scored ").append(actorTotal).append(", ")
+                .append(targetLabel).append(" scored ").append(targetTotal).append(" — ")
+                .append(actorWon ? actorName + " WINS the contest." : targetLabel + " WINS the contest.")
+                .append(" Narrate this head-to-head outcome vividly and fairly. The totals and the ")
+                .append("winner are FINAL — do not change, re-roll, or contradict them. End by inviting ")
+                .append("the party to continue.");
+
+        String response = streamToString(message.toString(), onChunk);
+        log.info("Contest resolution generated for session={}, length={}", sessionId, response.length());
+        return response;
+    }
+
+    /**
      * Generates the opening scene when a game starts, streaming tokens to {@code onChunk}.
      */
     @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackOpening")
@@ -168,13 +248,20 @@ public class DmAiService {
 
         StringBuilder prompt = new StringBuilder();
         prompt.append(sessionDirectives(sessionId));
-        prompt.append("The adventure is about to begin for a party of players. ");
+        String roster = partyRoster(sessionId);
+        if (!roster.isBlank()) {
+            prompt.append("The party consists of EXACTLY these characters — present them as already ")
+                    .append("together in the scene, and do NOT invent any other party members or give ")
+                    .append("them names:\n").append(roster).append("\n");
+        }
+        prompt.append("The adventure is about to begin. ");
         if (worldSetting != null && !worldSetting.isBlank()) {
             prompt.append("World setting:\n").append(worldSetting).append("\n\n");
         }
         prompt.append("Narrate an immersive opening scene that sets the mood, establishes where ")
-                .append("the party finds itself, and ends by inviting the first player to describe ")
-                .append("what they do. Do not take actions on the players' behalf.");
+                .append("the party finds itself, and ends by inviting the players to describe what they ")
+                .append("do. Refer to characters only by the exact names above; do not take actions on ")
+                .append("the players' behalf.");
 
         String response = streamToString(prompt.toString(), onChunk);
 
@@ -193,15 +280,23 @@ public class DmAiService {
                                            Consumer<String> onChunk) {
         log.info("Streaming combat narration for session={}", sessionId);
 
+        // Fetch the encounter roster once and share it between the two enemy-aware helpers
+        // so the combat path makes a single enemies query per beat.
+        List<Enemy> enemies = enemyRepository.findBySessionId(sessionId);
+
         String userMessage = """
                 Combat is underway. The following beat has ALREADY been resolved by the game \
                 engine — these dice results, hits, misses, damage values, current HP, and any \
                 deaths are FINAL and authoritative. Narrate what happened vividly and \
                 dramatically, but do NOT change, contradict, or re-roll any outcome, and do \
-                not invent new attacks. Keep it under 120 words. Refer to combatants by name.
-
+                not invent new attacks. Keep it under 120 words. Refer to combatants by name. \
+                If the beat marks an attack as "a critical hit", amplify it dramatically as a \
+                spectacular, devastating blow; if it marks an attack as "a fumble", play it as a \
+                costly, embarrassing stumble — but in either case ONLY add flavour, never new \
+                damage, deaths, or mechanical outcomes beyond what the beat states.
+                %s%s
                 Resolved combat beat:
-                %s""".formatted(beatSummary);
+                %s""".formatted(partySituation(sessionId, enemies), monsterLoreBlock(enemies), beatSummary);
 
         String response = streamToString(userMessage, onChunk);
 
@@ -262,8 +357,28 @@ public class DmAiService {
         if (session.isAllowAiRolls()) {
             b.append("- Ability checks: when a narrative action's outcome is genuinely uncertain ")
                     .append("(not trivial), set the scene briefly and END your reply with a check tag on ")
-                    .append("its own final line — [[ROLL: ability=DEX dc=15 skill=Acrobatics reason=\"...\"]] ")
-                    .append("— instead of narrating success or failure. Routine actions get narrated normally.\n");
+                    .append("its own final line — [[ROLL: player=\"<character name>\" ability=DEX dc=15 ")
+                    .append("skill=Acrobatics reason=\"...\"]] — instead of narrating success or failure. ")
+                    .append("Routine actions get narrated normally. ")
+                    .append("Add mode=ADVANTAGE or mode=DISADVANTAGE to the tag ONLY when the situation ")
+                    .append("clearly warrants it (a favourable angle, or a real hindrance); omit it otherwise. ")
+                    .append("The player can spend Inspiration for advantage — do not pick the player's mode for them.\n");
+            b.append("- Group checks: when the SAME uncertain task faces the whole party at once (everyone ")
+                    .append("sneaks past, all swim the rapids), END your reply with a group tag on its own ")
+                    .append("final line — [[GROUP: ability=DEX dc=15 skill=Stealth reason=\"sneak past\"]]. ")
+                    .append("Every player rolls; the engine applies the rule that the party succeeds only if ")
+                    .append("at least half its members succeed. Do not name players in a group tag.\n");
+            b.append("- Contests: when ONE character is directly opposed by an NPC (an arm-wrestle, a ")
+                    .append("stealth-vs-perception, a shove), END your reply with a contest tag on its own ")
+                    .append("final line — [[CONTEST: actor=\"<character name>\" actorAbility=DEX ")
+                    .append("actorSkill=Stealth targetMod=3 targetLabel=\"the guard\" reason=\"slip past\"]]. ")
+                    .append("The engine rolls BOTH sides and decides the winner (ties favour the defender). ")
+                    .append("Quote the actor and targetLabel; omit targetMod if you are unsure and the engine ")
+                    .append("will set a fair one.\n");
+            b.append("- Inspiration: reward standout play sparingly by ending a reply with an award tag on ")
+                    .append("its own final line — [[INSPIRATION: player=\"<character name>\" reason=\"clever, brave, or great roleplay\"]]. ")
+                    .append("Always wrap the character's name in double quotes so multi-word names survive; ")
+                    .append("award at most one per reply and never narrate the raw tag.\n");
         } else {
             b.append("- Ability checks: do NOT request dice rolls; narrate outcomes directly and fairly.\n");
         }
@@ -300,6 +415,170 @@ public class DmAiService {
             case NORMAL -> "balanced — use standard DCs (about 12–16) when you call for a roll.";
             case DEADLY -> "harsh — raise the stakes; use hard DCs (about 16–20) when you call for a roll.";
         };
+    }
+
+    /**
+     * Direct-injects SRD lore for the distinct monsters in the current encounter so combat
+     * narration is grounded in how each creature actually fights. The combat beat is a mechanical
+     * summary (no player prose), so semantic retrieval wouldn't surface this — but the engine
+     * already knows the roster. Returns a leading-newline block, or "" when no lore is available.
+     */
+    private String monsterLoreBlock(List<Enemy> enemies) {
+        java.util.Set<String> seenTitles = new java.util.LinkedHashSet<>();
+        StringBuilder b = new StringBuilder();
+        for (Enemy enemy : enemies) {
+            srdContent.monsterEntryByName(enemy.getName()).ifPresent(entry -> {
+                if (seenTitles.add(entry.title())) { // one line per monster type, not per instance
+                    b.append("- ").append(entry.title()).append(": ")
+                            .append(entry.content()).append("\n");
+                }
+            });
+        }
+        if (b.isEmpty()) {
+            return "";
+        }
+        return "\nMonster reference (flavour only — stats and outcomes are the engine's):\n" + b;
+    }
+
+    /**
+     * Builds a COMPACT, situational snapshot of the whole party (and any active enemies) so the
+     * DM can ground tactical narration — who is hurt, who is afflicted, what they're up against.
+     * Purely informative: HP is given as a coarse band (never raw numbers), and the block is
+     * explicitly flagged as context, not a license to change any engine-owned outcome. Resilient
+     * by design — a player whose runtime state was never seeded is simply skipped. Returns "" when
+     * there is nothing useful to say, so callers can omit the block entirely.
+     */
+    String partySituation(UUID sessionId) {
+        return partySituation(sessionId, enemyRepository.findBySessionId(sessionId));
+    }
+
+    /**
+     * A compact cast list (character name + class/level) for the opening scene, where runtime
+     * state may not be seeded yet — so it reads only the Player/Character roster, not HP/conditions.
+     */
+    private String partyRoster(UUID sessionId) {
+        StringBuilder b = new StringBuilder();
+        for (Player p : playerRepository.findBySessionId(sessionId)) {
+            if (p.getRole() != PlayerRole.PLAYER) {
+                continue;
+            }
+            b.append("- ").append(partyMemberName(p));
+            String classLevel = classLevel(p);
+            if (classLevel != null) {
+                b.append(" (").append(classLevel).append(")");
+            }
+            b.append("\n");
+        }
+        return b.toString();
+    }
+
+    /**
+     * Variant that reuses a pre-fetched enemy roster so the combat path can query enemies once
+     * and share the list with {@link #monsterLoreBlock(List)}.
+     */
+    String partySituation(UUID sessionId, List<Enemy> enemies) {
+        List<Player> players = playerRepository.findBySessionId(sessionId).stream()
+                .filter(p -> p.getRole() == PlayerRole.PLAYER)
+                .toList();
+
+        StringBuilder members = new StringBuilder();
+        for (Player p : players) {
+            PlayerRuntimeStateDto state;
+            try {
+                state = playerStateService.getState(p.getId());
+            } catch (Exception e) {
+                // No runtime state seeded for this player yet — skip rather than fail the block.
+                continue;
+            }
+            if (state == null) {
+                continue;
+            }
+            members.append("- ").append(partyMemberName(p));
+            String classLevel = classLevel(p);
+            if (classLevel != null) {
+                members.append(" (").append(classLevel).append(")");
+            }
+            members.append(" — ").append(hpBand(state.currentHp(), state.maxHp()));
+            if (state.inspiration()) {
+                members.append(" (Inspired)");
+            }
+            List<String> conditions = state.conditions();
+            if (conditions != null && !conditions.isEmpty()) {
+                members.append(", [").append(String.join(", ", conditions)).append("]");
+            }
+            members.append("\n");
+        }
+
+        if (members.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder b = new StringBuilder();
+        b.append("=== Party Situation — the COMPLETE party roster. These are the ONLY player ")
+                .append("characters in the game; do NOT invent or name any others. Use these exact ")
+                .append("names. (Situational context only — NOT a license to change any outcome.) ===\n");
+        b.append(members);
+
+        // Only surface the enemy roster while an encounter is genuinely ACTIVE. Ending an
+        // encounter (TPK or host-forced) leaves surviving enemies with alive=true, so keying
+        // off live enemies alone would inject a phantom "In combat:" line for the rest of the
+        // session and make the DM narrate a fight that already ended.
+        boolean combatActive = encounterRepository
+                .findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)
+                .isPresent();
+        if (combatActive) {
+            List<Enemy> livingEnemies = enemies.stream()
+                    .filter(Enemy::isAlive)
+                    .toList();
+            if (!livingEnemies.isEmpty()) {
+                b.append("In combat: ");
+                b.append(livingEnemies.stream()
+                        .map(e -> e.getName() + " (" + hpBand(e.getCurrentHp(), e.getMaxHp()) + ")")
+                        .collect(Collectors.joining(", ")));
+                b.append("\n");
+            }
+        }
+
+        b.append("---\n\n");
+        return b.toString();
+    }
+
+    /** Coarse HP band so narration can say "bloodied"/"critical" without leaking exact numbers. */
+    private static String hpBand(int currentHp, int maxHp) {
+        if (currentHp <= 0) {
+            return "down";
+        }
+        if (maxHp <= 0) {
+            return "healthy";
+        }
+        double pct = (double) currentHp / maxHp;
+        if (pct <= 0.25) {
+            return "critical";
+        }
+        if (pct <= 0.50) {
+            return "bloodied";
+        }
+        return "healthy";
+    }
+
+    /** In-world display name for a party member: character name when set, else the username. */
+    private String partyMemberName(Player player) {
+        if (player.getCharacterName() != null && !player.getCharacterName().isBlank()) {
+            return player.getCharacterName();
+        }
+        return player.getUsername();
+    }
+
+    /** "Class Level" (e.g. "Fighter 3") for a party member, or null if no character is linked. */
+    private String classLevel(Player player) {
+        if (player.getCharacterId() == null) {
+            return null;
+        }
+        Character c = characterRepository.findById(player.getCharacterId()).orElse(null);
+        if (c == null) {
+            return null;
+        }
+        return c.getCharacterClass() + " " + c.getLevel();
     }
 
     /**
@@ -379,6 +658,37 @@ public class DmAiService {
         String message = "The dust settles on the party's efforts:\n"
                 + (checksSummary == null ? "" : checksSummary)
                 + "\n[The DM will narrate the consequences when service is restored.]";
+        if (onChunk != null) {
+            onChunk.accept(message);
+        }
+        return message;
+    }
+
+    @SuppressWarnings("unused")
+    private String fallbackGroupCheckResolution(UUID sessionId, String checksSummary, int successes,
+                                                int total, boolean groupSucceeded,
+                                                Consumer<String> onChunk, Throwable throwable) {
+        log.error("AI group check resolution unavailable, using fallback. session={}, error={}",
+                sessionId, throwable.getMessage());
+        String message = "The party's combined effort resolves — " + successes + " of " + total
+                + " succeeded, so the group " + (groupSucceeded ? "SUCCEEDS" : "FAILS") + ".\n"
+                + (checksSummary == null ? "" : checksSummary)
+                + "\n[The DM will narrate the consequences when service is restored.]";
+        if (onChunk != null) {
+            onChunk.accept(message);
+        }
+        return message;
+    }
+
+    @SuppressWarnings("unused")
+    private String fallbackContestResolution(UUID sessionId, String actorName, int actorTotal,
+                                             String targetLabel, int targetTotal, boolean actorWon,
+                                             Consumer<String> onChunk, Throwable throwable) {
+        log.error("AI contest resolution unavailable, using fallback. session={}, error={}",
+                sessionId, throwable.getMessage());
+        String message = (actorWon ? actorName + " prevails! " : targetLabel + " prevails. ")
+                + "The contest scored " + actorTotal + " against " + targetTotal + ". "
+                + "[The DM will narrate the consequence when service is restored.]";
         if (onChunk != null) {
             onChunk.accept(message);
         }

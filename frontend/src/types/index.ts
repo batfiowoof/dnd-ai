@@ -47,6 +47,12 @@ export interface PendingCheckDto {
   skill: string | null;
   reason: string | null;
   suggestedModifier: number;
+  /** STANDARD / GROUP / CONTEST — lets a reconnecting client frame the re-opened prompt. */
+  checkKind: CheckKind;
+  /** Opposed party for a CONTEST (null otherwise). */
+  targetLabel: string | null;
+  /** The DM's situational grant carried so the re-opened badge survives reload (NORMAL when none). */
+  dmMode?: RollMode;
 }
 
 export interface CreateSessionRequest {
@@ -140,6 +146,9 @@ export interface DmNarrationEvent {
 /* ── Dice rolling ─────────────────────────────────────────────── */
 export type RollMode = "NORMAL" | "ADVANTAGE" | "DISADVANTAGE";
 
+/** Kind of ability check the DM called for. */
+export type CheckKind = "STANDARD" | "GROUP" | "CONTEST";
+
 export interface DiceRollEvent {
   type: "DICE_ROLL";
   sessionId: string;
@@ -194,6 +203,8 @@ export interface PlayerRuntimeState {
   conditions: string[];
   cantrips: string[];
   knownSpells: string[];
+  /** Whether the player currently holds Inspiration (spendable on a roll for advantage). */
+  inspiration: boolean;
 }
 
 /** Summary of a session the current user belongs to, for the "your adventures" list. */
@@ -298,6 +309,19 @@ export interface RollRequestEvent {
   skill: string | null;
   reason: string | null;
   suggestedModifier: number;
+  /** The DM's situational grant — ADVANTAGE/DISADVANTAGE, or NORMAL when none. */
+  dmMode: RollMode;
+  /** STANDARD / GROUP / CONTEST — frames how the prompt reads. */
+  checkKind: CheckKind;
+  /** Opposed party for a CONTEST (null otherwise). */
+  targetLabel: string | null;
+}
+
+/** Neutral system line broadcast to the room (e.g. "X gains Inspiration!"). */
+export interface SystemMessageEvent {
+  type: "SYSTEM";
+  sessionId: string;
+  text: string;
 }
 
 export type WebSocketMessage =
@@ -312,7 +336,8 @@ export type WebSocketMessage =
   | EnemyActionEvent
   | CombatLifecycleEvent
   | RoundStatusEvent
-  | RollRequestEvent;
+  | RollRequestEvent
+  | SystemMessageEvent;
 
 /* ── Character types ──────────────────────────────────────────── */
 

@@ -8,6 +8,7 @@ import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
 import com.dungeon.master.service.ai.DmAiService;
+import com.dungeon.master.service.ai.DmTags;
 import com.dungeon.master.service.game.GameSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -87,12 +88,20 @@ public class SessionEventConsumer {
                             "playerId", OPENING_PLAYER_KEY,
                             "delta", chunk)));
 
+            // Strip any directive tags the model leaked into the opening — the opening must never
+            // show a raw tag (and never starts combat: encounter tags are not parsed here).
+            String cleanedOpening = DmTags.strip(opening);
+            if (cleanedOpening.isBlank()) {
+                cleanedOpening = "The adventure begins. The Dungeon Master sets the scene.";
+            }
+            final String finalOpening = cleanedOpening;
+
             playerRepository.findBySessionIdAndRole(sessionId, PlayerRole.DM_AI).ifPresent(dm -> {
                 TurnEvent openingTurn = TurnEvent.builder()
                         .sessionId(sessionId)
                         .playerId(dm.getId())
                         .action("[The adventure begins]")
-                        .dmResponse(opening)
+                        .dmResponse(finalOpening)
                         .turnNumber(0)
                         .build();
                 turnEventRepository.save(openingTurn);
@@ -102,7 +111,7 @@ public class SessionEventConsumer {
                     "type", "DM_NARRATION",
                     "turnNumber", "0",
                     "playerId", OPENING_PLAYER_KEY,
-                    "dmNarration", opening));
+                    "dmNarration", finalOpening));
 
         } catch (Exception e) {
             log.error("Failed to generate opening narration for session={}", sessionId, e);

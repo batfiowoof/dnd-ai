@@ -116,7 +116,7 @@ class CombatServiceTest {
     }
 
     private PlayerRuntimeStateDto stateFor(UUID playerId, int hp) {
-        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false);
     }
 
     @Test

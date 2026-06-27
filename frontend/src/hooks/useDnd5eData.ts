@@ -3,58 +3,66 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 import {
-  listRaces,
-  getRace,
+  listSpecies,
+  listBackgrounds,
   listClasses,
-  getClass,
   listClassSpells,
-  getSpell,
-  getEquipment,
-  getEquipmentCategory,
+  listFeats,
+  listEquipment,
   listAlignments,
+  parseSpeed,
   kindFromCategory,
-  type ApiRef,
-  type ApiClass,
-  type ApiCountedRef,
-  type ApiCategoryChoice,
+  type SrdFeat,
 } from "@/lib/dnd5eapi";
-import {
-  buildClassEquipment,
-  ABILITY_BY_ABBR,
-  type RaceInfo,
-  type ClassInfo,
-  type ClassEquipment,
+import type {
+  SpeciesInfo,
+  BackgroundInfo,
+  ClassInfo,
 } from "@/lib/dnd5e";
 import type { Spell } from "@/lib/spells";
 import type { ItemKind } from "@/types";
 
 /**
- * The 5e catalog is static, so cache it indefinitely. These endpoints are
- * public (no auth token) — unlike the app's own `/api/*` query hooks.
+ * The SRD catalog is static, so cache it indefinitely. `/api/srd/*` list
+ * endpoints already return full records, so each hook maps the array directly —
+ * no per-item detail fetch (unlike the old dnd5eapi.co N+1 pattern).
  */
 const STATIC = { staleTime: Infinity } as const;
 
-/* ── Races & classes (list + parallel detail fetch) ──────────────── */
+/* ── Species, backgrounds, classes, alignments ───────────────────── */
 
-export function useRaces() {
+export function useSpecies() {
   return useQuery({
-    queryKey: queryKeys.dnd5e.races,
+    queryKey: queryKeys.dnd5e.species,
     ...STATIC,
-    queryFn: async (): Promise<RaceInfo[]> => {
-      const list = await listRaces();
-      const details = await Promise.all(list.results.map((r) => getRace(r.index)));
-      return details.map((r) => ({
-        index: r.index,
-        name: r.name,
-        speed: r.speed,
-        size: r.size,
-        traits: r.traits.map((t) => t.name),
-        abilityBonuses: Object.fromEntries(
-          r.ability_bonuses.map((b) => [
-            ABILITY_BY_ABBR[b.ability_score.index] ?? b.ability_score.index,
-            b.bonus,
-          ])
-        ),
+    queryFn: async (): Promise<SpeciesInfo[]> => {
+      const list = await listSpecies();
+      return list.map((s) => ({
+        index: s.index,
+        name: s.name,
+        creatureType: s.creatureType,
+        size: s.size,
+        speed: parseSpeed(s.speed),
+        traits: s.traits.map((t) => ({ name: t.name, desc: t.desc })),
+      }));
+    },
+  });
+}
+
+export function useBackgrounds() {
+  return useQuery({
+    queryKey: queryKeys.dnd5e.backgrounds,
+    ...STATIC,
+    queryFn: async (): Promise<BackgroundInfo[]> => {
+      const list = await listBackgrounds();
+      return list.map((b) => ({
+        index: b.index,
+        name: b.name,
+        abilityScores: b.abilityScores,
+        feat: b.feat,
+        skillProficiencies: b.skillProficiencies,
+        toolProficiency: b.toolProficiency,
+        equipment: { optionA: b.equipment.optionA, optionB: b.equipment.optionB },
       }));
     },
   });
@@ -66,13 +74,19 @@ export function useClasses() {
     ...STATIC,
     queryFn: async (): Promise<ClassInfo[]> => {
       const list = await listClasses();
-      const details = await Promise.all(list.results.map((c) => getClass(c.index)));
-      return details.map((c) => ({
+      return list.map((c) => ({
         index: c.index,
         name: c.name,
-        hitDie: c.hit_die,
-        savingThrows: c.saving_throws.map((s) => s.name),
-        proficiencies: c.proficiencies.map((p) => p.name),
+        primaryAbility: c.primaryAbility,
+        hitDie: c.hitDie,
+        savingThrows: c.savingThrows,
+        skillProficiencies: {
+          choose: c.skillProficiencies?.choose ?? 0,
+          from: c.skillProficiencies?.from ?? [],
+        },
+        weaponProficiencies: c.weaponProficiencies,
+        armorTraining: c.armorTraining ?? [],
+        startingEquipment: c.startingEquipment ?? "",
       }));
     },
   });
@@ -84,20 +98,51 @@ export function useAlignments() {
     ...STATIC,
     queryFn: async (): Promise<string[]> => {
       const list = await listAlignments();
-      return list.results.map((a) => a.name);
+      return list.map((a) => a.name);
     },
   });
 }
 
-/* ── Spells (level 0 & 1, school + desc via detail) ──────────────── */
+/* ── Origin feat detail (for the background feat callout card) ────── */
+
+export function useFeat(featIndex: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.dnd5e.feat(featIndex ?? ""),
+    enabled: enabled && !!featIndex,
+    ...STATIC,
+    retry: 0,
+    queryFn: async (): Promise<SrdFeat | null> => {
+      const list = await listFeats();
+      return list.find((f) => f.index === featIndex) ?? null;
+    },
+  });
+}
+
+/* ── Equipment list (used to classify parsed starting gear) ──────── */
+
+/** A map of SRD equipment index → `ItemKind`, for best-effort gear typing. */
+export function useEquipmentKindMap() {
+  return useQuery({
+    queryKey: queryKeys.dnd5e.equipmentList,
+    ...STATIC,
+    queryFn: async (): Promise<Map<string, ItemKind>> => {
+      const list = await listEquipment();
+      const map = new Map<string, ItemKind>();
+      for (const e of list) map.set(e.index, kindFromCategory(e.category));
+      return map;
+    },
+  });
+}
+
+/* ── Spells (level 0 & 1 for creation) ───────────────────────────── */
 
 export interface ClassSpells {
   cantrips: Spell[];
   level1: Spell[];
 }
 
-function firstParagraph(desc: string[]): string {
-  const text = desc?.[0] ?? "";
+function firstSentence(desc: string | undefined): string {
+  const text = desc ?? "";
   return text.length > 160 ? `${text.slice(0, 157).trimEnd()}…` : text;
 }
 
@@ -107,84 +152,21 @@ export function useClassSpells(classIndex: string | undefined, enabled = true) {
     enabled: enabled && !!classIndex,
     ...STATIC,
     queryFn: async (): Promise<ClassSpells> => {
-      const list = await listClassSpells(classIndex!);
-      const refs = list.results.filter((s) => s.level === 0 || s.level === 1);
-      // Detail fetch for school + desc; allSettled so a flaky public API still
-      // yields a usable picker (failed spells fall back to name + level only).
-      const settled = await Promise.allSettled(refs.map((r) => getSpell(r.index)));
-      const spells: Spell[] = refs.map((ref, i) => {
-        const res = settled[i];
-        if (res.status === "fulfilled") {
-          return {
-            name: res.value.name,
-            level: res.value.level,
-            school: res.value.school?.name,
-            desc: firstParagraph(res.value.desc),
-          };
-        }
-        return { name: ref.name, level: ref.level };
-      });
+      // The endpoint returns full spell records (school + desc already present),
+      // so we filter to creation-relevant levels client-side — no detail fetch.
+      const all = await listClassSpells(classIndex!);
+      const spells: Spell[] = all
+        .filter((s) => s.level === 0 || s.level === 1)
+        .map((s) => ({
+          name: s.name,
+          level: s.level,
+          school: s.school,
+          desc: firstSentence(s.desc),
+        }));
       return {
         cantrips: spells.filter((s) => s.level === 0),
         level1: spells.filter((s) => s.level === 1),
       };
-    },
-  });
-}
-
-/* ── Starting equipment ──────────────────────────────────────────── */
-
-/** Distinct concrete equipment indexes referenced by a class (for kind lookup). */
-function collectConcreteIndexes(apiClass: ApiClass): string[] {
-  const set = new Set<string>();
-  apiClass.starting_equipment.forEach((se) => set.add(se.equipment.index));
-  apiClass.starting_equipment_options.forEach((group) => {
-    if (group.from.option_set_type !== "options_array") return;
-    const visit = (o: ApiCountedRef | ApiCategoryChoice) => {
-      if (o.option_type === "counted_reference") set.add(o.of.index);
-    };
-    group.from.options.forEach((opt) => {
-      if (opt.option_type === "multiple") opt.items.forEach(visit);
-      else visit(opt);
-    });
-  });
-  return [...set];
-}
-
-export function useStartingEquipment(classIndex: string | undefined, enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.dnd5e.startingEquipment(classIndex ?? ""),
-    enabled: enabled && !!classIndex,
-    ...STATIC,
-    queryFn: async (): Promise<ClassEquipment> => {
-      const apiClass = await getClass(classIndex!);
-      const indexes = collectConcreteIndexes(apiClass);
-      const settled = await Promise.allSettled(indexes.map((i) => getEquipment(i)));
-      const kindMap = new Map<string, ItemKind>();
-      indexes.forEach((idx, i) => {
-        const res = settled[i];
-        if (res.status === "fulfilled") {
-          kindMap.set(idx, kindFromCategory(res.value.equipment_category.index));
-        }
-      });
-      const kindOf = (idx: string): ItemKind => kindMap.get(idx) ?? "GEAR";
-      return buildClassEquipment(apiClass, kindOf);
-    },
-  });
-}
-
-/** The concrete items of a category — populates a "pick any X" dropdown. */
-export function useEquipmentCategory(
-  categoryIndex: string | undefined,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: queryKeys.dnd5e.equipmentCategory(categoryIndex ?? ""),
-    enabled: enabled && !!categoryIndex,
-    ...STATIC,
-    queryFn: async (): Promise<ApiRef[]> => {
-      const cat = await getEquipmentCategory(categoryIndex!);
-      return cat.equipment;
     },
   });
 }

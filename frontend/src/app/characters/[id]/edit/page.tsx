@@ -5,9 +5,13 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { useCharacter, useUpdateCharacter } from "@/hooks/useCharacterQueries";
-import { useRaces, useClasses, useAlignments } from "@/hooks/useDnd5eData";
 import {
-  BACKGROUNDS,
+  useSpecies,
+  useClasses,
+  useBackgrounds,
+  useAlignments,
+} from "@/hooks/useDnd5eData";
+import {
   ABILITY_NAMES,
   getAbilityModifier,
   formatModifier,
@@ -45,8 +49,9 @@ function EditForm({ characterId }: { characterId: string }) {
   const { username } = useAuth();
   const characterQuery = useCharacter(characterId, !!username);
   const updateMutation = useUpdateCharacter();
-  const racesQuery = useRaces();
+  const speciesQuery = useSpecies();
   const classesQuery = useClasses();
+  const backgroundsQuery = useBackgrounds();
   const alignmentsQuery = useAlignments();
 
   const loading = characterQuery.isLoading;
@@ -108,8 +113,8 @@ function EditForm({ characterId }: { characterId: string }) {
     [abilities.dexterity]
   );
 
-  const selectedRace = racesQuery.data?.find((r) => r.name === race);
-  const derivedSpeed = selectedRace?.speed ?? 30;
+  const selectedSpecies = speciesQuery.data?.find((s) => s.name === race);
+  const derivedSpeed = selectedSpecies?.speed ?? 30;
 
   async function handleSave() {
     if (!username || !name.trim() || !race || !characterClass) return;
@@ -135,9 +140,9 @@ function EditForm({ characterId }: { characterId: string }) {
           speed: derivedSpeed,
           // Edit has no equipment step — preserve the stored gear/inventory.
           equipment: characterQuery.data?.equipment ?? [],
-          proficiencies:
-            selectedClass?.proficiencies ?? characterQuery.data?.proficiencies ?? [],
-          features: selectedRace?.traits ?? characterQuery.data?.features ?? [],
+          // Edit doesn't redo the proficiency/trait selection — preserve them.
+          proficiencies: characterQuery.data?.proficiencies ?? [],
+          features: characterQuery.data?.features ?? [],
           // Preserve spell & structured-inventory selections made at creation.
           cantrips: characterQuery.data?.cantrips ?? [],
           knownSpells: characterQuery.data?.knownSpells ?? [],
@@ -219,7 +224,7 @@ function EditForm({ characterId }: { characterId: string }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Race
+                Species
               </label>
               <select
                 value={race}
@@ -227,9 +232,9 @@ function EditForm({ characterId }: { characterId: string }) {
                 className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
-                {(racesQuery.data ?? []).map((r) => (
-                  <option key={r.name} value={r.name}>
-                    {r.name}
+                {(speciesQuery.data ?? []).map((s) => (
+                  <option key={s.name} value={s.name}>
+                    {s.name}
                   </option>
                 ))}
               </select>
@@ -280,9 +285,9 @@ function EditForm({ characterId }: { characterId: string }) {
                 className="w-full rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text"
               >
                 <option value="">--</option>
-                {BACKGROUNDS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
+                {(backgroundsQuery.data ?? []).map((b) => (
+                  <option key={b.name} value={b.name}>
+                    {b.name}
                   </option>
                 ))}
               </select>

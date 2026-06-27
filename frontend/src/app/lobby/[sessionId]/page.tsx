@@ -46,8 +46,8 @@ import type {
   PlayerRuntimeState,
   PlayerDto,
 } from "@/types";
-import type { RollMode } from "@/types";
 import { Button, Panel, Brand, Alert, D20Mark, Tooltip, cn } from "@/components/ui";
+import { stripDmTags } from "@/lib/strip";
 import Portrait from "@/components/Portrait";
 import RollPromptModal from "@/components/RollPromptModal";
 import DiceRollModal from "@/components/dice/DiceRollModal";
@@ -180,6 +180,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         skill: mine.skill,
         reason: mine.reason,
         suggestedModifier: mine.suggestedModifier,
+        // The DM's situational grant now travels on PendingCheckDto so the badge survives a
+        // reload; fall back to NORMAL for older states that predate the field.
+        dmMode: mine.dmMode ?? "NORMAL",
+        checkKind: mine.checkKind ?? "STANDARD",
+        targetLabel: mine.targetLabel ?? null,
       });
     }
   }, [gameStateQuery.data, playerId, sessionId]);
@@ -337,6 +342,22 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               if (evt.playerId === playerId) s.applyRollRequest(evt);
               break;
             }
+            case "SYSTEM": {
+              // Neutral room line (e.g. "X gains Inspiration!").
+              const text = data.text as string | undefined;
+              if (text) {
+                s.addLog({
+                  id: `system-${Date.now()}-${Math.random()
+                    .toString(36)
+                    .slice(2, 8)}`,
+                  type: "system",
+                  text,
+                  turnNumber: s.turnNumber,
+                });
+                scrollToBottom();
+              }
+              break;
+            }
           }
         });
 
@@ -413,11 +434,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     sendPass(clientRef.current, sessionId);
   }
 
-  function handleRollCheck(mode: RollMode) {
+  function handleRollCheck(spendInspiration: boolean) {
     if (!clientRef.current || !connected) return;
     // Close the prompt optimistically; the resolving dice + DM narration follow.
     useSessionStore.getState().clearPendingCheck();
-    sendRollCheck(clientRef.current, sessionId, mode);
+    sendRollCheck(clientRef.current, sessionId, spendInspiration);
   }
 
   function handleRoll(notation: string, label: string) {
@@ -731,6 +752,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
       <RollPromptModal
         request={pendingCheck}
         connected={connected}
+        hasInspiration={!!myState?.inspiration}
         onRoll={handleRollCheck}
       />
       <InventoryManager
@@ -773,6 +795,25 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             <span className="tabular text-gold">Turn {turnNumber}</span>
             {activeLabel && <> &middot; {activeLabel}</>}
           </span>
+          {/* Inspiration token — the local player holds spendable Inspiration. */}
+          {myState?.inspiration && (
+            <span
+              title="You have Inspiration — spend it on a roll for advantage"
+              className="inline-flex items-center gap-1 rounded-full border border-gold/50 bg-gold-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="11"
+                height="11"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 2l1.9 5.6a3 3 0 0 0 1.9 1.9L21.5 11l-5.7 1.9a3 3 0 0 0-1.9 1.9L12 20.5l-1.9-5.7a3 3 0 0 0-1.9-1.9L2.5 11l5.7-1.9a3 3 0 0 0 1.9-1.9L12 2z" />
+              </svg>
+              Inspiration
+            </span>
+          )}
+
           <span
             className={cn(
               "h-2 w-2 rounded-full",
@@ -926,7 +967,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                       Dungeon Master
                     </span>
                     <p className="text-sm leading-relaxed text-text">
-                      {entry.text}
+                      {stripDmTags(entry.text)}
                     </p>
                   </div>
                 )}

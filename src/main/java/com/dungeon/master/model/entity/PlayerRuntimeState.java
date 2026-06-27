@@ -51,6 +51,11 @@ public class PlayerRuntimeState {
     @Builder.Default
     private int tempHp = 0;
 
+    /** Whether the player currently holds Inspiration (spendable on a roll for advantage). */
+    @Column(name = "inspiration", nullable = false)
+    @Builder.Default
+    private boolean inspiration = false;
+
     /** Armor class, snapshotted from the Character template on join. */
     @Column(name = "armor_class", nullable = false)
     @Builder.Default

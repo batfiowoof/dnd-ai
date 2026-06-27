@@ -92,9 +92,8 @@ public class GameWebSocketController {
                                 Principal principal) {
         String username = principal.getName();
         try {
-            RollMode mode = request == null || request.rollMode() == null
-                    ? RollMode.NORMAL : request.rollMode();
-            checkService.resolveCheck(sessionId, username, mode);
+            boolean spendInspiration = request != null && request.spendInspiration();
+            checkService.resolveCheck(sessionId, username, spendInspiration);
         } catch (Exception e) {
             log.error("Error resolving check: session={}, player={}", sessionId, username, e);
             sendError(username, e);

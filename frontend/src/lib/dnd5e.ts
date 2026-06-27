@@ -1,59 +1,91 @@
-/* ── D&D 5E rules & helpers for character creation ────────────────
- * Reference *content* (races, classes, spells, equipment) is sourced from
- * dnd5eapi.co via `hooks/useDnd5eData.ts`. This module holds only rules math,
- * the UI model shapes those hooks produce, and the equipment build/resolve logic.
- * `BACKGROUNDS` stays local: the 2014 API exposes only one background.
+/* ── D&D 2024 (SRD 5.2.1) rules & helpers for character creation ───
+ * Reference *content* (species, backgrounds, classes, feats, spells, equipment)
+ * is sourced from the app backend `/api/srd/*` via `hooks/useDnd5eData.ts`. This
+ * module holds the rules math, the UI model shapes those hooks produce, the
+ * background ability-score-increase (ASI) logic, and a best-effort parser that
+ * turns the SRD's free-text starting-equipment strings into an inventory list.
+ *
+ * 2024 rules note: ability scores = a chosen base (Standard Array / Point Buy)
+ * PLUS the *background's* increase. Species grants traits only — no ability
+ * bonuses (the old `RaceInfo.abilityBonuses` is gone).
  */
 
 import type { ItemKind, InventoryItem } from "@/types";
-import {
-  kindFromCategory,
-  type ApiClass,
-  type ApiEquipOption,
-  type ApiCountedRef,
-  type ApiCategoryChoice,
-} from "@/lib/dnd5eapi";
+import { kindFromCategory } from "@/lib/dnd5eapi";
 
 /* ── UI models produced by the data hooks ────────────────────────── */
 
-export interface RaceInfo {
+export interface SpeciesInfo {
   index: string;
   name: string;
-  /** Keyed by full ability name (e.g. "dexterity"), mapped from API abbreviations. */
-  abilityBonuses: Record<string, number>;
-  speed: number;
-  traits: string[];
+  creatureType: string;
   size: string;
+  /** Parsed from the SRD speed string (falls back to 30). */
+  speed: number;
+  traits: { name: string; desc: string }[];
+}
+
+export interface BackgroundInfo {
+  index: string;
+  name: string;
+  /** The three abilities the background's increase may be assigned to. */
+  abilityScores: string[];
+  /** Origin feat, e.g. "Magic Initiate (Cleric)". */
+  feat: string;
+  skillProficiencies: string[];
+  toolProficiency: string;
+  equipment: { optionA: string; optionB: string };
 }
 
 export interface ClassInfo {
   index: string;
   name: string;
+  primaryAbility: string;
   hitDie: number;
   savingThrows: string[];
-  proficiencies: string[];
+  skillProficiencies: { choose: number; from: string[] };
+  weaponProficiencies: string;
+  armorTraining: string[];
+  startingEquipment: string;
 }
 
-/* ── Static rules data (no SRD content) ──────────────────────────── */
-
-/** Background is a non-mechanical display string; the API has only "acolyte". */
-export const BACKGROUNDS = [
-  "Acolyte",
-  "Charlatan",
-  "Criminal",
-  "Entertainer",
-  "Folk Hero",
-  "Guild Artisan",
-  "Hermit",
-  "Noble",
-  "Outlander",
-  "Sage",
-  "Sailor",
-  "Soldier",
-  "Urchin",
-];
+/* ── Static rules data ───────────────────────────────────────────── */
 
 export const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
+
+/**
+ * The 18 canonical D&D skills. Used as the class skill-choice option list when a
+ * class's `skillProficiencies.from` is empty — in the 2024 rules that means
+ * "choose any N from the full skill list" (e.g. Bard: choose 3 from any).
+ */
+export const ALL_SKILLS = [
+  "Acrobatics",
+  "Animal Handling",
+  "Arcana",
+  "Athletics",
+  "Deception",
+  "History",
+  "Insight",
+  "Intimidation",
+  "Investigation",
+  "Medicine",
+  "Nature",
+  "Perception",
+  "Performance",
+  "Persuasion",
+  "Religion",
+  "Sleight of Hand",
+  "Stealth",
+  "Survival",
+] as const;
+
+/** The skill option list for a class: its `from`, or the full list when empty. */
+export function classSkillOptions(cls: ClassInfo | null): string[] {
+  if (!cls) return [];
+  return cls.skillProficiencies.from.length > 0
+    ? cls.skillProficiencies.from
+    : [...ALL_SKILLS];
+}
 
 export const POINT_BUY_COSTS: Record<number, number> = {
   8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9,
@@ -72,15 +104,13 @@ export const ABILITY_NAMES = [
 
 export type AbilityName = (typeof ABILITY_NAMES)[number];
 
-/** Full ability name keyed by the API's 3-letter `ability_score.index`. */
-export const ABILITY_BY_ABBR: Record<string, AbilityName> = {
-  str: "strength",
-  dex: "dexterity",
-  con: "constitution",
-  int: "intelligence",
-  wis: "wisdom",
-  cha: "charisma",
-};
+/** Map a background's display ability ("Intelligence") to an `AbilityName`. */
+export function toAbilityName(display: string): AbilityName | null {
+  const lc = display.trim().toLowerCase();
+  return (ABILITY_NAMES as readonly string[]).includes(lc)
+    ? (lc as AbilityName)
+    : null;
+}
 
 export function getAbilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
@@ -99,173 +129,147 @@ export function calculateArmorClass(dexterity: number): number {
   return 10 + getAbilityModifier(dexterity);
 }
 
-/* ── Starting equipment (built from the API class payload) ───────── */
+/* ── Background ability-score increase (2024) ────────────────────── */
 
-export interface ResolvedItem {
-  name: string;
-  qty: number;
-  kind: ItemKind;
+/** `two-one` = +2 to one ability and +1 to another; `all-one` = +1 to all three. */
+export type AsiMode = "two-one" | "all-one";
+
+export interface AsiAssignment {
+  mode: AsiMode;
+  /** Target of the +2 (two-one mode only). */
+  plusTwo: AbilityName | null;
+  /** Target of the +1 (two-one mode only). */
+  plusOne: AbilityName | null;
 }
 
-/** A "pick one (or N) specific item from this category" requirement. */
-export interface CategoryPick {
-  categoryIndex: string;
-  categoryName: string;
-  count: number;
+export const EMPTY_ASI: AsiAssignment = {
+  mode: "two-one",
+  plusTwo: null,
+  plusOne: null,
+};
+
+/** The background's three target abilities as `AbilityName`s (skips unknowns). */
+export function backgroundTargets(bg: BackgroundInfo | null): AbilityName[] {
+  if (!bg) return [];
+  return bg.abilityScores
+    .map(toAbilityName)
+    .filter((a): a is AbilityName => a !== null);
 }
 
-/** One selectable option within a choice group (the "(a)" / "(b)" of a slot). */
+/** Per-ability bonus granted by the background ASI (all zero until valid). */
+export function backgroundBonuses(
+  bg: BackgroundInfo | null,
+  asi: AsiAssignment
+): Record<AbilityName, number> {
+  const bonuses = Object.fromEntries(
+    ABILITY_NAMES.map((a) => [a, 0])
+  ) as Record<AbilityName, number>;
+  if (!bg) return bonuses;
+
+  if (asi.mode === "all-one") {
+    for (const a of backgroundTargets(bg)) bonuses[a] += 1;
+  } else {
+    if (asi.plusTwo) bonuses[asi.plusTwo] += 2;
+    if (asi.plusOne) bonuses[asi.plusOne] += 1;
+  }
+  return bonuses;
+}
+
+/** True when the chosen ASI split is a legal assignment for this background. */
+export function asiValid(bg: BackgroundInfo | null, asi: AsiAssignment): boolean {
+  if (!bg) return false;
+  if (asi.mode === "all-one") return backgroundTargets(bg).length === 3;
+  const targets = backgroundTargets(bg);
+  return (
+    !!asi.plusTwo &&
+    !!asi.plusOne &&
+    asi.plusTwo !== asi.plusOne &&
+    targets.includes(asi.plusTwo) &&
+    targets.includes(asi.plusOne)
+  );
+}
+
+/* ── Starting equipment (best-effort parse of SRD free text) ─────── */
+
 export interface EquipOption {
-  label: string;
-  items: ResolvedItem[];
-  /** Category sub-picks the player must resolve if this option is chosen. */
-  categoryPicks: CategoryPick[];
+  /** "A" / "B" / "C". */
+  letter: string;
+  /** The raw item list for this option (display + parsing source). */
+  raw: string;
 }
 
-/** A single equipment slot the player resolves by picking one option. */
-export interface EquipGroup {
-  prompt: string;
-  options: EquipOption[];
+/**
+ * Split a class `startingEquipment` string into its A/B(/C) options.
+ * Example: "Choose A or B: (A) Greataxe, …; or (B) 75 GP" → two options.
+ * Falls back to a single option containing the whole string.
+ */
+export function parseClassEquipmentOptions(
+  startingEquipment: string
+): EquipOption[] {
+  const out: EquipOption[] = [];
+  const re = /\(([A-Z])\)\s*([^;]*?)(?=\s*;|\s*$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(startingEquipment)) !== null) {
+    out.push({ letter: m[1], raw: m[2].trim() });
+  }
+  if (out.length === 0) {
+    out.push({ letter: "A", raw: startingEquipment.trim() });
+  }
+  return out;
 }
 
-export interface ClassEquipment {
-  fixed: ResolvedItem[];
-  groups: EquipGroup[];
+const WEAPON_RE =
+  /axe|sword|dagger|mace|spear|bow|javelin|flail|sickle|quarterstaff|staff|club|hammer|rapier|scimitar|glaive|halberd|pike|whip|crossbow|sling|dart|trident|morningstar|maul|war ?pick/i;
+const ARMOR_RE = /armor|mail|shield|leather|plate|breastplate|chain shirt/i;
+
+/** Heuristic item kind from a name (used when the SRD list has no exact match). */
+function guessKind(name: string): ItemKind {
+  if (ARMOR_RE.test(name)) return "ARMOR";
+  if (WEAPON_RE.test(name)) return "WEAPON";
+  return "GEAR";
 }
 
-function itemLabel(name: string, qty: number): string {
-  return qty > 1 ? `${name} ×${qty}` : name;
-}
-
-function buildOption(
-  opt: ApiEquipOption,
-  kindOf: (index: string) => ItemKind
-): EquipOption {
-  const items: ResolvedItem[] = [];
-  const categoryPicks: CategoryPick[] = [];
-  const labels: string[] = [];
-
-  const consume = (o: ApiCountedRef | ApiCategoryChoice) => {
-    if (o.option_type === "counted_reference") {
-      items.push({ name: o.of.name, qty: o.count, kind: kindOf(o.of.index) });
-      labels.push(itemLabel(o.of.name, o.count));
-    } else {
-      const ec = o.choice.from.equipment_category;
-      categoryPicks.push({
-        categoryIndex: ec.index,
-        categoryName: ec.name,
-        count: o.choice.choose,
-      });
-      labels.push(
-        o.choice.choose > 1 ? `${o.choice.choose}× any ${ec.name}` : `Any ${ec.name}`
-      );
+/**
+ * Parse one option's raw item string into a merged inventory list. Tokens are
+ * comma-separated; a leading integer is treated as a quantity ("4 Handaxes").
+ * `kindMap` (keyed by SRD index) classifies known items; everything else falls
+ * back to a keyword heuristic, then GEAR. Money ("75 GP") and packs stay as
+ * generic gear — this is intentionally simpler than a structured item builder.
+ */
+export function parseEquipmentItems(
+  raw: string,
+  kindMap?: Map<string, ItemKind>
+): InventoryItem[] {
+  const kindOf = (name: string): ItemKind => {
+    if (kindMap) {
+      const idx = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
+      const hit = kindMap.get(idx) ?? kindMap.get(idx.replace(/s$/, ""));
+      if (hit) return hit;
     }
+    return guessKind(name);
   };
 
-  if (opt.option_type === "multiple") opt.items.forEach(consume);
-  else consume(opt);
-
-  return { label: labels.join(" + "), items, categoryPicks };
-}
-
-/**
- * Translate an API class payload into the choice model the wizard renders.
- * `kindOf` resolves a concrete item index to an `ItemKind` (via fetched item
- * details); category-pick kinds are derived from the category index at resolve.
- */
-export function buildClassEquipment(
-  apiClass: ApiClass,
-  kindOf: (index: string) => ItemKind
-): ClassEquipment {
-  const fixed: ResolvedItem[] = apiClass.starting_equipment.map((se) => ({
-    name: se.equipment.name,
-    qty: se.quantity,
-    kind: kindOf(se.equipment.index),
-  }));
-
-  const groups: EquipGroup[] = apiClass.starting_equipment_options.map((group) => {
-    if (group.from.option_set_type === "equipment_category") {
-      const ec = group.from.equipment_category;
-      return {
-        prompt: group.desc,
-        options: [
-          {
-            label: `Any ${ec.name}`,
-            items: [],
-            categoryPicks: [
-              { categoryIndex: ec.index, categoryName: ec.name, count: group.choose },
-            ],
-          },
-        ],
-      };
-    }
-    return {
-      prompt: group.desc,
-      options: group.from.options.map((opt) => buildOption(opt, kindOf)),
-    };
-  });
-
-  return { fixed, groups };
-}
-
-/** Stable key for one category-pick slot, shared by the wizard and the resolver. */
-export function catKey(groupIndex: number, pickIndex: number, slot: number): string {
-  return `${groupIndex}-${pickIndex}-${slot}`;
-}
-
-/**
- * Merge fixed gear with the chosen option (and any resolved category picks) of
- * each group into a stacked item list. `selections[i]` is the chosen option index
- * for `groups[i]`; `categoryChoices[catKey(...)]` is the chosen item name.
- */
-export function resolveEquipment(
-  classEquip: ClassEquipment,
-  selections: number[],
-  categoryChoices: Record<string, string>
-): InventoryItem[] {
-  const picked: ResolvedItem[] = [...classEquip.fixed];
-
-  classEquip.groups.forEach((group, gi) => {
-    const opt = group.options[selections[gi] ?? 0];
-    if (!opt) return;
-    picked.push(...opt.items);
-    opt.categoryPicks.forEach((pick, pi) => {
-      for (let slot = 0; slot < pick.count; slot++) {
-        const name = categoryChoices[catKey(gi, pi, slot)];
-        if (name) {
-          picked.push({ name, qty: 1, kind: kindFromCategory(pick.categoryIndex) });
-        }
-      }
-    });
-  });
-
   const merged: InventoryItem[] = [];
-  for (const it of picked) {
-    const existing = merged.find((m) => m.name === it.name && m.kind === it.kind);
-    if (existing) existing.qty += it.qty;
-    else merged.push({ name: it.name, qty: it.qty, kind: it.kind, equipped: false });
-  }
+  raw
+    .split(",")
+    .map((t) => t.trim().replace(/^and\s+/i, "").trim())
+    .filter(Boolean)
+    .forEach((token) => {
+      const m = /^(\d+)\s+(.+)$/.exec(token);
+      const qty = m ? Number(m[1]) : 1;
+      const name = (m ? m[2] : token).trim();
+      if (!name) return;
+      const kind = kindOf(name);
+      const existing = merged.find((i) => i.name === name && i.kind === kind);
+      if (existing) existing.qty += qty;
+      else merged.push({ name, qty, kind, equipped: false });
+    });
   return merged;
-}
-
-/** True when every category sub-pick of the selected options has been filled. */
-export function equipmentSelectionComplete(
-  classEquip: ClassEquipment,
-  selections: number[],
-  categoryChoices: Record<string, string>
-): boolean {
-  return classEquip.groups.every((group, gi) => {
-    const opt = group.options[selections[gi] ?? 0];
-    if (!opt) return true;
-    return opt.categoryPicks.every((pick, pi) =>
-      Array.from({ length: pick.count }).every(
-        (_, slot) => !!categoryChoices[catKey(gi, pi, slot)]
-      )
-    );
-  });
 }
 
 /** Human-readable strings for the legacy `equipment` field / display. */
 export function equipmentToStrings(items: InventoryItem[]): string[] {
   return items.map((i) => (i.qty > 1 ? `${i.name} (${i.qty})` : i.name));
 }
+
+export { kindFromCategory };

@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class RagService {
 
     private static final int TOP_K_DOCUMENTS = 5;
+    private static final int TOP_K_RULES = 3;
     private static final int RECENT_TURNS_COUNT = 5;
 
     private final WorldDocumentRepository worldDocumentRepository;
@@ -40,13 +41,27 @@ public class RagService {
             }
         });
 
-        List<WorldDocument> relevantDocs = retrieveRelevantDocuments(playerAction);
+        // Embed the action ONCE and reuse the vector for both the world-knowledge and the
+        // rules retrieval, rather than embedding the same text twice per turn.
+        String queryVector = embedQuery(playerAction);
+
+        List<WorldDocument> relevantDocs = queryVector == null ? List.of()
+                : fetchByIds(worldDocumentRepository.findSimilarDocumentIds(queryVector, TOP_K_DOCUMENTS));
         if (!relevantDocs.isEmpty()) {
             context.append("=== World Knowledge ===\n");
             for (WorldDocument doc : relevantDocs) {
                 context.append("[").append(doc.getCategory()).append("] ")
                         .append(doc.getTitle()).append(": ")
                         .append(doc.getContent()).append("\n\n");
+            }
+        }
+
+        List<WorldDocument> ruleDocs = queryVector == null ? List.of()
+                : fetchByIds(worldDocumentRepository.findSimilarRuleIds(queryVector, TOP_K_RULES));
+        if (!ruleDocs.isEmpty()) {
+            context.append("=== D&D 5e Rules (reference for flavour — the engine still owns all math) ===\n");
+            for (WorldDocument doc : ruleDocs) {
+                context.append(doc.getTitle()).append(": ").append(doc.getContent()).append("\n\n");
             }
         }
 
@@ -68,23 +83,31 @@ public class RagService {
     }
 
     public List<WorldDocument> retrieveRelevantDocuments(String query) {
-        try {
-            float[] queryEmbedding = embeddingService.generateEmbedding(query);
-            String vectorString = embeddingService.embeddingToString(queryEmbedding);
-
-            List<UUID> similarIds = worldDocumentRepository.findSimilarDocumentIds(
-                    vectorString, TOP_K_DOCUMENTS);
-
-            if (similarIds.isEmpty()) {
-                log.debug("No similar documents found for query");
-                return List.of();
-            }
-
-            return worldDocumentRepository.findAllById(similarIds);
-        } catch (Exception e) {
-            log.error("Failed to retrieve relevant documents", e);
+        String queryVector = embedQuery(query);
+        if (queryVector == null) {
             return List.of();
         }
+        return fetchByIds(worldDocumentRepository.findSimilarDocumentIds(queryVector, TOP_K_DOCUMENTS));
+    }
+
+    /** Embed a query string to a pgvector literal, or null when it's blank or embedding fails. */
+    private String embedQuery(String query) {
+        if (query == null || query.isBlank()) {
+            return null;
+        }
+        try {
+            return embeddingService.embeddingToString(embeddingService.generateEmbedding(query));
+        } catch (Exception e) {
+            log.error("Failed to embed retrieval query", e);
+            return null;
+        }
+    }
+
+    private List<WorldDocument> fetchByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return worldDocumentRepository.findAllById(ids);
     }
 
     public List<TurnEvent> getRecentTurns(UUID sessionId) {

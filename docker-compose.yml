@@ -15,6 +15,10 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5555:5432"
+    # Let Postgres finish its shutdown checkpoint on `compose stop/down`; the
+    # default 10s timeout was killing it mid-checkpoint, forcing crash recovery
+    # (the slow ~30s fsync) on the next boot.
+    stop_grace_period: 60s
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,6 +26,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      # First boot on a slow disk does a ~30s fsync + crash recovery before
+      # accepting connections; without a start_period those count as failures
+      # and dependents (backend) abort with "container is unhealthy".
+      start_period: 90s
 
   # ── Kafka (KRaft — no Zookeeper) ──────────────────
   kafka:
@@ -46,6 +54,7 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 45s
 
   # ── Keycloak (OAuth2 / OIDC provider) ─────────────
   keycloak:

@@ -4,9 +4,12 @@ import com.dungeon.master.config.KafkaConfig;
 import com.dungeon.master.kafka.event.PlayerActionEvent;
 import com.dungeon.master.kafka.event.RoundActionEvent;
 import com.dungeon.master.kafka.event.RoundActionEvent.Contribution;
+import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.enums.Difficulty;
+import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.service.ai.DmAiService;
@@ -14,6 +17,7 @@ import com.dungeon.master.service.ai.DmTags;
 import com.dungeon.master.service.game.Bestiary;
 import com.dungeon.master.service.game.CheckService;
 import com.dungeon.master.service.game.CombatService;
+import com.dungeon.master.service.game.PlayerStateService;
 import com.dungeon.master.service.game.TurnService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +39,7 @@ public class PlayerActionConsumer {
     private final TurnService turnService;
     private final CombatService combatService;
     private final CheckService checkService;
+    private final PlayerStateService playerStateService;
     private final GameSessionRepository sessionRepository;
     private final PlayerRepository playerRepository;
     private final SimpMessagingTemplate messagingTemplate;
@@ -147,9 +152,18 @@ public class PlayerActionConsumer {
             cleaned = "The Dungeon Master considers the scene.";
         }
 
+        // Parse every check-type tag up front (regardless of the allowRolls toggle) so we can tell
+        // whether THIS turn is resolving a non-combat skill/ability check. A turn that asks for a
+        // check must NOT also start combat (a lock-pick / sneak / search is not a fight) — see the
+        // combat gate below. Combat initiative is engine-rolled in startEncounter, never via a ROLL
+        // tag, so treating any of these as "a check was requested" is safe.
+        List<DmTags.RollTag> rolls = DmTags.parseRolls(assembled);
+        DmTags.GroupTag group = DmTags.parseGroup(assembled);
+        List<DmTags.ContestTag> contests = DmTags.parseContest(assembled);
+        boolean checkRequestedThisTurn = !rolls.isEmpty() || group != null || !contests.isEmpty();
+
         // 1) Ability-check requests (before recording so the turn holds for the roller).
         if (allowRolls) {
-            List<DmTags.RollTag> rolls = DmTags.parseRolls(assembled);
             if (!rolls.isEmpty()) {
                 UUID roundToken = (collaborative && rolls.size() > 1) ? UUID.randomUUID() : null;
                 for (DmTags.RollTag rt : rolls) {
@@ -159,8 +173,39 @@ public class PlayerActionConsumer {
                     }
                     int dc = rt.dc() > 0 ? rt.dc() : defaultDc(session);
                     checkService.createPendingCheck(sessionId, target, rt.ability(), dc,
-                            rt.skill(), rt.reason(), turnEventId, roundToken);
+                            rt.skill(), rt.reason(), rt.mode(), turnEventId, roundToken);
                 }
+            }
+
+            // Group check — one check imposed on the whole party (shares a group token). Resolution
+            // applies the half-the-party success rule; abandonment is handled by a timeout sweep.
+            if (group != null) {
+                int dc = group.dc() > 0 ? group.dc() : defaultDc(session);
+                checkService.createGroupCheck(sessionId, group.ability(), dc, group.skill(),
+                        group.reason(), turnEventId);
+            }
+
+            // Contest — one actor opposed by an NPC the engine rolls. Resolve the named actor across
+            // the whole session (same logic as an inspiration target). targetMod falls back to a
+            // difficulty band when the tag omits it.
+            for (DmTags.ContestTag ct : contests) {
+                Player actor = resolveInspirationTarget(sessionId, ct.actor(), anchorPlayerId);
+                if (actor == null) {
+                    continue;
+                }
+                int targetMod = ct.targetMod() != null ? ct.targetMod() : defaultContestMod(session);
+                checkService.createContestCheck(sessionId, actor, ct.actorAbility(), ct.actorSkill(),
+                        targetMod, ct.targetLabel(), ct.reason(), turnEventId);
+            }
+
+            // Inspiration awards — gated with rolls (same automation toggle). Resolve the named
+            // player across the whole session; a bare tag falls back to the acting/anchor player.
+            for (DmTags.InspirationTag it : DmTags.parseInspiration(assembled)) {
+                Player target = resolveInspirationTarget(sessionId, it.player(), anchorPlayerId);
+                if (target == null) {
+                    continue;
+                }
+                awardInspiration(sessionId, target);
             }
         }
 
@@ -168,8 +213,10 @@ public class PlayerActionConsumer {
         //    broadcasts the canonical response + advances per mode.
         turnService.recordDmResponse(turnEventId, sessionId, anchorPlayerId, cleaned, turnNumber);
 
-        // 3) Combat trigger — only if allowed and no encounter is already active.
-        if (allowCombat && combatService.getActiveCombat(sessionId).isEmpty()) {
+        // 3) Combat trigger — only if allowed, no encounter is already active, and THIS turn did
+        //    not resolve a skill/ability check (a check means the action was non-combat, so it must
+        //    not also spawn a fight — e.g. a lock-pick that triggered a roll).
+        if (allowCombat && !checkRequestedThisTurn && combatService.getActiveCombat(sessionId).isEmpty()) {
             List<String> keys = DmTags.parseEncounter(assembled, Bestiary.keys());
             if (!keys.isEmpty()) {
                 log.info("DM-triggered encounter: session={}, enemies={}", sessionId, keys);
@@ -182,19 +229,102 @@ public class PlayerActionConsumer {
      * Resolve which player a {@code [[ROLL:…]]} tag targets. In the single-action path the
      * target is the acting player. In a collaborative round, {@code player=Name} names the
      * character; match it case-insensitively among the round's contributors, falling back to
-     * the anchor only when no name was given.
+     * the anchor only when no name was given. The DM is asked to QUOTE multi-word names, but as a
+     * safety net (the KV parser truncates an unquoted name to its first word) we also try matching
+     * the value against the first whitespace token of each candidate's character name.
      */
     private Player resolveRollTarget(UUID sessionId, String playerName, UUID anchorPlayerId,
                                      List<Contribution> roundActions) {
         if (roundActions == null || playerName == null || playerName.isBlank()) {
             return anchorPlayerId == null ? null : playerRepository.findById(anchorPlayerId).orElse(null);
         }
-        return roundActions.stream()
-                .filter(c -> c.characterName() != null && c.characterName().equalsIgnoreCase(playerName.trim()))
-                .findFirst()
-                .map(Contribution::playerId)
-                .flatMap(playerRepository::findById)
-                .orElse(null);
+        String name = playerName.trim();
+        // Exact case-insensitive match on the character name.
+        for (Contribution c : roundActions) {
+            if (name.equalsIgnoreCase(c.characterName())) {
+                return playerRepository.findById(c.playerId()).orElse(null);
+            }
+        }
+        // Resilient fallback: first whitespace token of the character name (e.g. "Aria" ← "Aria Brightblade").
+        for (Contribution c : roundActions) {
+            if (name.equalsIgnoreCase(firstToken(c.characterName()))) {
+                return playerRepository.findById(c.playerId()).orElse(null);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Resolve which player an {@code [[INSPIRATION:…]]} tag awards. Unlike a roll target (which is
+     * the acting player), an inspiration award names anyone in the party — so match {@code player=}
+     * case-insensitively against every session member's character name (then username). The DM is
+     * asked to QUOTE multi-word names; as a safety net we also try the first whitespace token of
+     * each candidate's character name. CRITICAL: when a name WAS given but matches nobody we return
+     * null (skip the award) rather than defaulting to the anchor — never award Inspiration to the
+     * wrong player. The anchor fallback applies ONLY when no name was given.
+     */
+    private Player resolveInspirationTarget(UUID sessionId, String playerName, UUID anchorPlayerId) {
+        if (playerName == null || playerName.isBlank()) {
+            return anchorPlayerId == null ? null : playerRepository.findById(anchorPlayerId).orElse(null);
+        }
+        String name = playerName.trim();
+        List<Player> members = playerRepository.findBySessionId(sessionId).stream()
+                .filter(p -> p.getRole() == PlayerRole.PLAYER)
+                .toList();
+        // Exact case-insensitive match on character name, then username.
+        for (Player p : members) {
+            if (name.equalsIgnoreCase(p.getCharacterName()) || name.equalsIgnoreCase(p.getUsername())) {
+                return p;
+            }
+        }
+        // Resilient fallback: first whitespace token of the character name (e.g. "Aria" ← "Aria Brightblade").
+        for (Player p : members) {
+            if (name.equalsIgnoreCase(firstToken(p.getCharacterName()))) {
+                return p;
+            }
+        }
+        // A name was given but matched nobody — skip rather than award to the wrong player.
+        return null;
+    }
+
+    /** First whitespace-delimited token of a name, or null when the name is null/blank. */
+    private static String firstToken(String name) {
+        if (name == null) {
+            return null;
+        }
+        String trimmed = name.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        int sp = 0;
+        while (sp < trimmed.length() && !Character.isWhitespace(trimmed.charAt(sp))) {
+            sp++;
+        }
+        return trimmed.substring(0, sp);
+    }
+
+    /**
+     * Grant Inspiration to a player, broadcast the updated runtime state, and drop a short system
+     * line into the room. Fails safe — a player with no seeded runtime state is skipped rather than
+     * crashing the consumer. The system line uses an unknown {@code SYSTEM} type that the current
+     * frontend drops silently; it renders once the frontend roll phase wires it up.
+     */
+    private void awardInspiration(UUID sessionId, Player target) {
+        try {
+            PlayerRuntimeStateDto state = playerStateService.grantInspiration(target.getId());
+            messagingTemplate.convertAndSend("/topic/game/" + sessionId,
+                    PlayerStateEvent.of(sessionId, state));
+            String name = target.getCharacterName() != null && !target.getCharacterName().isBlank()
+                    ? target.getCharacterName() : target.getUsername();
+            messagingTemplate.convertAndSend("/topic/game/" + sessionId, (Object) Map.of(
+                    "type", "SYSTEM",
+                    "sessionId", sessionId.toString(),
+                    "text", name + " gains Inspiration!"));
+            log.info("Inspiration granted: session={}, player={}", sessionId, target.getId());
+        } catch (Exception e) {
+            log.warn("Failed to grant inspiration: session={}, player={}: {}",
+                    sessionId, target.getId(), e.getMessage());
+        }
     }
 
     /** Fallback DC when a [[ROLL]] tag omits one — banded by session difficulty. */
@@ -204,6 +334,20 @@ public class PlayerActionConsumer {
             case EASY -> 10;
             case NORMAL -> 13;
             case DEADLY -> 17;
+        };
+    }
+
+    /**
+     * Fallback NPC modifier when a [[CONTEST]] tag omits {@code targetMod} — banded by difficulty,
+     * mirroring {@link #defaultDc}. The NPC side rolls {@code 1d20 + this}, so a higher band makes
+     * the opposed party tougher to beat.
+     */
+    private int defaultContestMod(GameSession session) {
+        Difficulty d = session == null ? Difficulty.NORMAL : session.getDifficulty();
+        return switch (d) {
+            case EASY -> 2;
+            case NORMAL -> 4;
+            case DEADLY -> 6;
         };
     }
 }

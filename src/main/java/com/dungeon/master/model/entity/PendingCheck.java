@@ -1,7 +1,11 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.enums.CheckKind;
+import com.dungeon.master.model.enums.RollMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
@@ -58,6 +62,32 @@ public class PendingCheck {
 
     @Column(name = "round_token")
     private UUID roundToken;
+
+    /**
+     * The DM's situational roll mode for this check (ADVANTAGE/DISADVANTAGE), applied when the
+     * player rolls. Null/NORMAL means the DM granted no situational edge or hindrance.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dm_mode", length = 20)
+    private RollMode dmMode;
+
+    /**
+     * The kind of check (STANDARD / GROUP / CONTEST). Drives how {@code CheckService} resolves it:
+     * STANDARD compares total vs DC; GROUP applies the half-the-party rule across a shared
+     * {@code roundToken}; CONTEST has the engine roll an opposed NPC side ({@code 1d20 + targetMod}).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "check_kind", length = 20, nullable = false)
+    @Builder.Default
+    private CheckKind checkKind = CheckKind.STANDARD;
+
+    /** CONTEST only: the NPC/defender's flat modifier; their side rolls {@code 1d20 + targetMod}. */
+    @Column(name = "target_mod")
+    private Integer targetMod;
+
+    /** CONTEST only: the in-fiction label of the opposed party (e.g. "the guard"). */
+    @Column(name = "target_label", length = 255)
+    private String targetLabel;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

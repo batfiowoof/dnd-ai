@@ -16,15 +16,14 @@ export const queryKeys = {
     byId: (id: string) => ["characters", id] as const,
   },
   dnd5e: {
-    races: ["dnd5e", "races"] as const,
+    species: ["dnd5e", "species"] as const,
+    backgrounds: ["dnd5e", "backgrounds"] as const,
     classes: ["dnd5e", "classes"] as const,
     alignments: ["dnd5e", "alignments"] as const,
+    equipmentList: ["dnd5e", "equipmentList"] as const,
+    feat: (index: string) => ["dnd5e", "feat", index] as const,
     classSpells: (classIndex: string) =>
       ["dnd5e", "classSpells", classIndex] as const,
-    startingEquipment: (classIndex: string) =>
-      ["dnd5e", "startingEquipment", classIndex] as const,
-    equipmentCategory: (categoryIndex: string) =>
-      ["dnd5e", "equipmentCategory", categoryIndex] as const,
     spellByName: (name: string) => ["dnd5e", "spellByName", name] as const,
     equipmentByName: (name: string) =>
       ["dnd5e", "equipmentByName", name] as const,

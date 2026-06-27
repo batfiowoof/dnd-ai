@@ -16,6 +16,7 @@ public record PlayerRuntimeStateDto(
         List<InventoryItem> inventory,
         List<String> conditions,
         List<String> cantrips,
-        List<String> knownSpells
+        List<String> knownSpells,
+        boolean inspiration
 ) {
 }

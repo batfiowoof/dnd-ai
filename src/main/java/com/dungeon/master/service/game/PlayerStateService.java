@@ -273,6 +273,36 @@ public class PlayerStateService {
         throw new IllegalStateException("Item not in inventory: " + itemName);
     }
 
+    /**
+     * Award Inspiration to a player (idempotent — setting an already-inspired player is a no-op).
+     * Returns the updated state so callers can broadcast without a second read.
+     */
+    @Transactional
+    public PlayerRuntimeStateDto grantInspiration(UUID playerId) {
+        PlayerRuntimeState s = require(playerId);
+        if (!s.isInspiration()) {
+            s.setInspiration(true);
+            s = repository.save(s);
+        }
+        return toDto(s);
+    }
+
+    /**
+     * Spend a player's Inspiration if they hold it. Returns {@code true} when it was set (and now
+     * cleared), {@code false} when the player had none — so the caller only folds advantage into
+     * the roll when inspiration was actually consumed.
+     */
+    @Transactional
+    public boolean consumeInspiration(UUID playerId) {
+        PlayerRuntimeState s = require(playerId);
+        if (!s.isInspiration()) {
+            return false;
+        }
+        s.setInspiration(false);
+        repository.save(s);
+        return true;
+    }
+
     /** Long rest: recover all spell slots, heal to max HP, and clear conditions. */
     @Transactional
     public PlayerRuntimeStateDto longRest(UUID playerId) {
@@ -338,6 +368,7 @@ public class PlayerStateService {
                 s.getInventory(),
                 s.getConditions(),
                 s.getCantrips(),
-                s.getKnownSpells());
+                s.getKnownSpells(),
+                s.isInspiration());
     }
 }

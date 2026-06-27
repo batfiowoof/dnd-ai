@@ -93,15 +93,19 @@ export function sendPass(client: Client, sessionId: string) {
   });
 }
 
-/** Resolve the DM-requested ability check pending for the player. */
+/**
+ * Resolve the DM-requested ability check pending for the player. The player's only roll-mode
+ * lever is spending Inspiration (grants advantage) — the DM decides situational advantage /
+ * disadvantage. The backend rolls authoritatively and narrates the outcome.
+ */
 export function sendRollCheck(
   client: Client,
   sessionId: string,
-  rollMode: RollMode
+  spendInspiration: boolean
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/roll-check`,
-    body: JSON.stringify({ rollMode }),
+    body: JSON.stringify({ spendInspiration }),
   });
 }
 

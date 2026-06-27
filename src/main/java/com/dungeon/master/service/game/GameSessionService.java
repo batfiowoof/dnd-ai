@@ -261,7 +261,10 @@ public class GameSessionService {
         List<PendingCheckDto> pendingChecks = pendingCheckRepository.findBySessionId(sessionId).stream()
                 .map(pc -> new PendingCheckDto(
                         pc.getPlayerId(), pc.getAbility(), pc.getDc(), pc.getSkill(),
-                        pc.getReason(), abilityModHint(pc.getPlayerId(), pc.getAbility())))
+                        pc.getReason(), abilityModHint(pc.getPlayerId(), pc.getAbility()),
+                        pc.getCheckKind() == null ? "STANDARD" : pc.getCheckKind().name(),
+                        pc.getTargetLabel(),
+                        pc.getDmMode() == null ? "NORMAL" : pc.getDmMode().name()))
                 .toList();
 
         return new GameStateDto(
