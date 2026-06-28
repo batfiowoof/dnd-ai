@@ -35,24 +35,6 @@ export interface GameStateDto {
   allowAiCombat: boolean;
   allowAiRolls: boolean;
   collabWindowSeconds: number;
-  /** Open ability checks, so a reconnecting client can re-open its roll prompt. */
-  pendingChecks: PendingCheckDto[];
-}
-
-/** An open ability check surfaced on game state (the transient ROLL_REQUEST is missed on reload). */
-export interface PendingCheckDto {
-  playerId: string;
-  ability: string;
-  dc: number;
-  skill: string | null;
-  reason: string | null;
-  suggestedModifier: number;
-  /** STANDARD / GROUP / CONTEST — lets a reconnecting client frame the re-opened prompt. */
-  checkKind: CheckKind;
-  /** Opposed party for a CONTEST (null otherwise). */
-  targetLabel: string | null;
-  /** The DM's situational grant carried so the re-opened badge survives reload (NORMAL when none). */
-  dmMode?: RollMode;
 }
 
 export interface CreateSessionRequest {
@@ -265,21 +247,78 @@ export interface RollSummary {
   fumble: boolean;
 }
 
-export interface EnemyActionEvent {
-  type: "ENEMY_ACTION";
-  sessionId: string;
-  attackerKind: CombatantKind;
-  attackerName: string;
+/** One actor's resolution against a single target (attack / save / heal / effect). */
+export interface CombatTarget {
   targetKind: CombatantKind;
   targetName: string;
-  attackRoll: RollSummary;
-  vsAc: number;
-  hit: boolean;
+  attackRoll: RollSummary | null;
+  vsAc: number | null;
+  hit: boolean | null;
+  saveRoll: RollSummary | null;
+  saveDc: number | null;
+  saved: boolean | null;
   damageRoll: RollSummary | null;
-  targetCurrentHp: number;
-  targetMaxHp: number;
-  targetDefeated: boolean;
+  heal: number | null;
+  condition: string | null;
+  currentHp: number;
+  maxHp: number;
+  defeated: boolean;
+}
+
+export type CombatActionKind =
+  | "ATTACK"
+  | "SPELL_DAMAGE"
+  | "SPELL_HEAL"
+  | "SPELL_EFFECT"
+  | "ITEM";
+
+/**
+ * One actor's complete combat action (an attack, multiattack, AoE spell, or heal),
+ * carried as a single event. The client buffers these in arrival order and plays them
+ * back one at a time so the turn order reads correctly.
+ */
+export interface CombatActionEvent {
+  type: "COMBAT_ACTION";
+  sessionId: string;
+  seq: number;
+  actorKind: CombatantKind;
+  actorName: string;
+  actionKind: CombatActionKind;
+  label: string;
+  targets: CombatTarget[];
   combat: CombatStateDto;
+}
+
+/* ── Combat reference data (from /api/combat/*) ───────────────── */
+export type SpellEffectType =
+  | "DAMAGE"
+  | "HEAL"
+  | "BUFF"
+  | "DEBUFF"
+  | "CONTROL"
+  | "UTILITY";
+export type SpellTargetType = "ENEMY" | "ALLY" | "SELF" | "AREA" | "ANY";
+
+export interface SpellSummary {
+  name: string;
+  level: number;
+  school: string;
+  effectType: SpellEffectType;
+  targetType: SpellTargetType;
+  maxTargets: number | null;
+  concentration: boolean;
+  range: string;
+  parsed: boolean;
+}
+
+export interface MonsterSummary {
+  key: string;
+  name: string;
+  cr: number | null;
+  type: string | null;
+  size: string | null;
+  hp: number | null;
+  ac: number | null;
 }
 
 export interface CombatLifecycleEvent {
@@ -300,23 +339,6 @@ export interface RoundStatusEvent {
   open: boolean;
 }
 
-export interface RollRequestEvent {
-  type: "ROLL_REQUEST";
-  sessionId: string;
-  playerId: string;
-  ability: string;
-  dc: number;
-  skill: string | null;
-  reason: string | null;
-  suggestedModifier: number;
-  /** The DM's situational grant — ADVANTAGE/DISADVANTAGE, or NORMAL when none. */
-  dmMode: RollMode;
-  /** STANDARD / GROUP / CONTEST — frames how the prompt reads. */
-  checkKind: CheckKind;
-  /** Opposed party for a CONTEST (null otherwise). */
-  targetLabel: string | null;
-}
-
 /** Neutral system line broadcast to the room (e.g. "X gains Inspiration!"). */
 export interface SystemMessageEvent {
   type: "SYSTEM";
@@ -333,10 +355,9 @@ export type WebSocketMessage =
   | DmNarrationEvent
   | DiceRollEvent
   | PlayerStateEvent
-  | EnemyActionEvent
+  | CombatActionEvent
   | CombatLifecycleEvent
   | RoundStatusEvent
-  | RollRequestEvent
   | SystemMessageEvent;
 
 /* ── Character types ──────────────────────────────────────────── */

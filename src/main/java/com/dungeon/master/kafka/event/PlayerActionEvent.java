@@ -12,6 +12,7 @@ public record PlayerActionEvent(
         String playerName,
         String action,
         int turnNumber,
-        UUID turnEventId
+        UUID turnEventId,
+        boolean spendInspiration
 ) {
 }

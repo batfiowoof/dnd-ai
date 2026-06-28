@@ -1,5 +1,6 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.dto.MonsterAttack;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -9,7 +10,13 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** A hostile combatant in a session encounter. HP is authoritative server state. */
@@ -57,4 +64,31 @@ public class Enemy {
     @Column(nullable = false)
     @Builder.Default
     private boolean alive = true;
+
+    /**
+     * Full attack list from the monster stat block (multiattack monsters have several).
+     * Empty for enemies seeded without a catalog block — the engine then falls back to
+     * the single {@link #attackBonus} / {@link #damageDice} above.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<MonsterAttack> attacks = new ArrayList<>();
+
+    /** Active conditions on the enemy (e.g. from a player's control spell). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> conditions = new ArrayList<>();
+
+    /** Ability scores (STR/DEX/CON/INT/WIS/CHA) from the stat block — used for saving throws. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Integer> abilities = new LinkedHashMap<>();
+
+    /** How many attacks this enemy makes per turn (multiattack), default 1. */
+    @Column(name = "attacks_per_turn", nullable = false)
+    @Builder.Default
+    private int attacksPerTurn = 1;
 }

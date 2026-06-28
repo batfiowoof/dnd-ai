@@ -25,7 +25,6 @@ public record GameStateDto(
         DmLength dmLength,
         boolean allowAiCombat,
         boolean allowAiRolls,
-        int collabWindowSeconds,
-        List<PendingCheckDto> pendingChecks
+        int collabWindowSeconds
 ) {
 }

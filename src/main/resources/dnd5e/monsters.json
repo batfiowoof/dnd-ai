@@ -1,0 +1,11500 @@
+[
+ {
+  "key": "ABOLETH",
+  "name": "Aboleth",
+  "size": "Large",
+  "type": "Aberration",
+  "cr": 10.0,
+  "ac": 17,
+  "hp": 150,
+  "hpDice": "20d10+40",
+  "speed": 10,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 21,
+   "DEX": 9,
+   "CON": 15,
+   "INT": 18,
+   "WIS": 15,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Tentacle",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d6+5",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Tentacle"
+  }
+ },
+ {
+  "key": "AIR_ELEMENTAL",
+  "name": "Air Elemental",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 5.0,
+  "ac": 15,
+  "hp": 90,
+  "hpDice": "12d10+24",
+  "speed": 10,
+  "dexMod": 5,
+  "abilities": {
+   "STR": 14,
+   "DEX": 20,
+   "CON": 14,
+   "INT": 6,
+   "WIS": 10,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Thunderous Slam",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+5",
+    "damageType": "Thunder"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Thunderous Slam"
+  }
+ },
+ {
+  "key": "ANIMATED_ARMOR",
+  "name": "Animated Armor",
+  "size": "Medium",
+  "type": "Construct",
+  "cr": 1.0,
+  "ac": 18,
+  "hp": 33,
+  "hpDice": "6d8+6",
+  "speed": 25,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 14,
+   "DEX": 11,
+   "CON": 13,
+   "INT": 1,
+   "WIS": 3,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Slam"
+  }
+ },
+ {
+  "key": "ANIMATED_FLYING_SWORD",
+  "name": "Animated Flying Sword",
+  "size": "Small",
+  "type": "Construct",
+  "cr": 0.25,
+  "ac": 17,
+  "hp": 14,
+  "hpDice": "4d6",
+  "speed": 5,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 12,
+   "DEX": 15,
+   "CON": 11,
+   "INT": 1,
+   "WIS": 5,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Slash",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ANIMATED_RUG_OF_SMOTHERING",
+  "name": "Animated Rug of Smothering",
+  "size": "Large",
+  "type": "Construct",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 27,
+  "hpDice": "5d10",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 14,
+   "CON": 10,
+   "INT": 1,
+   "WIS": 3,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Smother",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ANKHEG",
+  "name": "Ankheg",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 2.0,
+  "ac": 14,
+  "hp": 45,
+  "hpDice": "6d10+12",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 17,
+   "DEX": 11,
+   "CON": 14,
+   "INT": 1,
+   "WIS": 13,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ASSASSIN",
+  "name": "Assassin",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 8.0,
+  "ac": 16,
+  "hp": 97,
+  "hpDice": "15d8+30",
+  "speed": 30,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 11,
+   "DEX": 18,
+   "CON": 14,
+   "INT": 16,
+   "WIS": 11,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Shortsword",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Light Crossbow",
+    "kind": "RANGED",
+    "toHit": 7,
+    "reach": null,
+    "range": 80,
+    "damageDice": "1d8+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "AWAKENED_SHRUB",
+  "name": "Awakened Shrub",
+  "size": "Small",
+  "type": "Plant",
+  "cr": 0.0,
+  "ac": 9,
+  "hp": 10,
+  "hpDice": "3d6",
+  "speed": 20,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 3,
+   "DEX": 8,
+   "CON": 11,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Rake",
+    "kind": "MELEE",
+    "toHit": 1,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "AWAKENED_TREE",
+  "name": "Awakened Tree",
+  "size": "Huge",
+  "type": "Plant",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 59,
+  "hpDice": "7d12+14",
+  "speed": 20,
+  "dexMod": -2,
+  "abilities": {
+   "STR": 19,
+   "DEX": 6,
+   "CON": 15,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "AXE_BEAK",
+  "name": "Axe Beak",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 0.25,
+  "ac": 11,
+  "hp": 19,
+  "hpDice": "3d10+3",
+  "speed": 50,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 14,
+   "DEX": 12,
+   "CON": 12,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Beak",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "AZER_SENTINEL",
+  "name": "Azer Sentinel",
+  "size": "Medium",
+  "type": "Elemental",
+  "cr": 2.0,
+  "ac": 17,
+  "hp": 39,
+  "hpDice": "6d8+12",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 17,
+   "DEX": 12,
+   "CON": 15,
+   "INT": 12,
+   "WIS": 13,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Burning Hammer",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BALOR",
+  "name": "Balor",
+  "size": "Huge",
+  "type": "Fiend",
+  "cr": 19.0,
+  "ac": 19,
+  "hp": 287,
+  "hpDice": "23d12+138",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 26,
+   "DEX": 15,
+   "CON": 22,
+   "INT": 20,
+   "WIS": 16,
+   "CHA": 22
+  },
+  "attacks": [
+   {
+    "name": "Flame Whip",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 30,
+    "range": null,
+    "damageDice": "3d6+8",
+    "damageType": "Force"
+   },
+   {
+    "name": "Lightning Blade",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d8+8",
+    "damageType": "Force"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BANDIT",
+  "name": "Bandit",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.125,
+  "ac": 12,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 11,
+   "DEX": 12,
+   "CON": 12,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Scimitar",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+1",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Light Crossbow",
+    "kind": "RANGED",
+    "toHit": 3,
+    "reach": null,
+    "range": 80,
+    "damageDice": "1d8+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BANDIT_CAPTAIN",
+  "name": "Bandit Captain",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 2.0,
+  "ac": 15,
+  "hp": 52,
+  "hpDice": "8d8+16",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 15,
+   "DEX": 16,
+   "CON": 14,
+   "INT": 14,
+   "WIS": 11,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Scimitar",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Pistol",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 30,
+    "damageDice": "1d10+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BARBED_DEVIL",
+  "name": "Barbed Devil",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 5.0,
+  "ac": 15,
+  "hp": 110,
+  "hpDice": "13d8+52",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 16,
+   "DEX": 17,
+   "CON": 18,
+   "INT": 12,
+   "WIS": 14,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Claws",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Hurl Flame",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 150,
+    "damageDice": "5d6",
+    "damageType": "Fire"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Hurl Flame"
+  }
+ },
+ {
+  "key": "BASILISK",
+  "name": "Basilisk",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 15,
+  "hp": 52,
+  "hpDice": "8d8+16",
+  "speed": 20,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 8,
+   "CON": 15,
+   "INT": 2,
+   "WIS": 8,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BEARDED_DEVIL",
+  "name": "Bearded Devil",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 3.0,
+  "ac": 13,
+  "hp": 58,
+  "hpDice": "9d8+18",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 16,
+   "DEX": 15,
+   "CON": 15,
+   "INT": 9,
+   "WIS": 11,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Beard",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Infernal Glaive",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BEHIR",
+  "name": "Behir",
+  "size": "Huge",
+  "type": "Monstrosity",
+  "cr": 11.0,
+  "ac": 17,
+  "hp": 168,
+  "hpDice": "16d12+64",
+  "speed": 50,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 23,
+   "DEX": 16,
+   "CON": 18,
+   "INT": 7,
+   "WIS": 14,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d12+6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BERSERKER",
+  "name": "Berserker",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 67,
+  "hpDice": "9d8+27",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 12,
+   "CON": 17,
+   "INT": 9,
+   "WIS": 11,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Greataxe",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d12+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BLACK_DRAGON_WYRMLING",
+  "name": "Black Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 2.0,
+  "ac": 17,
+  "hp": 33,
+  "hpDice": "6d8+6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 15,
+   "DEX": 14,
+   "CON": 13,
+   "INT": 10,
+   "WIS": 11,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_BLACK_DRAGON",
+  "name": "Young Black Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 7.0,
+  "ac": 18,
+  "hp": 127,
+  "hpDice": "15d10+45",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 19,
+   "DEX": 14,
+   "CON": 17,
+   "INT": 12,
+   "WIS": 11,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d4+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_BLACK_DRAGON",
+  "name": "Adult Black Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 14.0,
+  "ac": 19,
+  "hp": 195,
+  "hpDice": "17d12+85",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 23,
+   "DEX": 14,
+   "CON": 21,
+   "INT": 14,
+   "WIS": 13,
+   "CHA": 19
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 11,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_BLACK_DRAGON",
+  "name": "Ancient Black Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 21.0,
+  "ac": 22,
+  "hp": 367,
+  "hpDice": "21d20+147",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 27,
+   "DEX": 14,
+   "CON": 25,
+   "INT": 16,
+   "WIS": 15,
+   "CHA": 22
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 15,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "BLACK_PUDDING",
+  "name": "Black Pudding",
+  "size": "Large",
+  "type": "Ooze",
+  "cr": 4.0,
+  "ac": 7,
+  "hp": 68,
+  "hpDice": "8d10+24",
+  "speed": 20,
+  "dexMod": -3,
+  "abilities": {
+   "STR": 16,
+   "DEX": 5,
+   "CON": 16,
+   "INT": 1,
+   "WIS": 6,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Dissolving Pseudopod",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 10,
+    "range": null,
+    "damageDice": "4d6+3",
+    "damageType": "Acid"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BLINK_DOG",
+  "name": "Blink Dog",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 22,
+  "hpDice": "4d8+4",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 12,
+   "DEX": 17,
+   "CON": 12,
+   "INT": 10,
+   "WIS": 13,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BLUE_DRAGON_WYRMLING",
+  "name": "Blue Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 3.0,
+  "ac": 17,
+  "hp": 65,
+  "hpDice": "10d8+20",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 17,
+   "DEX": 10,
+   "CON": 15,
+   "INT": 12,
+   "WIS": 11,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_BLUE_DRAGON",
+  "name": "Young Blue Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 9.0,
+  "ac": 18,
+  "hp": 152,
+  "hpDice": "16d10+64",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 21,
+   "DEX": 10,
+   "CON": 19,
+   "INT": 14,
+   "WIS": 13,
+   "CHA": 17
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_BLUE_DRAGON",
+  "name": "Adult Blue Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 16.0,
+  "ac": 19,
+  "hp": 212,
+  "hpDice": "17d12+102",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 25,
+   "DEX": 10,
+   "CON": 23,
+   "INT": 16,
+   "WIS": 15,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+7",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_BLUE_DRAGON",
+  "name": "Ancient Blue Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 23.0,
+  "ac": 22,
+  "hp": 481,
+  "hpDice": "26d20+208",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 29,
+   "DEX": 10,
+   "CON": 27,
+   "INT": 18,
+   "WIS": 17,
+   "CHA": 25
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 16,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+9",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "BONE_DEVIL",
+  "name": "Bone Devil",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 9.0,
+  "ac": 16,
+  "hp": 161,
+  "hpDice": "17d10+68",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 18,
+   "DEX": 16,
+   "CON": 18,
+   "INT": 13,
+   "WIS": 14,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Infernal Sting",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "BRASS_DRAGON_WYRMLING",
+  "name": "Brass Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 1.0,
+  "ac": 15,
+  "hp": 22,
+  "hpDice": "4d8+4",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 15,
+   "DEX": 10,
+   "CON": 13,
+   "INT": 10,
+   "WIS": 11,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "YOUNG_BRASS_DRAGON",
+  "name": "Young Brass Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 6.0,
+  "ac": 17,
+  "hp": 110,
+  "hpDice": "13d10+39",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 10,
+   "CON": 17,
+   "INT": 12,
+   "WIS": 11,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_BRASS_DRAGON",
+  "name": "Adult Brass Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 13.0,
+  "ac": 18,
+  "hp": 172,
+  "hpDice": "15d12+75",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 23,
+   "DEX": 10,
+   "CON": 21,
+   "INT": 14,
+   "WIS": 13,
+   "CHA": 17
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 11,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_BRASS_DRAGON",
+  "name": "Ancient Brass Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 20.0,
+  "ac": 20,
+  "hp": 332,
+  "hpDice": "19d20+133",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 27,
+   "DEX": 10,
+   "CON": 25,
+   "INT": 16,
+   "WIS": 15,
+   "CHA": 22
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d10+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "BRONZE_DRAGON_WYRMLING",
+  "name": "Bronze Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 2.0,
+  "ac": 15,
+  "hp": 39,
+  "hpDice": "6d8+12",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 17,
+   "DEX": 10,
+   "CON": 15,
+   "INT": 12,
+   "WIS": 11,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_BRONZE_DRAGON",
+  "name": "Young Bronze Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 8.0,
+  "ac": 17,
+  "hp": 142,
+  "hpDice": "15d10+60",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 21,
+   "DEX": 10,
+   "CON": 19,
+   "INT": 14,
+   "WIS": 13,
+   "CHA": 17
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_BRONZE_DRAGON",
+  "name": "Adult Bronze Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 15.0,
+  "ac": 18,
+  "hp": 212,
+  "hpDice": "17d12+102",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 25,
+   "DEX": 10,
+   "CON": 23,
+   "INT": 16,
+   "WIS": 15,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+7",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_BRONZE_DRAGON",
+  "name": "Ancient Bronze Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 22.0,
+  "ac": 22,
+  "hp": 444,
+  "hpDice": "24d20+192",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 29,
+   "DEX": 10,
+   "CON": 27,
+   "INT": 18,
+   "WIS": 17,
+   "CHA": 25
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 16,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+9",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "BUGBEAR_STALKER",
+  "name": "Bugbear Stalker",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 3.0,
+  "ac": 15,
+  "hp": 65,
+  "hpDice": "10d8+20",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 14,
+   "CON": 14,
+   "INT": 11,
+   "WIS": 12,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Javelin",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 10,
+    "range": 30,
+    "damageDice": "3d6+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Morningstar",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Javelin Or Morningstar"
+  }
+ },
+ {
+  "key": "BUGBEAR_WARRIOR",
+  "name": "Bugbear Warrior",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 1.0,
+  "ac": 14,
+  "hp": 33,
+  "hpDice": "6d8+6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 15,
+   "DEX": 14,
+   "CON": 13,
+   "INT": 8,
+   "WIS": 11,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Grab",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+2",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Light Hammer",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 10,
+    "range": 20,
+    "damageDice": "3d4+2",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BULETTE",
+  "name": "Bulette",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 5.0,
+  "ac": 17,
+  "hp": 94,
+  "hpDice": "9d10+45",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 11,
+   "CON": 21,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d12+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "CENTAUR_TROOPER",
+  "name": "Centaur Trooper",
+  "size": "Large",
+  "type": "Fey",
+  "cr": 2.0,
+  "ac": 16,
+  "hp": 45,
+  "hpDice": "6d10+12",
+  "speed": 50,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 14,
+   "CON": 14,
+   "INT": 9,
+   "WIS": 13,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Pike",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d10+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Longbow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 150,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CHAIN_DEVIL",
+  "name": "Chain Devil",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 8.0,
+  "ac": 15,
+  "hp": 85,
+  "hpDice": "10d8+40",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 18,
+   "INT": 11,
+   "WIS": 12,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Chain",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Chain"
+  }
+ },
+ {
+  "key": "CHIMERA",
+  "name": "Chimera",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 6.0,
+  "ac": 14,
+  "hp": 114,
+  "hpDice": "12d10+48",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 11,
+   "CON": 19,
+   "INT": 3,
+   "WIS": 14,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+4",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Ram",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d12+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CHUUL",
+  "name": "Chuul",
+  "size": "Large",
+  "type": "Aberration",
+  "cr": 4.0,
+  "ac": 16,
+  "hp": 76,
+  "hpDice": "9d10+27",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 10,
+   "CON": 16,
+   "INT": 5,
+   "WIS": 11,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Pincer",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d10+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Pincer"
+  }
+ },
+ {
+  "key": "CLAY_GOLEM",
+  "name": "Clay Golem",
+  "size": "Large",
+  "type": "Construct",
+  "cr": 9.0,
+  "ac": 14,
+  "hp": 123,
+  "hpDice": "13d10+52",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 20,
+   "DEX": 9,
+   "CON": 18,
+   "INT": 3,
+   "WIS": 8,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+5",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Slam"
+  }
+ },
+ {
+  "key": "CLOAKER",
+  "name": "Cloaker",
+  "size": "Large",
+  "type": "Aberration",
+  "cr": 8.0,
+  "ac": 14,
+  "hp": 91,
+  "hpDice": "14d10+14",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 15,
+   "CON": 12,
+   "INT": 13,
+   "WIS": 14,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Attach",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 1,
+   "attack": "Attach Attack And Two Tail"
+  }
+ },
+ {
+  "key": "CLOUD_GIANT",
+  "name": "Cloud Giant",
+  "size": "Huge",
+  "type": "Giant",
+  "cr": 9.0,
+  "ac": 14,
+  "hp": 200,
+  "hpDice": "16d12+96",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 27,
+   "DEX": 10,
+   "CON": 22,
+   "INT": 12,
+   "WIS": 16,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Thunderous Mace",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d8+8",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Thundercloud",
+    "kind": "RANGED",
+    "toHit": 12,
+    "reach": null,
+    "range": 240,
+    "damageDice": "3d6+8",
+    "damageType": "Thunder"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "COCKATRICE",
+  "name": "Cockatrice",
+  "size": "Small",
+  "type": "Monstrosity",
+  "cr": 0.5,
+  "ac": 11,
+  "hp": 22,
+  "hpDice": "5d6+5",
+  "speed": 20,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 6,
+   "DEX": 12,
+   "CON": 12,
+   "INT": 2,
+   "WIS": 13,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Petrifying Bite",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "COMMONER",
+  "name": "Commoner",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.0,
+  "ac": 10,
+  "hp": 4,
+  "hpDice": "1d8",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 10,
+   "DEX": 10,
+   "CON": 10,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Club",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "COPPER_DRAGON_WYRMLING",
+  "name": "Copper Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 1.0,
+  "ac": 16,
+  "hp": 22,
+  "hpDice": "4d8+4",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 12,
+   "CON": 13,
+   "INT": 14,
+   "WIS": 11,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "YOUNG_COPPER_DRAGON",
+  "name": "Young Copper Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 7.0,
+  "ac": 17,
+  "hp": 119,
+  "hpDice": "14d10+42",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 19,
+   "DEX": 12,
+   "CON": 17,
+   "INT": 16,
+   "WIS": 13,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_COPPER_DRAGON",
+  "name": "Adult Copper Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 14.0,
+  "ac": 18,
+  "hp": 184,
+  "hpDice": "16d12+80",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 23,
+   "DEX": 12,
+   "CON": 21,
+   "INT": 18,
+   "WIS": 15,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 11,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_COPPER_DRAGON",
+  "name": "Ancient Copper Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 21.0,
+  "ac": 21,
+  "hp": 367,
+  "hpDice": "21d20+147",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 27,
+   "DEX": 12,
+   "CON": 25,
+   "INT": 20,
+   "WIS": 17,
+   "CHA": 22
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 15,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d10+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "COUATL",
+  "name": "Couatl",
+  "size": "Medium",
+  "type": "Celestial",
+  "cr": 4.0,
+  "ac": 19,
+  "hp": 60,
+  "hpDice": "8d8+24",
+  "speed": 30,
+  "dexMod": 5,
+  "abilities": {
+   "STR": 16,
+   "DEX": 20,
+   "CON": 17,
+   "INT": 18,
+   "WIS": 20,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Swarm of Grasping Hands",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "4d8+2",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CULTIST",
+  "name": "Cultist",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.125,
+  "ac": 12,
+  "hp": 9,
+  "hpDice": "2d8",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 11,
+   "DEX": 12,
+   "CON": 10,
+   "INT": 10,
+   "WIS": 11,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Ritual Sickle",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CULTIST_FANATIC",
+  "name": "Cultist Fanatic",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 44,
+  "hpDice": "8d8+8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 11,
+   "DEX": 14,
+   "CON": 12,
+   "INT": 10,
+   "WIS": 14,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Pact Blade",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DARKMANTLE",
+  "name": "Darkmantle",
+  "size": "Small",
+  "type": "Aberration",
+  "cr": 0.5,
+  "ac": 11,
+  "hp": 22,
+  "hpDice": "5d6+5",
+  "speed": 10,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 12,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Crush",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DEATH_DOG",
+  "name": "Death Dog",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 1.0,
+  "ac": 12,
+  "hp": 39,
+  "hpDice": "6d8+12",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 15,
+   "DEX": 14,
+   "CON": 14,
+   "INT": 3,
+   "WIS": 13,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "DEVA",
+  "name": "Deva",
+  "size": "Medium",
+  "type": "Celestial",
+  "cr": 10.0,
+  "ac": 17,
+  "hp": 229,
+  "hpDice": "27d8+108",
+  "speed": 30,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 18,
+   "DEX": 18,
+   "CON": 18,
+   "INT": 17,
+   "WIS": 20,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Holy Mace",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Holy Mace"
+  }
+ },
+ {
+  "key": "DJINNI",
+  "name": "Djinni",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 11.0,
+  "ac": 17,
+  "hp": 218,
+  "hpDice": "19d10+114",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 21,
+   "DEX": 15,
+   "CON": 22,
+   "INT": 15,
+   "WIS": 16,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Storm Blade",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+5",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Storm Bolt",
+    "kind": "RANGED",
+    "toHit": 9,
+    "reach": null,
+    "range": 120,
+    "damageDice": "3d8",
+    "damageType": "Thunder"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DOPPELGANGER",
+  "name": "Doppelganger",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 14,
+  "hp": 52,
+  "hpDice": "8d8+16",
+  "speed": 30,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 11,
+   "DEX": 18,
+   "CON": 14,
+   "INT": 11,
+   "WIS": 12,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Slam"
+  }
+ },
+ {
+  "key": "DRAGON_TURTLE",
+  "name": "Dragon Turtle",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 17.0,
+  "ac": 20,
+  "hp": 356,
+  "hpDice": "23d20+115",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 25,
+   "DEX": 10,
+   "CON": 20,
+   "INT": 10,
+   "WIS": 12,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 13,
+    "reach": 15,
+    "range": null,
+    "damageDice": "3d10+7",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 13,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d10+7",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "DRETCH",
+  "name": "Dretch",
+  "size": "Small",
+  "type": "Fiend",
+  "cr": 0.25,
+  "ac": 11,
+  "hp": 18,
+  "hpDice": "4d6+4",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 12,
+   "DEX": 11,
+   "CON": 12,
+   "INT": 5,
+   "WIS": 8,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DRIDER",
+  "name": "Drider",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 6.0,
+  "ac": 19,
+  "hp": 123,
+  "hpDice": "13d10+52",
+  "speed": 30,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 16,
+   "DEX": 19,
+   "CON": 18,
+   "INT": 13,
+   "WIS": 16,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Foreleg",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Poison Burst",
+    "kind": "RANGED",
+    "toHit": 6,
+    "reach": null,
+    "range": 120,
+    "damageDice": "3d6+3",
+    "damageType": "Poison"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DRUID",
+  "name": "Druid",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 44,
+  "hpDice": "8d8+8",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 10,
+   "DEX": 12,
+   "CON": 13,
+   "INT": 12,
+   "WIS": 16,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Vine Staff",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Verdant Wisp",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 90,
+    "damageDice": "3d6",
+    "damageType": "Radiant"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DRYAD",
+  "name": "Dryad",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 1.0,
+  "ac": 16,
+  "hp": 22,
+  "hpDice": "5d8",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 10,
+   "DEX": 12,
+   "CON": 11,
+   "INT": 14,
+   "WIS": 15,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Vine Lash",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d8+4",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Thorn Burst",
+    "kind": "RANGED",
+    "toHit": 6,
+    "reach": null,
+    "range": 60,
+    "damageDice": "1d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "EARTH_ELEMENTAL",
+  "name": "Earth Elemental",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 5.0,
+  "ac": 17,
+  "hp": 147,
+  "hpDice": "14d10+70",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 20,
+   "DEX": 8,
+   "CON": 20,
+   "INT": 5,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+5",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Rock Launch",
+    "kind": "RANGED",
+    "toHit": 8,
+    "reach": null,
+    "range": 60,
+    "damageDice": "1d6+5",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "EFREETI",
+  "name": "Efreeti",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 11.0,
+  "ac": 17,
+  "hp": 212,
+  "hpDice": "17d10+119",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 22,
+   "DEX": 12,
+   "CON": 24,
+   "INT": 16,
+   "WIS": 15,
+   "CHA": 19
+  },
+  "attacks": [
+   {
+    "name": "Heated Blade",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+6",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Hurl Flame",
+    "kind": "RANGED",
+    "toHit": 8,
+    "reach": null,
+    "range": 120,
+    "damageDice": "7d6",
+    "damageType": "Fire"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ERINYES",
+  "name": "Erinyes",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 12.0,
+  "ac": 18,
+  "hp": 178,
+  "hpDice": "21d8+84",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 18,
+   "DEX": 16,
+   "CON": 18,
+   "INT": 14,
+   "WIS": 14,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Withering Sword",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Withering Sword"
+  }
+ },
+ {
+  "key": "ETTERCAP",
+  "name": "Ettercap",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 44,
+  "hpDice": "8d8+8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 14,
+   "DEX": 15,
+   "CON": 13,
+   "INT": 7,
+   "WIS": 12,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ETTIN",
+  "name": "Ettin",
+  "size": "Large",
+  "type": "Giant",
+  "cr": 4.0,
+  "ac": 12,
+  "hp": 85,
+  "hpDice": "10d10+30",
+  "speed": 40,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 21,
+   "DEX": 8,
+   "CON": 17,
+   "INT": 6,
+   "WIS": 10,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Battleaxe",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+5",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Morningstar",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+5",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "FIRE_ELEMENTAL",
+  "name": "Fire Elemental",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 5.0,
+  "ac": 13,
+  "hp": 93,
+  "hpDice": "11d10+33",
+  "speed": 50,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 10,
+   "DEX": 17,
+   "CON": 16,
+   "INT": 6,
+   "WIS": 10,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Burn",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Fire"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Burn"
+  }
+ },
+ {
+  "key": "FIRE_GIANT",
+  "name": "Fire Giant",
+  "size": "Huge",
+  "type": "Giant",
+  "cr": 9.0,
+  "ac": 18,
+  "hp": 162,
+  "hpDice": "13d12+78",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 25,
+   "DEX": 9,
+   "CON": 23,
+   "INT": 10,
+   "WIS": 14,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Flame Sword",
+    "kind": "MELEE",
+    "toHit": 11,
+    "reach": 10,
+    "range": null,
+    "damageDice": "4d6+7",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Hammer Throw",
+    "kind": "RANGED",
+    "toHit": 11,
+    "reach": null,
+    "range": 60,
+    "damageDice": "3d10+7",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "FLESH_GOLEM",
+  "name": "Flesh Golem",
+  "size": "Medium",
+  "type": "Construct",
+  "cr": 5.0,
+  "ac": 9,
+  "hp": 127,
+  "hpDice": "15d8+60",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 19,
+   "DEX": 9,
+   "CON": 18,
+   "INT": 6,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Slam"
+  }
+ },
+ {
+  "key": "FROST_GIANT",
+  "name": "Frost Giant",
+  "size": "Huge",
+  "type": "Giant",
+  "cr": 8.0,
+  "ac": 15,
+  "hp": 149,
+  "hpDice": "13d12+65",
+  "speed": 40,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 23,
+   "DEX": 9,
+   "CON": 21,
+   "INT": 9,
+   "WIS": 10,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Frost Axe",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d12+6",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Great Bow",
+    "kind": "RANGED",
+    "toHit": 9,
+    "reach": null,
+    "range": 150,
+    "damageDice": "2d10+6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SHRIEKER_FUNGUS",
+  "name": "Shrieker Fungus",
+  "size": "Medium",
+  "type": "Plant",
+  "cr": 0.0,
+  "ac": 5,
+  "hp": 13,
+  "hpDice": "3d8",
+  "speed": 5,
+  "dexMod": -5,
+  "abilities": {
+   "STR": 1,
+   "DEX": 1,
+   "CON": 10,
+   "INT": 1,
+   "WIS": 3,
+   "CHA": 1
+  },
+  "attacks": [],
+  "multiattack": null
+ },
+ {
+  "key": "VIOLET_FUNGUS",
+  "name": "Violet Fungus",
+  "size": "Medium",
+  "type": "Plant",
+  "cr": 0.25,
+  "ac": 5,
+  "hp": 18,
+  "hpDice": "4d8",
+  "speed": 5,
+  "dexMod": -5,
+  "abilities": {
+   "STR": 3,
+   "DEX": 1,
+   "CON": 10,
+   "INT": 1,
+   "WIS": 3,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Rotting Touch",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d8",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rotting Touch"
+  }
+ },
+ {
+  "key": "GARGOYLE",
+  "name": "Gargoyle",
+  "size": "Medium",
+  "type": "Elemental",
+  "cr": 2.0,
+  "ac": 15,
+  "hp": 67,
+  "hpDice": "9d8+27",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 15,
+   "DEX": 11,
+   "CON": 16,
+   "INT": 6,
+   "WIS": 11,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "GELATINOUS_CUBE",
+  "name": "Gelatinous Cube",
+  "size": "Large",
+  "type": "Ooze",
+  "cr": 2.0,
+  "ac": 6,
+  "hp": 63,
+  "hpDice": "6d10+30",
+  "speed": 15,
+  "dexMod": -4,
+  "abilities": {
+   "STR": 14,
+   "DEX": 3,
+   "CON": 20,
+   "INT": 1,
+   "WIS": 6,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Pseudopod",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+2",
+    "damageType": "Acid"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GHAST",
+  "name": "Ghast",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 36,
+  "hpDice": "8d8",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 16,
+   "DEX": 17,
+   "CON": 10,
+   "INT": 11,
+   "WIS": 10,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GHOST",
+  "name": "Ghost",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 4.0,
+  "ac": 11,
+  "hp": 45,
+  "hpDice": "10d8",
+  "speed": 5,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 7,
+   "DEX": 13,
+   "CON": 10,
+   "INT": 10,
+   "WIS": 12,
+   "CHA": 17
+  },
+  "attacks": [
+   {
+    "name": "Withering Touch",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d10+3",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Withering Touch"
+  }
+ },
+ {
+  "key": "GHOUL",
+  "name": "Ghoul",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 1.0,
+  "ac": 12,
+  "hp": 22,
+  "hpDice": "5d8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 13,
+   "DEX": 15,
+   "CON": 10,
+   "INT": 7,
+   "WIS": 10,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "GIBBERING_MOUTHER",
+  "name": "Gibbering Mouther",
+  "size": "Medium",
+  "type": "Aberration",
+  "cr": 2.0,
+  "ac": 9,
+  "hp": 52,
+  "hpDice": "7d8+21",
+  "speed": 20,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 10,
+   "DEX": 8,
+   "CON": 16,
+   "INT": 3,
+   "WIS": 10,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GLABREZU",
+  "name": "Glabrezu",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 9.0,
+  "ac": 17,
+  "hp": 189,
+  "hpDice": "18d10+90",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 20,
+   "DEX": 15,
+   "CON": 21,
+   "INT": 19,
+   "WIS": 17,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Pincer",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Pincer"
+  }
+ },
+ {
+  "key": "GLADIATOR",
+  "name": "Gladiator",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 5.0,
+  "ac": 16,
+  "hp": 112,
+  "hpDice": "15d8+45",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 10,
+   "WIS": 12,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Spear",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Spear"
+  }
+ },
+ {
+  "key": "GNOLL_WARRIOR",
+  "name": "Gnoll Warrior",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 0.5,
+  "ac": 15,
+  "hp": 27,
+  "hpDice": "6d8",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 14,
+   "DEX": 12,
+   "CON": 11,
+   "INT": 6,
+   "WIS": 10,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Bone Bow",
+    "kind": "RANGED",
+    "toHit": 3,
+    "reach": null,
+    "range": 150,
+    "damageDice": "1d10+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GOBLIN_MINION",
+  "name": "Goblin Minion",
+  "size": "Small",
+  "type": "Fey",
+  "cr": 0.125,
+  "ac": 12,
+  "hp": 7,
+  "hpDice": "2d6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 8,
+   "DEX": 15,
+   "CON": 10,
+   "INT": 10,
+   "WIS": 8,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Dagger",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "1d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GOBLIN_WARRIOR",
+  "name": "Goblin Warrior",
+  "size": "Small",
+  "type": "Fey",
+  "cr": 0.25,
+  "ac": 15,
+  "hp": 10,
+  "hpDice": "3d6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 8,
+   "DEX": 15,
+   "CON": 10,
+   "INT": 10,
+   "WIS": 8,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Scimitar",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Shortbow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 80,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GOBLIN_BOSS",
+  "name": "Goblin Boss",
+  "size": "Small",
+  "type": "Fey",
+  "cr": 1.0,
+  "ac": 17,
+  "hp": 21,
+  "hpDice": "6d6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 10,
+   "DEX": 15,
+   "CON": 10,
+   "INT": 10,
+   "WIS": 8,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Scimitar",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Shortbow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 80,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GOLD_DRAGON_WYRMLING",
+  "name": "Gold Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 3.0,
+  "ac": 17,
+  "hp": 60,
+  "hpDice": "8d8+24",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 19,
+   "DEX": 14,
+   "CON": 17,
+   "INT": 14,
+   "WIS": 11,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_GOLD_DRAGON",
+  "name": "Young Gold Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 10.0,
+  "ac": 18,
+  "hp": 178,
+  "hpDice": "17d10+85",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 23,
+   "DEX": 14,
+   "CON": 21,
+   "INT": 16,
+   "WIS": 13,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_GOLD_DRAGON",
+  "name": "Adult Gold Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 17.0,
+  "ac": 19,
+  "hp": 243,
+  "hpDice": "18d12+126",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 27,
+   "DEX": 14,
+   "CON": 25,
+   "INT": 16,
+   "WIS": 15,
+   "CHA": 24
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_GOLD_DRAGON",
+  "name": "Ancient Gold Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 24.0,
+  "ac": 22,
+  "hp": 546,
+  "hpDice": "28d20+252",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 30,
+   "DEX": 14,
+   "CON": 29,
+   "INT": 18,
+   "WIS": 17,
+   "CHA": 28
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 17,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+10",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "GORGON",
+  "name": "Gorgon",
+  "size": "Large",
+  "type": "Construct",
+  "cr": 5.0,
+  "ac": 19,
+  "hp": 114,
+  "hpDice": "12d10+48",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 20,
+   "DEX": 11,
+   "CON": 18,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d12+5",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GRAY_OOZE",
+  "name": "Gray Ooze",
+  "size": "Medium",
+  "type": "Ooze",
+  "cr": 0.5,
+  "ac": 9,
+  "hp": 22,
+  "hpDice": "3d8+9",
+  "speed": 10,
+  "dexMod": -2,
+  "abilities": {
+   "STR": 12,
+   "DEX": 6,
+   "CON": 16,
+   "INT": 1,
+   "WIS": 6,
+   "CHA": 2
+  },
+  "attacks": [
+   {
+    "name": "Pseudopod",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+1",
+    "damageType": "Acid"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GREEN_DRAGON_WYRMLING",
+  "name": "Green Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 2.0,
+  "ac": 17,
+  "hp": 38,
+  "hpDice": "7d8+7",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 12,
+   "CON": 13,
+   "INT": 14,
+   "WIS": 11,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_GREEN_DRAGON",
+  "name": "Young Green Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 8.0,
+  "ac": 18,
+  "hp": 136,
+  "hpDice": "16d10+48",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 19,
+   "DEX": 12,
+   "CON": 17,
+   "INT": 16,
+   "WIS": 13,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_GREEN_DRAGON",
+  "name": "Adult Green Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 15.0,
+  "ac": 19,
+  "hp": 207,
+  "hpDice": "18d12+90",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 23,
+   "DEX": 12,
+   "CON": 21,
+   "INT": 18,
+   "WIS": 15,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 11,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_GREEN_DRAGON",
+  "name": "Ancient Green Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 22.0,
+  "ac": 21,
+  "hp": 402,
+  "hpDice": "23d20+161",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 27,
+   "DEX": 12,
+   "CON": 25,
+   "INT": 20,
+   "WIS": 17,
+   "CHA": 22
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 15,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "GREEN_HAG",
+  "name": "Green Hag",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 3.0,
+  "ac": 17,
+  "hp": 82,
+  "hpDice": "11d8+33",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 12,
+   "CON": 16,
+   "INT": 13,
+   "WIS": 14,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "GRICK",
+  "name": "Grick",
+  "size": "Medium",
+  "type": "Aberration",
+  "cr": 2.0,
+  "ac": 14,
+  "hp": 54,
+  "hpDice": "12d8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 14,
+   "DEX": 14,
+   "CON": 11,
+   "INT": 3,
+   "WIS": 14,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Beak",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+2",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tentacles",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GRIFFON",
+  "name": "Griffon",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 59,
+  "hpDice": "7d10+21",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 2,
+   "WIS": 13,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "GRIMLOCK",
+  "name": "Grimlock",
+  "size": "Medium",
+  "type": "Aberration",
+  "cr": 0.25,
+  "ac": 11,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 12,
+   "CON": 12,
+   "INT": 9,
+   "WIS": 8,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bone Cudgel",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GUARDIAN_NAGA",
+  "name": "Guardian Naga",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 10.0,
+  "ac": 18,
+  "hp": 136,
+  "hpDice": "16d10+48",
+  "speed": 40,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 19,
+   "DEX": 18,
+   "CON": 16,
+   "INT": 16,
+   "WIS": 19,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d12+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "GUARD",
+  "name": "Guard",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.125,
+  "ac": 16,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 13,
+   "DEX": 12,
+   "CON": 12,
+   "INT": 10,
+   "WIS": 11,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Spear",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "1d6+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GUARD_CAPTAIN",
+  "name": "Guard Captain",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 4.0,
+  "ac": 18,
+  "hp": 75,
+  "hpDice": "10d8+30",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 14,
+   "CON": 16,
+   "INT": 12,
+   "WIS": 14,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Javelin",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": 30,
+    "damageDice": "3d6+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Longsword",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d10+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HALF_DRAGON",
+  "name": "Half-Dragon",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 5.0,
+  "ac": 18,
+  "hp": 105,
+  "hpDice": "14d8+42",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 19,
+   "DEX": 14,
+   "CON": 16,
+   "INT": 10,
+   "WIS": 15,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d4+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "HARPY",
+  "name": "Harpy",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 1.0,
+  "ac": 11,
+  "hp": 38,
+  "hpDice": "7d8+7",
+  "speed": 20,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 12,
+   "DEX": 13,
+   "CON": 12,
+   "INT": 7,
+   "WIS": 10,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HELL_HOUND",
+  "name": "Hell Hound",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 3.0,
+  "ac": 15,
+  "hp": 58,
+  "hpDice": "9d8+18",
+  "speed": 50,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 17,
+   "DEX": 12,
+   "CON": 14,
+   "INT": 6,
+   "WIS": 13,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "HEZROU",
+  "name": "Hezrou",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 8.0,
+  "ac": 18,
+  "hp": 157,
+  "hpDice": "15d10+75",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 19,
+   "DEX": 17,
+   "CON": 20,
+   "INT": 5,
+   "WIS": 12,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "HILL_GIANT",
+  "name": "Hill Giant",
+  "size": "Huge",
+  "type": "Giant",
+  "cr": 5.0,
+  "ac": 13,
+  "hp": 105,
+  "hpDice": "10d12+40",
+  "speed": 40,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 21,
+   "DEX": 8,
+   "CON": 19,
+   "INT": 5,
+   "WIS": 9,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Tree Club",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d8+5",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Trash Lob",
+    "kind": "RANGED",
+    "toHit": 8,
+    "reach": null,
+    "range": 60,
+    "damageDice": "2d10+5",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HIPPOGRIFF",
+  "name": "Hippogriff",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 1.0,
+  "ac": 11,
+  "hp": 26,
+  "hpDice": "4d10+4",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 17,
+   "DEX": 13,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "HOBGOBLIN_WARRIOR",
+  "name": "Hobgoblin Warrior",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 0.5,
+  "ac": 18,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 13,
+   "DEX": 12,
+   "CON": 12,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Longsword",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d10+1",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Longbow",
+    "kind": "RANGED",
+    "toHit": 3,
+    "reach": null,
+    "range": 150,
+    "damageDice": "1d8+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HOBGOBLIN_CAPTAIN",
+  "name": "Hobgoblin Captain",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 3.0,
+  "ac": 17,
+  "hp": 58,
+  "hpDice": "9d8+18",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 15,
+   "DEX": 14,
+   "CON": 14,
+   "INT": 12,
+   "WIS": 10,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Greatsword",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+2",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Longbow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 150,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HOMUNCULUS",
+  "name": "Homunculus",
+  "size": "Tiny",
+  "type": "Construct",
+  "cr": 0.0,
+  "ac": 13,
+  "hp": 4,
+  "hpDice": "1d4+2",
+  "speed": 20,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 4,
+   "DEX": 15,
+   "CON": 14,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HORNED_DEVIL",
+  "name": "Horned Devil",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 11.0,
+  "ac": 18,
+  "hp": 199,
+  "hpDice": "19d10+95",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 22,
+   "DEX": 17,
+   "CON": 21,
+   "INT": 12,
+   "WIS": 16,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Searing Fork",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+6",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Hurl Flame",
+    "kind": "RANGED",
+    "toHit": 8,
+    "reach": null,
+    "range": 150,
+    "damageDice": "5d8+4",
+    "damageType": "Fire"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HYDRA",
+  "name": "Hydra",
+  "size": "Huge",
+  "type": "Monstrosity",
+  "cr": 8.0,
+  "ac": 15,
+  "hp": 184,
+  "hpDice": "16d12+80",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 20,
+   "DEX": 12,
+   "CON": 20,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d10+5",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ICE_DEVIL",
+  "name": "Ice Devil",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 14.0,
+  "ac": 18,
+  "hp": 228,
+  "hpDice": "24d10+96",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 21,
+   "DEX": 14,
+   "CON": 18,
+   "INT": 18,
+   "WIS": 15,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Ice Spear",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 5,
+    "range": 30,
+    "damageDice": "2d8+5",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d6+5",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Ice Spear"
+  }
+ },
+ {
+  "key": "IMP",
+  "name": "Imp",
+  "size": "Tiny",
+  "type": "Fiend",
+  "cr": 1.0,
+  "ac": 13,
+  "hp": 21,
+  "hpDice": "6d4+6",
+  "speed": 20,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 6,
+   "DEX": 17,
+   "CON": 13,
+   "INT": 11,
+   "WIS": 12,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Sting",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "INCUBUS",
+  "name": "Incubus",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 4.0,
+  "ac": 15,
+  "hp": 66,
+  "hpDice": "12d8+12",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 8,
+   "DEX": 17,
+   "CON": 13,
+   "INT": 15,
+   "WIS": 12,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Restless Touch",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+5",
+    "damageType": "Psychic"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Restless Touch"
+  }
+ },
+ {
+  "key": "INVISIBLE_STALKER",
+  "name": "Invisible Stalker",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 6.0,
+  "ac": 14,
+  "hp": 97,
+  "hpDice": "13d10+26",
+  "speed": 50,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 16,
+   "DEX": 19,
+   "CON": 14,
+   "INT": 10,
+   "WIS": 15,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Wind Swipe",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Force"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Wind Swipe"
+  }
+ },
+ {
+  "key": "IRON_GOLEM",
+  "name": "Iron Golem",
+  "size": "Large",
+  "type": "Construct",
+  "cr": 16.0,
+  "ac": 20,
+  "hp": 252,
+  "hpDice": "24d10+120",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 24,
+   "DEX": 9,
+   "CON": 20,
+   "INT": 3,
+   "WIS": 11,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Bladed Arm",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d8+7",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Fiery Bolt",
+    "kind": "RANGED",
+    "toHit": 10,
+    "reach": null,
+    "range": 120,
+    "damageDice": "8d8",
+    "damageType": "Fire"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "KNIGHT",
+  "name": "Knight",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 3.0,
+  "ac": 18,
+  "hp": 52,
+  "hpDice": "8d8+16",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 16,
+   "DEX": 11,
+   "CON": 14,
+   "INT": 11,
+   "WIS": 11,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Greatsword",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Heavy Crossbow",
+    "kind": "RANGED",
+    "toHit": 2,
+    "reach": null,
+    "range": 100,
+    "damageDice": "2d10",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "KOBOLD_WARRIOR",
+  "name": "Kobold Warrior",
+  "size": "Small",
+  "type": "Dragon",
+  "cr": 0.125,
+  "ac": 14,
+  "hp": 7,
+  "hpDice": "3d6-3",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 7,
+   "DEX": 15,
+   "CON": 9,
+   "INT": 8,
+   "WIS": 7,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Dagger",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "1d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "KRAKEN",
+  "name": "Kraken",
+  "size": "Gargantuan",
+  "type": "Monstrosity",
+  "cr": 23.0,
+  "ac": 18,
+  "hp": 481,
+  "hpDice": "26d20+208",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 30,
+   "DEX": 11,
+   "CON": 26,
+   "INT": 22,
+   "WIS": 18,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Tentacle",
+    "kind": "MELEE",
+    "toHit": 17,
+    "reach": 30,
+    "range": null,
+    "damageDice": "4d6+10",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Tentacle"
+  }
+ },
+ {
+  "key": "LAMIA",
+  "name": "Lamia",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 4.0,
+  "ac": 13,
+  "hp": 97,
+  "hpDice": "13d10+26",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 13,
+   "CON": 15,
+   "INT": 14,
+   "WIS": 15,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "LEMURE",
+  "name": "Lemure",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 0.0,
+  "ac": 9,
+  "hp": 9,
+  "hpDice": "2d8",
+  "speed": 20,
+  "dexMod": -3,
+  "abilities": {
+   "STR": 10,
+   "DEX": 5,
+   "CON": 11,
+   "INT": 1,
+   "WIS": 11,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Vile Slime",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4",
+    "damageType": "Poison"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "LICH",
+  "name": "Lich",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 21.0,
+  "ac": 20,
+  "hp": 315,
+  "hpDice": "42d8+126",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 11,
+   "DEX": 16,
+   "CON": 16,
+   "INT": 21,
+   "WIS": 14,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Eldritch Burst",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 5,
+    "range": 120,
+    "damageDice": "4d12+5",
+    "damageType": "Force"
+   },
+   {
+    "name": "Paralyzing Touch",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+5",
+    "damageType": "Cold"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MAGE",
+  "name": "Mage",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 6.0,
+  "ac": 15,
+  "hp": 81,
+  "hpDice": "18d8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 9,
+   "DEX": 14,
+   "CON": 11,
+   "INT": 17,
+   "WIS": 12,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Arcane Burst",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": 120,
+    "damageDice": "3d8+3",
+    "damageType": "Force"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Arcane Burst"
+  }
+ },
+ {
+  "key": "ARCHMAGE",
+  "name": "Archmage",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 12.0,
+  "ac": 17,
+  "hp": 170,
+  "hpDice": "31d8+31",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 10,
+   "DEX": 14,
+   "CON": 12,
+   "INT": 20,
+   "WIS": 15,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Arcane Burst",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 5,
+    "range": 150,
+    "damageDice": "4d10+5",
+    "damageType": "Force"
+   }
+  ],
+  "multiattack": {
+   "count": 4,
+   "attack": "Arcane Burst"
+  }
+ },
+ {
+  "key": "MAGMIN",
+  "name": "Magmin",
+  "size": "Small",
+  "type": "Elemental",
+  "cr": 0.5,
+  "ac": 14,
+  "hp": 13,
+  "hpDice": "3d6+3",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 7,
+   "DEX": 15,
+   "CON": 12,
+   "INT": 8,
+   "WIS": 11,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Touch",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+2",
+    "damageType": "Fire"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MANTICORE",
+  "name": "Manticore",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 14,
+  "hp": 68,
+  "hpDice": "8d10+24",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 17,
+   "DEX": 16,
+   "CON": 17,
+   "INT": 7,
+   "WIS": 12,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Tail Spike",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 100,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MARILITH",
+  "name": "Marilith",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 16.0,
+  "ac": 16,
+  "hp": 220,
+  "hpDice": "21d10+105",
+  "speed": 40,
+  "dexMod": 5,
+  "abilities": {
+   "STR": 18,
+   "DEX": 20,
+   "CON": 20,
+   "INT": 18,
+   "WIS": 16,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Pact Blade",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 6,
+   "attack": "Pact Blade"
+  }
+ },
+ {
+  "key": "MEDUSA",
+  "name": "Medusa",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 6.0,
+  "ac": 15,
+  "hp": 127,
+  "hpDice": "17d8+51",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 10,
+   "DEX": 17,
+   "CON": 16,
+   "INT": 12,
+   "WIS": 13,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Snake Hair",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Poison Ray",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 150,
+    "damageDice": "2d8+2",
+    "damageType": "Poison"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "DUST_MEPHIT",
+  "name": "Dust Mephit",
+  "size": "Small",
+  "type": "Elemental",
+  "cr": 0.5,
+  "ac": 12,
+  "hp": 17,
+  "hpDice": "5d6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 5,
+   "DEX": 14,
+   "CON": 10,
+   "INT": 9,
+   "WIS": 11,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ICE_MEPHIT",
+  "name": "Ice Mephit",
+  "size": "Small",
+  "type": "Elemental",
+  "cr": 0.5,
+  "ac": 11,
+  "hp": 21,
+  "hpDice": "6d6",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 7,
+   "DEX": 13,
+   "CON": 10,
+   "INT": 9,
+   "WIS": 11,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MAGMA_MEPHIT",
+  "name": "Magma Mephit",
+  "size": "Small",
+  "type": "Elemental",
+  "cr": 0.5,
+  "ac": 11,
+  "hp": 18,
+  "hpDice": "4d6+4",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 8,
+   "DEX": 12,
+   "CON": 12,
+   "INT": 7,
+   "WIS": 10,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "STEAM_MEPHIT",
+  "name": "Steam Mephit",
+  "size": "Small",
+  "type": "Elemental",
+  "cr": 0.25,
+  "ac": 10,
+  "hp": 17,
+  "hpDice": "5d6",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 5,
+   "DEX": 11,
+   "CON": 10,
+   "INT": 11,
+   "WIS": 10,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MERFOLK_SKIRMISHER",
+  "name": "Merfolk Skirmisher",
+  "size": "Medium",
+  "type": "Elemental",
+  "cr": 0.125,
+  "ac": 11,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 10,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 10,
+   "DEX": 13,
+   "CON": 12,
+   "INT": 11,
+   "WIS": 14,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Ocean Spear",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "1d6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MERROW",
+  "name": "Merrow",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 45,
+  "hpDice": "6d10+12",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 15,
+   "INT": 8,
+   "WIS": 10,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+4",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Harpoon",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MIMIC",
+  "name": "Mimic",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 58,
+  "hpDice": "9d8+18",
+  "speed": 20,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 17,
+   "DEX": 12,
+   "CON": 15,
+   "INT": 5,
+   "WIS": 13,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Pseudopod",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MINOTAUR_OF_BAPHOMET",
+  "name": "Minotaur of Baphomet",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 14,
+  "hp": 85,
+  "hpDice": "10d10+30",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 18,
+   "DEX": 11,
+   "CON": 16,
+   "INT": 6,
+   "WIS": 16,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Abyssal Glaive",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d12+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MUMMY",
+  "name": "Mummy",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 3.0,
+  "ac": 11,
+  "hp": 58,
+  "hpDice": "9d8+18",
+  "speed": 20,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 8,
+   "CON": 15,
+   "INT": 6,
+   "WIS": 12,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Rotting Fist",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rotting Fist"
+  }
+ },
+ {
+  "key": "MUMMY_LORD",
+  "name": "Mummy Lord",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 15.0,
+  "ac": 17,
+  "hp": 187,
+  "hpDice": "25d8+75",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 18,
+   "DEX": 10,
+   "CON": 17,
+   "INT": 11,
+   "WIS": 19,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Rotting Fist",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d10+4",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Channel Negative Energy",
+    "kind": "RANGED",
+    "toHit": 9,
+    "reach": null,
+    "range": 60,
+    "damageDice": "6d6+4",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "NALFESHNEE",
+  "name": "Nalfeshnee",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 13.0,
+  "ac": 18,
+  "hp": 184,
+  "hpDice": "16d10+96",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 21,
+   "DEX": 10,
+   "CON": 22,
+   "INT": 19,
+   "WIS": 12,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "NIGHT_HAG",
+  "name": "Night Hag",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 5.0,
+  "ac": 17,
+  "hp": 112,
+  "hpDice": "15d8+45",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 16,
+   "WIS": 14,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "NIGHTMARE",
+  "name": "Nightmare",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 3.0,
+  "ac": 13,
+  "hp": 68,
+  "hpDice": "8d10+24",
+  "speed": 60,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 10,
+   "WIS": 13,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "NOBLE",
+  "name": "Noble",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.125,
+  "ac": 15,
+  "hp": 9,
+  "hpDice": "2d8",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 11,
+   "DEX": 12,
+   "CON": 11,
+   "INT": 12,
+   "WIS": 14,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Rapier",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "OCHRE_JELLY",
+  "name": "Ochre Jelly",
+  "size": "Large",
+  "type": "Ooze",
+  "cr": 2.0,
+  "ac": 8,
+  "hp": 52,
+  "hpDice": "7d10+14",
+  "speed": 20,
+  "dexMod": -2,
+  "abilities": {
+   "STR": 15,
+   "DEX": 6,
+   "CON": 14,
+   "INT": 2,
+   "WIS": 6,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Pseudopod",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+2",
+    "damageType": "Acid"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "OGRE",
+  "name": "Ogre",
+  "size": "Large",
+  "type": "Giant",
+  "cr": 2.0,
+  "ac": 11,
+  "hp": 68,
+  "hpDice": "8d10+24",
+  "speed": 40,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 19,
+   "DEX": 8,
+   "CON": 16,
+   "INT": 5,
+   "WIS": 7,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Greatclub",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Javelin",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": 30,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ONI",
+  "name": "Oni",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 7.0,
+  "ac": 17,
+  "hp": 119,
+  "hpDice": "14d10+42",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 11,
+   "CON": 16,
+   "INT": 14,
+   "WIS": 12,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d12+4",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Nightmare Ray",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 60,
+    "damageDice": "2d6+2",
+    "damageType": "Psychic"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw Or Nightmare Ray"
+  }
+ },
+ {
+  "key": "OTYUGH",
+  "name": "Otyugh",
+  "size": "Large",
+  "type": "Aberration",
+  "cr": 5.0,
+  "ac": 14,
+  "hp": 104,
+  "hpDice": "11d10+44",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 16,
+   "DEX": 11,
+   "CON": 19,
+   "INT": 6,
+   "WIS": 13,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tentacle",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 1,
+   "attack": "Bite Attack And Two Tentacle"
+  }
+ },
+ {
+  "key": "OWLBEAR",
+  "name": "Owlbear",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 13,
+  "hp": 59,
+  "hpDice": "7d10+21",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 20,
+   "DEX": 12,
+   "CON": 17,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "PEGASUS",
+  "name": "Pegasus",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 59,
+  "hpDice": "7d10+21",
+  "speed": 60,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 10,
+   "WIS": 15,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PHASE_SPIDER",
+  "name": "Phase Spider",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 14,
+  "hp": 45,
+  "hpDice": "7d10+7",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 15,
+   "DEX": 16,
+   "CON": 12,
+   "INT": 6,
+   "WIS": 10,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "PIRATE",
+  "name": "Pirate",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 1.0,
+  "ac": 14,
+  "hp": 33,
+  "hpDice": "6d8+6",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 10,
+   "DEX": 16,
+   "CON": 12,
+   "INT": 8,
+   "WIS": 12,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Dagger",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "1d4+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Dagger"
+  }
+ },
+ {
+  "key": "PIRATE_CAPTAIN",
+  "name": "Pirate Captain",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 6.0,
+  "ac": 17,
+  "hp": 84,
+  "hpDice": "13d8+26",
+  "speed": 30,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 10,
+   "DEX": 18,
+   "CON": 14,
+   "INT": 10,
+   "WIS": 14,
+   "CHA": 17
+  },
+  "attacks": [
+   {
+    "name": "Rapier",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Pistol",
+    "kind": "RANGED",
+    "toHit": 7,
+    "reach": null,
+    "range": 30,
+    "damageDice": "2d10+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PIT_FIEND",
+  "name": "Pit Fiend",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 20.0,
+  "ac": 21,
+  "hp": 337,
+  "hpDice": "27d10+189",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 26,
+   "DEX": 14,
+   "CON": 24,
+   "INT": 22,
+   "WIS": 18,
+   "CHA": 24
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d6+8",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Devilish Claw",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "4d8+8",
+    "damageType": "Necrotic"
+   },
+   {
+    "name": "Fiery Mace",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "4d6+8",
+    "damageType": "Force"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PLANETAR",
+  "name": "Planetar",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 16.0,
+  "ac": 19,
+  "hp": 262,
+  "hpDice": "21d10+147",
+  "speed": 40,
+  "dexMod": 5,
+  "abilities": {
+   "STR": 24,
+   "DEX": 20,
+   "CON": 24,
+   "INT": 19,
+   "WIS": 22,
+   "CHA": 25
+  },
+  "attacks": [
+   {
+    "name": "Radiant Sword",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+7",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Radiant Sword"
+  }
+ },
+ {
+  "key": "PRIEST_ACOLYTE",
+  "name": "Priest Acolyte",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 14,
+   "DEX": 10,
+   "CON": 12,
+   "INT": 10,
+   "WIS": 14,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Mace",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Radiant Flame",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 60,
+    "damageDice": "2d6",
+    "damageType": "Radiant"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PRIEST",
+  "name": "Priest",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 38,
+  "hpDice": "7d8+7",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 16,
+   "DEX": 10,
+   "CON": 12,
+   "INT": 13,
+   "WIS": 16,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Mace",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Radiant Flame",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 60,
+    "damageDice": "2d10",
+    "damageType": "Radiant"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PSEUDODRAGON",
+  "name": "Pseudodragon",
+  "size": "Tiny",
+  "type": "Dragon",
+  "cr": 0.25,
+  "ac": 14,
+  "hp": 10,
+  "hpDice": "3d4+3",
+  "speed": 15,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 6,
+   "DEX": 15,
+   "CON": 13,
+   "INT": 10,
+   "WIS": 12,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "PURPLE_WORM",
+  "name": "Purple Worm",
+  "size": "Gargantuan",
+  "type": "Monstrosity",
+  "cr": 15.0,
+  "ac": 18,
+  "hp": 247,
+  "hpDice": "15d20+90",
+  "speed": 50,
+  "dexMod": -2,
+  "abilities": {
+   "STR": 28,
+   "DEX": 7,
+   "CON": 22,
+   "INT": 1,
+   "WIS": 8,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d8+9",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tail Stinger",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+9",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "QUASIT",
+  "name": "Quasit",
+  "size": "Tiny",
+  "type": "Fiend",
+  "cr": 1.0,
+  "ac": 13,
+  "hp": 25,
+  "hpDice": "10d4",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 5,
+   "DEX": 17,
+   "CON": 10,
+   "INT": 7,
+   "WIS": 10,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "RAKSHASA",
+  "name": "Rakshasa",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 13.0,
+  "ac": 17,
+  "hp": 221,
+  "hpDice": "26d8+104",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 14,
+   "DEX": 17,
+   "CON": 18,
+   "INT": 13,
+   "WIS": 16,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Cursed Touch",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Cursed Touch"
+  }
+ },
+ {
+  "key": "RED_DRAGON_WYRMLING",
+  "name": "Red Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 4.0,
+  "ac": 17,
+  "hp": 75,
+  "hpDice": "10d8+30",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 10,
+   "CON": 17,
+   "INT": 12,
+   "WIS": 11,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_RED_DRAGON",
+  "name": "Young Red Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 10.0,
+  "ac": 18,
+  "hp": 178,
+  "hpDice": "17d10+85",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 23,
+   "DEX": 10,
+   "CON": 21,
+   "INT": 14,
+   "WIS": 11,
+   "CHA": 19
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_RED_DRAGON",
+  "name": "Adult Red Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 17.0,
+  "ac": 19,
+  "hp": 256,
+  "hpDice": "19d12+133",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 27,
+   "DEX": 10,
+   "CON": 25,
+   "INT": 16,
+   "WIS": 13,
+   "CHA": 23
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d10+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_RED_DRAGON",
+  "name": "Ancient Red Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 24.0,
+  "ac": 22,
+  "hp": 507,
+  "hpDice": "26d20+234",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 30,
+   "DEX": 10,
+   "CON": 29,
+   "INT": 18,
+   "WIS": 15,
+   "CHA": 27
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 17,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+10",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "REMORHAZ",
+  "name": "Remorhaz",
+  "size": "Huge",
+  "type": "Monstrosity",
+  "cr": 11.0,
+  "ac": 17,
+  "hp": 195,
+  "hpDice": "17d12+85",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 24,
+   "DEX": 13,
+   "CON": 21,
+   "INT": 4,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 11,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+7",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ROC",
+  "name": "Roc",
+  "size": "Gargantuan",
+  "type": "Monstrosity",
+  "cr": 11.0,
+  "ac": 15,
+  "hp": 248,
+  "hpDice": "16d20+80",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 28,
+   "DEX": 10,
+   "CON": 20,
+   "INT": 3,
+   "WIS": 10,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Beak",
+    "kind": "MELEE",
+    "toHit": 13,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d12+9",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Talons",
+    "kind": "MELEE",
+    "toHit": 13,
+    "reach": 5,
+    "range": null,
+    "damageDice": "4d6+9",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Beak"
+  }
+ },
+ {
+  "key": "ROPER",
+  "name": "Roper",
+  "size": "Large",
+  "type": "Aberration",
+  "cr": 5.0,
+  "ac": 20,
+  "hp": 93,
+  "hpDice": "11d10+33",
+  "speed": 10,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 8,
+   "CON": 17,
+   "INT": 7,
+   "WIS": 16,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d8+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Tentacle"
+  }
+ },
+ {
+  "key": "RUST_MONSTER",
+  "name": "Rust Monster",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 0.5,
+  "ac": 14,
+  "hp": 33,
+  "hpDice": "6d8+6",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 13,
+   "DEX": 12,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 13,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SAHUAGIN_WARRIOR",
+  "name": "Sahuagin Warrior",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 0.5,
+  "ac": 12,
+  "hp": 22,
+  "hpDice": "4d8+4",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 13,
+   "DEX": 11,
+   "CON": 12,
+   "INT": 12,
+   "WIS": 13,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "SALAMANDER",
+  "name": "Salamander",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 5.0,
+  "ac": 15,
+  "hp": 90,
+  "hpDice": "12d10+24",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 14,
+   "CON": 15,
+   "INT": 11,
+   "WIS": 10,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Flame Spear",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "2d8+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Flame Spear"
+  }
+ },
+ {
+  "key": "SATYR",
+  "name": "Satyr",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 0.5,
+  "ac": 13,
+  "hp": 31,
+  "hpDice": "7d8",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 12,
+   "DEX": 16,
+   "CON": 11,
+   "INT": 12,
+   "WIS": 10,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SCOUT",
+  "name": "Scout",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.5,
+  "ac": 13,
+  "hp": 16,
+  "hpDice": "3d8+3",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 11,
+   "DEX": 14,
+   "CON": 12,
+   "INT": 11,
+   "WIS": 13,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Shortsword",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Longbow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 150,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SEA_HAG",
+  "name": "Sea Hag",
+  "size": "Medium",
+  "type": "Fey",
+  "cr": 2.0,
+  "ac": 14,
+  "hp": 52,
+  "hpDice": "7d8+21",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 13,
+   "CON": 16,
+   "INT": 12,
+   "WIS": 12,
+   "CHA": 13
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SHADOW",
+  "name": "Shadow",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 0.5,
+  "ac": 12,
+  "hp": 27,
+  "hpDice": "5d8+5",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 6,
+   "DEX": 14,
+   "CON": 13,
+   "INT": 6,
+   "WIS": 10,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Draining Swipe",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SHAMBLING_MOUND",
+  "name": "Shambling Mound",
+  "size": "Large",
+  "type": "Plant",
+  "cr": 5.0,
+  "ac": 15,
+  "hp": 110,
+  "hpDice": "13d10+39",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 8,
+   "CON": 16,
+   "INT": 5,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Charged Tendril",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Charged Tendril"
+  }
+ },
+ {
+  "key": "SHIELD_GUARDIAN",
+  "name": "Shield Guardian",
+  "size": "Large",
+  "type": "Construct",
+  "cr": 7.0,
+  "ac": 17,
+  "hp": 142,
+  "hpDice": "15d10+60",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 8,
+   "CON": 18,
+   "INT": 7,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Fist",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Fist"
+  }
+ },
+ {
+  "key": "SILVER_DRAGON_WYRMLING",
+  "name": "Silver Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 2.0,
+  "ac": 17,
+  "hp": 45,
+  "hpDice": "6d8+18",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 10,
+   "CON": 17,
+   "INT": 12,
+   "WIS": 11,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_SILVER_DRAGON",
+  "name": "Young Silver Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 9.0,
+  "ac": 18,
+  "hp": 168,
+  "hpDice": "16d10+80",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 23,
+   "DEX": 10,
+   "CON": 21,
+   "INT": 14,
+   "WIS": 11,
+   "CHA": 19
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_SILVER_DRAGON",
+  "name": "Adult Silver Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 16.0,
+  "ac": 19,
+  "hp": 216,
+  "hpDice": "16d12+112",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 27,
+   "DEX": 10,
+   "CON": 25,
+   "INT": 16,
+   "WIS": 13,
+   "CHA": 22
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 13,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d8+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_SILVER_DRAGON",
+  "name": "Ancient Silver Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 23.0,
+  "ac": 22,
+  "hp": 468,
+  "hpDice": "24d20+216",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 30,
+   "DEX": 10,
+   "CON": 29,
+   "INT": 18,
+   "WIS": 15,
+   "CHA": 26
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 17,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+10",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "SKELETON",
+  "name": "Skeleton",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 0.25,
+  "ac": 14,
+  "hp": 13,
+  "hpDice": "2d8+4",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 10,
+   "DEX": 16,
+   "CON": 15,
+   "INT": 6,
+   "WIS": 8,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Shortsword",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Shortbow",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 80,
+    "damageDice": "1d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WARHORSE_SKELETON",
+  "name": "Warhorse Skeleton",
+  "size": "Large",
+  "type": "Undead",
+  "cr": 0.5,
+  "ac": 13,
+  "hp": 22,
+  "hpDice": "3d10+6",
+  "speed": 60,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 12,
+   "CON": 15,
+   "INT": 2,
+   "WIS": 8,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MINOTAUR_SKELETON",
+  "name": "Minotaur Skeleton",
+  "size": "Large",
+  "type": "Undead",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 45,
+  "hpDice": "6d10+12",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 18,
+   "DEX": 11,
+   "CON": 15,
+   "INT": 6,
+   "WIS": 8,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d10+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SOLAR",
+  "name": "Solar",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 21.0,
+  "ac": 21,
+  "hp": 297,
+  "hpDice": "22d10+176",
+  "speed": 50,
+  "dexMod": 6,
+  "abilities": {
+   "STR": 26,
+   "DEX": 22,
+   "CON": 26,
+   "INT": 25,
+   "WIS": 25,
+   "CHA": 30
+  },
+  "attacks": [
+   {
+    "name": "Flying Sword",
+    "kind": "MELEE",
+    "toHit": 15,
+    "reach": 10,
+    "range": 120,
+    "damageDice": "4d6+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Flying Sword"
+  }
+ },
+ {
+  "key": "SPECTER",
+  "name": "Specter",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 1.0,
+  "ac": 12,
+  "hp": 22,
+  "hpDice": "5d8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 1,
+   "DEX": 14,
+   "CON": 11,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Life Drain",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SPHINX_OF_WONDER",
+  "name": "Sphinx of Wonder",
+  "size": "Tiny",
+  "type": "Celestial",
+  "cr": 1.0,
+  "ac": 13,
+  "hp": 24,
+  "hpDice": "7d4+7",
+  "speed": 20,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 6,
+   "DEX": 17,
+   "CON": 13,
+   "INT": 15,
+   "WIS": 12,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SPHINX_OF_LORE",
+  "name": "Sphinx of Lore",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 11.0,
+  "ac": 17,
+  "hp": 170,
+  "hpDice": "20d10+60",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 18,
+   "WIS": 18,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "SPHINX_OF_VALOR",
+  "name": "Sphinx of Valor",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 17.0,
+  "ac": 17,
+  "hp": 199,
+  "hpDice": "19d10+95",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 22,
+   "DEX": 10,
+   "CON": 20,
+   "INT": 16,
+   "WIS": 23,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 12,
+    "reach": 5,
+    "range": null,
+    "damageDice": "4d6+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "SPIRIT_NAGA",
+  "name": "Spirit Naga",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 8.0,
+  "ac": 17,
+  "hp": 135,
+  "hpDice": "18d10+36",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 18,
+   "DEX": 17,
+   "CON": 14,
+   "INT": 16,
+   "WIS": 15,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d6+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Necrotic Ray",
+    "kind": "RANGED",
+    "toHit": 6,
+    "reach": null,
+    "range": 60,
+    "damageDice": "6d6",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SPRITE",
+  "name": "Sprite",
+  "size": "Tiny",
+  "type": "Fey",
+  "cr": 0.25,
+  "ac": 15,
+  "hp": 10,
+  "hpDice": "4d4",
+  "speed": 10,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 3,
+   "DEX": 18,
+   "CON": 10,
+   "INT": 14,
+   "WIS": 13,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Needle Sword",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Enchanting Bow",
+    "kind": "RANGED",
+    "toHit": 6,
+    "reach": null,
+    "range": 40,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SPY",
+  "name": "Spy",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 1.0,
+  "ac": 12,
+  "hp": 27,
+  "hpDice": "6d8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 10,
+   "DEX": 15,
+   "CON": 10,
+   "INT": 12,
+   "WIS": 14,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Shortsword",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Hand Crossbow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 30,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "STIRGE",
+  "name": "Stirge",
+  "size": "Tiny",
+  "type": "Monstrosity",
+  "cr": 0.125,
+  "ac": 13,
+  "hp": 5,
+  "hpDice": "2d4",
+  "speed": 10,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 4,
+   "DEX": 16,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 8,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Proboscis",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "STONE_GIANT",
+  "name": "Stone Giant",
+  "size": "Huge",
+  "type": "Giant",
+  "cr": 7.0,
+  "ac": 17,
+  "hp": 126,
+  "hpDice": "11d12+55",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 23,
+   "DEX": 15,
+   "CON": 20,
+   "INT": 10,
+   "WIS": 12,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Stone Club",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 15,
+    "range": null,
+    "damageDice": "3d10+6",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Boulder",
+    "kind": "RANGED",
+    "toHit": 9,
+    "reach": null,
+    "range": 60,
+    "damageDice": "2d8+6",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "STONE_GOLEM",
+  "name": "Stone Golem",
+  "size": "Large",
+  "type": "Construct",
+  "cr": 10.0,
+  "ac": 18,
+  "hp": 220,
+  "hpDice": "21d10+105",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 22,
+   "DEX": 9,
+   "CON": 20,
+   "INT": 3,
+   "WIS": 11,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+6",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Force Bolt",
+    "kind": "RANGED",
+    "toHit": 9,
+    "reach": null,
+    "range": 120,
+    "damageDice": "4d10",
+    "damageType": "Force"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "STORM_GIANT",
+  "name": "Storm Giant",
+  "size": "Huge",
+  "type": "Giant",
+  "cr": 13.0,
+  "ac": 16,
+  "hp": 230,
+  "hpDice": "20d12+100",
+  "speed": 50,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 29,
+   "DEX": 14,
+   "CON": 20,
+   "INT": 16,
+   "WIS": 20,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Storm Sword",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 10,
+    "range": null,
+    "damageDice": "4d6+9",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Thunderbolt",
+    "kind": "RANGED",
+    "toHit": 14,
+    "reach": null,
+    "range": 500,
+    "damageDice": "2d12+9",
+    "damageType": "Lightning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SUCCUBUS",
+  "name": "Succubus",
+  "size": "Medium",
+  "type": "Fiend",
+  "cr": 4.0,
+  "ac": 15,
+  "hp": 71,
+  "hpDice": "13d8+13",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 8,
+   "DEX": 17,
+   "CON": 13,
+   "INT": 15,
+   "WIS": 12,
+   "CHA": 20
+  },
+  "attacks": [
+   {
+    "name": "Fiendish Touch",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d10+5",
+    "damageType": "Psychic"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "TARRASQUE",
+  "name": "Tarrasque",
+  "size": "Gargantuan",
+  "type": "Monstrosity",
+  "cr": 30.0,
+  "ac": 25,
+  "hp": 697,
+  "hpDice": "34d20+340",
+  "speed": 60,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 30,
+   "DEX": 11,
+   "CON": 30,
+   "INT": 3,
+   "WIS": 11,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 19,
+    "reach": 15,
+    "range": null,
+    "damageDice": "4d12+10",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 19,
+    "reach": 15,
+    "range": null,
+    "damageDice": "4d8+10",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 19,
+    "reach": 30,
+    "range": null,
+    "damageDice": "3d8+10",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 1,
+   "attack": "Bite Attack And Three Other"
+  }
+ },
+ {
+  "key": "TOUGH",
+  "name": "Tough",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.5,
+  "ac": 12,
+  "hp": 32,
+  "hpDice": "5d8+10",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 12,
+   "CON": 14,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Mace",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Heavy Crossbow",
+    "kind": "RANGED",
+    "toHit": 3,
+    "reach": null,
+    "range": 100,
+    "damageDice": "1d10+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "TOUGH_BOSS",
+  "name": "Tough Boss",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 4.0,
+  "ac": 16,
+  "hp": 82,
+  "hpDice": "11d8+33",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 14,
+   "CON": 16,
+   "INT": 11,
+   "WIS": 10,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Warhammer",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+3",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Heavy Crossbow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 100,
+    "damageDice": "2d10+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "TREANT",
+  "name": "Treant",
+  "size": "Huge",
+  "type": "Plant",
+  "cr": 9.0,
+  "ac": 16,
+  "hp": 138,
+  "hpDice": "12d12+60",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 23,
+   "DEX": 8,
+   "CON": 21,
+   "INT": 12,
+   "WIS": 16,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+6",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Hail of Bark",
+    "kind": "RANGED",
+    "toHit": 10,
+    "reach": null,
+    "range": 180,
+    "damageDice": "4d10+6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Slam"
+  }
+ },
+ {
+  "key": "TROLL",
+  "name": "Troll",
+  "size": "Large",
+  "type": "Giant",
+  "cr": 5.0,
+  "ac": 15,
+  "hp": 94,
+  "hpDice": "9d10+45",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 13,
+   "CON": 20,
+   "INT": 7,
+   "WIS": 9,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "TROLL_LIMB",
+  "name": "Troll Limb",
+  "size": "Small",
+  "type": "Giant",
+  "cr": 0.5,
+  "ac": 13,
+  "hp": 14,
+  "hpDice": "4d6",
+  "speed": 20,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 12,
+   "CON": 10,
+   "INT": 1,
+   "WIS": 9,
+   "CHA": 1
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "UNICORN",
+  "name": "Unicorn",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 5.0,
+  "ac": 12,
+  "hp": 97,
+  "hpDice": "13d10+26",
+  "speed": 50,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 14,
+   "CON": 15,
+   "INT": 11,
+   "WIS": 17,
+   "CHA": 16
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Radiant Horn",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+4",
+    "damageType": "Radiant"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "VAMPIRE_FAMILIAR",
+  "name": "Vampire Familiar",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 3.0,
+  "ac": 15,
+  "hp": 65,
+  "hpDice": "10d8+20",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 17,
+   "DEX": 16,
+   "CON": 15,
+   "INT": 10,
+   "WIS": 10,
+   "CHA": 14
+  },
+  "attacks": [
+   {
+    "name": "Umbral Dagger",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "1d4+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Umbral Dagger"
+  }
+ },
+ {
+  "key": "VAMPIRE_SPAWN",
+  "name": "Vampire Spawn",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 5.0,
+  "ac": 16,
+  "hp": 90,
+  "hpDice": "12d8+36",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 16,
+   "DEX": 16,
+   "CON": 16,
+   "INT": 11,
+   "WIS": 10,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "VAMPIRE",
+  "name": "Vampire",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 13.0,
+  "ac": 16,
+  "hp": 195,
+  "hpDice": "23d8+92",
+  "speed": 40,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 18,
+   "DEX": 18,
+   "CON": 18,
+   "INT": 17,
+   "WIS": 15,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Grave Strike (Vampire Form Only)",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "VROCK",
+  "name": "Vrock",
+  "size": "Large",
+  "type": "Fiend",
+  "cr": 6.0,
+  "ac": 15,
+  "hp": 152,
+  "hpDice": "16d10+64",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 15,
+   "CON": 18,
+   "INT": 8,
+   "WIS": 13,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Shred",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Shred"
+  }
+ },
+ {
+  "key": "WARRIOR_INFANTRY",
+  "name": "Warrior Infantry",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 0.125,
+  "ac": 13,
+  "hp": 9,
+  "hpDice": "2d8",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 13,
+   "DEX": 11,
+   "CON": 11,
+   "INT": 8,
+   "WIS": 11,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Spear",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "1d6+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WARRIOR_VETERAN",
+  "name": "Warrior Veteran",
+  "size": "Medium",
+  "type": "Humanoid",
+  "cr": 3.0,
+  "ac": 17,
+  "hp": 65,
+  "hpDice": "10d8+20",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 13,
+   "CON": 14,
+   "INT": 10,
+   "WIS": 11,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Greatsword",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Heavy Crossbow",
+    "kind": "RANGED",
+    "toHit": 3,
+    "reach": null,
+    "range": 100,
+    "damageDice": "2d10+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Greatsword Or Heavy Crossbow"
+  }
+ },
+ {
+  "key": "WATER_ELEMENTAL",
+  "name": "Water Elemental",
+  "size": "Large",
+  "type": "Elemental",
+  "cr": 5.0,
+  "ac": 14,
+  "hp": 114,
+  "hpDice": "12d10+48",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 14,
+   "CON": 18,
+   "INT": 5,
+   "WIS": 10,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Slam"
+  }
+ },
+ {
+  "key": "WEREBEAR",
+  "name": "Werebear",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 5.0,
+  "ac": 15,
+  "hp": 135,
+  "hpDice": "18d8+54",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 10,
+   "CON": 17,
+   "INT": 11,
+   "WIS": 12,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Bite (Bear or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d12+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Handaxe (Humanoid or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": 20,
+    "damageDice": "3d6+4",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Rend (Bear or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WEREBOAR",
+  "name": "Wereboar",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 4.0,
+  "ac": 15,
+  "hp": 97,
+  "hpDice": "15d8+30",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 17,
+   "DEX": 10,
+   "CON": 15,
+   "INT": 10,
+   "WIS": 11,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Gore (Boar or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Javelin (Humanoid or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": 30,
+    "damageDice": "3d6+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tusk (Boar or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WERERAT",
+  "name": "Wererat",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 60,
+  "hpDice": "11d8+11",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 10,
+   "DEX": 16,
+   "CON": 12,
+   "INT": 11,
+   "WIS": 10,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Bite (Rat or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Scratch",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Crossbow (Humanoid or Hybrid Form Only)",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 30,
+    "damageDice": "1d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WERETIGER",
+  "name": "Weretiger",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 4.0,
+  "ac": 12,
+  "hp": 120,
+  "hpDice": "16d8+48",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 10,
+   "WIS": 13,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Bite (Tiger or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Scratch",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Longbow (Humanoid or Hybrid Form Only)",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 150,
+    "damageDice": "2d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WEREWOLF",
+  "name": "Werewolf",
+  "size": "Medium",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 15,
+  "hp": 71,
+  "hpDice": "11d8+22",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 16,
+   "DEX": 14,
+   "CON": 14,
+   "INT": 10,
+   "WIS": 11,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Bite (Wolf or Hybrid Form Only)",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Scratch",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Longbow (Humanoid or Hybrid Form Only)",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 150,
+    "damageDice": "2d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WHITE_DRAGON_WYRMLING",
+  "name": "White Dragon Wyrmling",
+  "size": "Medium",
+  "type": "Dragon",
+  "cr": 2.0,
+  "ac": 16,
+  "hp": 32,
+  "hpDice": "5d8+10",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 14,
+   "DEX": 10,
+   "CON": 14,
+   "INT": 5,
+   "WIS": 10,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "YOUNG_WHITE_DRAGON",
+  "name": "Young White Dragon",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 6.0,
+  "ac": 17,
+  "hp": 123,
+  "hpDice": "13d10+52",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 18,
+   "DEX": 10,
+   "CON": 18,
+   "INT": 6,
+   "WIS": 11,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d4+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ADULT_WHITE_DRAGON",
+  "name": "Adult White Dragon",
+  "size": "Huge",
+  "type": "Dragon",
+  "cr": 13.0,
+  "ac": 18,
+  "hp": 200,
+  "hpDice": "16d12+96",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 22,
+   "DEX": 10,
+   "INT": 8,
+   "WIS": 12,
+   "CHA": 12
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 11,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+6",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "ANCIENT_WHITE_DRAGON",
+  "name": "Ancient White Dragon",
+  "size": "Gargantuan",
+  "type": "Dragon",
+  "cr": 20.0,
+  "ac": 20,
+  "hp": 333,
+  "hpDice": "18d20+144",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 26,
+   "DEX": 10,
+   "CON": 26,
+   "INT": 10,
+   "WIS": 13,
+   "CHA": 18
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 14,
+    "reach": 15,
+    "range": null,
+    "damageDice": "2d8+8",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 3,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "WIGHT",
+  "name": "Wight",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 3.0,
+  "ac": 14,
+  "hp": 82,
+  "hpDice": "11d8+33",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 15,
+   "DEX": 14,
+   "CON": 16,
+   "INT": 10,
+   "WIS": 13,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Necrotic Sword",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Slashing"
+   },
+   {
+    "name": "Necrotic Bow",
+    "kind": "RANGED",
+    "toHit": 4,
+    "reach": null,
+    "range": 150,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WILL_O_WISP",
+  "name": "Will-o'-Wisp",
+  "size": "Tiny",
+  "type": "Undead",
+  "cr": 2.0,
+  "ac": 19,
+  "hp": 27,
+  "hpDice": "11d4",
+  "speed": 5,
+  "dexMod": 9,
+  "abilities": {
+   "STR": 1,
+   "DEX": 28,
+   "CON": 10,
+   "INT": 13,
+   "WIS": 14,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Shock",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+2",
+    "damageType": "Lightning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WINTER_WOLF",
+  "name": "Winter Wolf",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 3.0,
+  "ac": 13,
+  "hp": 75,
+  "hpDice": "10d10+20",
+  "speed": 50,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 13,
+   "CON": 14,
+   "INT": 7,
+   "WIS": 12,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WORG",
+  "name": "Worg",
+  "size": "Large",
+  "type": "Fey",
+  "cr": 0.5,
+  "ac": 13,
+  "hp": 26,
+  "hpDice": "4d10+4",
+  "speed": 50,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 13,
+   "CON": 13,
+   "INT": 7,
+   "WIS": 11,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WRAITH",
+  "name": "Wraith",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 5.0,
+  "ac": 13,
+  "hp": 67,
+  "hpDice": "9d8+27",
+  "speed": 5,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 6,
+   "DEX": 16,
+   "CON": 16,
+   "INT": 12,
+   "WIS": 14,
+   "CHA": 15
+  },
+  "attacks": [
+   {
+    "name": "Life Drain",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "4d8+3",
+    "damageType": "Necrotic"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WYVERN",
+  "name": "Wyvern",
+  "size": "Large",
+  "type": "Dragon",
+  "cr": 6.0,
+  "ac": 14,
+  "hp": 127,
+  "hpDice": "15d10+45",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 10,
+   "CON": 16,
+   "INT": 5,
+   "WIS": 12,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Sting",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "XORN",
+  "name": "Xorn",
+  "size": "Medium",
+  "type": "Elemental",
+  "cr": 5.0,
+  "ac": 19,
+  "hp": 84,
+  "hpDice": "8d8+48",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 17,
+   "DEX": 10,
+   "CON": 22,
+   "INT": 11,
+   "WIS": 10,
+   "CHA": 11
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "4d6+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 1,
+   "attack": "Bite Attack And Three Claw"
+  }
+ },
+ {
+  "key": "ZOMBIE",
+  "name": "Zombie",
+  "size": "Medium",
+  "type": "Undead",
+  "cr": 0.25,
+  "ac": 8,
+  "hp": 15,
+  "hpDice": "2d8+6",
+  "speed": 20,
+  "dexMod": -2,
+  "abilities": {
+   "STR": 13,
+   "DEX": 6,
+   "CON": 16,
+   "INT": 3,
+   "WIS": 6,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+1",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "OGRE_ZOMBIE",
+  "name": "Ogre Zombie",
+  "size": "Large",
+  "type": "Undead",
+  "cr": 2.0,
+  "ac": 8,
+  "hp": 85,
+  "hpDice": "9d10+36",
+  "speed": 30,
+  "dexMod": -2,
+  "abilities": {
+   "STR": 19,
+   "DEX": 6,
+   "CON": 18,
+   "INT": 3,
+   "WIS": 6,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Slam",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ALLOSAURUS",
+  "name": "Allosaurus",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 51,
+  "hpDice": "6d10+18",
+  "speed": 60,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 19,
+   "DEX": 13,
+   "CON": 17,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d10+4",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claws",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ANKYLOSAURUS",
+  "name": "Ankylosaurus",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 3.0,
+  "ac": 15,
+  "hp": 68,
+  "hpDice": "8d12+16",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 19,
+   "DEX": 11,
+   "CON": 15,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d10+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Tail"
+  }
+ },
+ {
+  "key": "APE",
+  "name": "Ape",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 12,
+  "hp": 19,
+  "hpDice": "3d8+6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 16,
+   "DEX": 14,
+   "CON": 14,
+   "INT": 6,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Fist",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Rock (Recharge 6)",
+    "kind": "RANGED",
+    "toHit": 5,
+    "reach": null,
+    "range": 25,
+    "damageDice": "2d6+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Fist"
+  }
+ },
+ {
+  "key": "ARCHELON",
+  "name": "Archelon",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 4.0,
+  "ac": 17,
+  "hp": 90,
+  "hpDice": "12d12+12",
+  "speed": 20,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 18,
+   "DEX": 16,
+   "CON": 13,
+   "INT": 4,
+   "WIS": 14,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "BABOON",
+  "name": "Baboon",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 3,
+  "hpDice": "1d6",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 8,
+   "DEX": 14,
+   "CON": 11,
+   "INT": 4,
+   "WIS": 12,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 1,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4-1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BADGER",
+  "name": "Badger",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 11,
+  "hp": 5,
+  "hpDice": "1d4+3",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 10,
+   "DEX": 11,
+   "CON": 16,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BAT",
+  "name": "Bat",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 5,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 2,
+   "DEX": 15,
+   "CON": 8,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BLACK_BEAR",
+  "name": "Black Bear",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 11,
+  "hp": 19,
+  "hpDice": "3d8+6",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 12,
+   "CON": 14,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "BLOOD_HAWK",
+  "name": "Blood Hawk",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 12,
+  "hp": 7,
+  "hpDice": "2d6",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 6,
+   "DEX": 14,
+   "CON": 10,
+   "INT": 3,
+   "WIS": 14,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Beak",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BOAR",
+  "name": "Boar",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 11,
+  "hp": 13,
+  "hpDice": "2d8+4",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 13,
+   "DEX": 11,
+   "CON": 14,
+   "INT": 2,
+   "WIS": 9,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "BROWN_BEAR",
+  "name": "Brown Bear",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 11,
+  "hp": 22,
+  "hpDice": "3d10+6",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 17,
+   "DEX": 12,
+   "CON": 15,
+   "INT": 2,
+   "WIS": 13,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CAMEL",
+  "name": "Camel",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 10,
+  "hp": 17,
+  "hpDice": "2d10+6",
+  "speed": 50,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 8,
+   "CON": 17,
+   "INT": 2,
+   "WIS": 11,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CAT",
+  "name": "Cat",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 2,
+  "hpDice": "1d4",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 3,
+   "DEX": 15,
+   "CON": 10,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Scratch",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CONSTRICTOR_SNAKE",
+  "name": "Constrictor Snake",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 13,
+  "hpDice": "2d10+2",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 15,
+   "DEX": 14,
+   "CON": 12,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CRAB",
+  "name": "Crab",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 11,
+  "hp": 3,
+  "hpDice": "1d4+1",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 6,
+   "DEX": 11,
+   "CON": 12,
+   "INT": 1,
+   "WIS": 8,
+   "CHA": 2
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "CROCODILE",
+  "name": "Crocodile",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 12,
+  "hp": 13,
+  "hpDice": "2d10+2",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 15,
+   "DEX": 10,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DEER",
+  "name": "Deer",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 13,
+  "hp": 4,
+  "hpDice": "1d8",
+  "speed": 50,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 11,
+   "DEX": 16,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 14,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Ram",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DIRE_WOLF",
+  "name": "Dire Wolf",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 14,
+  "hp": 22,
+  "hpDice": "3d10+6",
+  "speed": 50,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 15,
+   "CON": 15,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "DRAFT_HORSE",
+  "name": "Draft Horse",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 10,
+  "hp": 15,
+  "hpDice": "2d10+4",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 18,
+   "DEX": 10,
+   "CON": 15,
+   "INT": 2,
+   "WIS": 11,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "EAGLE",
+  "name": "Eagle",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 4,
+  "hpDice": "1d6+1",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 6,
+   "DEX": 15,
+   "CON": 12,
+   "INT": 2,
+   "WIS": 14,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Talons",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "ELEPHANT",
+  "name": "Elephant",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 4.0,
+  "ac": 12,
+  "hp": 76,
+  "hpDice": "8d12+24",
+  "speed": 40,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 22,
+   "DEX": 9,
+   "CON": 17,
+   "INT": 3,
+   "WIS": 11,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Gore"
+  }
+ },
+ {
+  "key": "ELK",
+  "name": "Elk",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 10,
+  "hp": 11,
+  "hpDice": "2d10",
+  "speed": 50,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 16,
+   "DEX": 10,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Ram",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "FLYING_SNAKE",
+  "name": "Flying Snake",
+  "size": "Tiny",
+  "type": "Monstrosity",
+  "cr": 0.125,
+  "ac": 14,
+  "hp": 5,
+  "hpDice": "2d4",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 4,
+   "DEX": 15,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "FROG",
+  "name": "Frog",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 11,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 20,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 1,
+   "DEX": 13,
+   "CON": 8,
+   "INT": 1,
+   "WIS": 8,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_APE",
+  "name": "Giant Ape",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 7.0,
+  "ac": 12,
+  "hp": 168,
+  "hpDice": "16d12+64",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 23,
+   "DEX": 14,
+   "CON": 18,
+   "INT": 5,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Fist",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d10+6",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Fist"
+  }
+ },
+ {
+  "key": "GIANT_BADGER",
+  "name": "Giant Badger",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 15,
+  "hpDice": "2d8+6",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 13,
+   "DEX": 10,
+   "CON": 17,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_BAT",
+  "name": "Giant Bat",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 22,
+  "hpDice": "4d10",
+  "speed": 10,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 15,
+   "DEX": 16,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_BOAR",
+  "name": "Giant Boar",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 42,
+  "hpDice": "5d10+15",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 17,
+   "DEX": 10,
+   "CON": 16,
+   "INT": 2,
+   "WIS": 7,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_CENTIPEDE",
+  "name": "Giant Centipede",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 14,
+  "hp": 9,
+  "hpDice": "2d6+2",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 5,
+   "DEX": 14,
+   "CON": 12,
+   "INT": 1,
+   "WIS": 7,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_CONSTRICTOR_SNAKE",
+  "name": "Giant Constrictor Snake",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 60,
+  "hpDice": "8d12+8",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 19,
+   "DEX": 14,
+   "CON": 12,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_CRAB",
+  "name": "Giant Crab",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 15,
+  "hp": 13,
+  "hpDice": "3d8",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 13,
+   "DEX": 13,
+   "CON": 11,
+   "INT": 1,
+   "WIS": 9,
+   "CHA": 3
+  },
+  "attacks": [],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_CROCODILE",
+  "name": "Giant Crocodile",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 5.0,
+  "ac": 14,
+  "hp": 85,
+  "hpDice": "9d12+27",
+  "speed": 30,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 21,
+   "DEX": 9,
+   "CON": 17,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d10+5",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 8,
+    "reach": 10,
+    "range": null,
+    "damageDice": "3d8+5",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_EAGLE",
+  "name": "Giant Eagle",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 1.0,
+  "ac": 13,
+  "hp": 26,
+  "hpDice": "4d10+4",
+  "speed": 10,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 16,
+   "DEX": 17,
+   "CON": 13,
+   "INT": 8,
+   "WIS": 14,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "GIANT_ELK",
+  "name": "Giant Elk",
+  "size": "Huge",
+  "type": "Celestial",
+  "cr": 2.0,
+  "ac": 14,
+  "hp": 42,
+  "hpDice": "5d12+10",
+  "speed": 60,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 19,
+   "DEX": 18,
+   "CON": 14,
+   "INT": 7,
+   "WIS": 14,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Ram",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_FIRE_BEETLE",
+  "name": "Giant Fire Beetle",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 13,
+  "hp": 4,
+  "hpDice": "1d6+1",
+  "speed": 30,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 8,
+   "DEX": 10,
+   "CON": 12,
+   "INT": 1,
+   "WIS": 7,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 1,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Fire"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_FROG",
+  "name": "Giant Frog",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 11,
+  "hp": 18,
+  "hpDice": "4d8",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 12,
+   "DEX": 13,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_GOAT",
+  "name": "Giant Goat",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 11,
+  "hp": 19,
+  "hpDice": "3d10+3",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 17,
+   "DEX": 13,
+   "CON": 12,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Ram",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_HYENA",
+  "name": "Giant Hyena",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 12,
+  "hp": 45,
+  "hpDice": "6d10+12",
+  "speed": 50,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 16,
+   "DEX": 14,
+   "CON": 14,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_LIZARD",
+  "name": "Giant Lizard",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 12,
+  "hp": 19,
+  "hpDice": "3d10+3",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 12,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_OCTOPUS",
+  "name": "Giant Octopus",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 11,
+  "hp": 45,
+  "hpDice": "7d10+7",
+  "speed": 10,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 17,
+   "DEX": 13,
+   "CON": 13,
+   "INT": 5,
+   "WIS": 10,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Tentacles",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_OWL",
+  "name": "Giant Owl",
+  "size": "Large",
+  "type": "Celestial",
+  "cr": 0.25,
+  "ac": 12,
+  "hp": 19,
+  "hpDice": "3d10+3",
+  "speed": 5,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 13,
+   "DEX": 15,
+   "CON": 12,
+   "INT": 10,
+   "WIS": 14,
+   "CHA": 10
+  },
+  "attacks": [
+   {
+    "name": "Talons",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d10+2",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_RAT",
+  "name": "Giant Rat",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 13,
+  "hp": 7,
+  "hpDice": "2d6",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 7,
+   "DEX": 16,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_SCORPION",
+  "name": "Giant Scorpion",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 3.0,
+  "ac": 15,
+  "hp": 52,
+  "hpDice": "7d10+14",
+  "speed": 40,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 13,
+   "CON": 15,
+   "INT": 1,
+   "WIS": 9,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Claw",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Bludgeoning"
+   },
+   {
+    "name": "Sting",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Claw"
+  }
+ },
+ {
+  "key": "GIANT_SEAHORSE",
+  "name": "Giant Seahorse",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 14,
+  "hp": 16,
+  "hpDice": "3d10",
+  "speed": 5,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 12,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Ram",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+2",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_SHARK",
+  "name": "Giant Shark",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 5.0,
+  "ac": 13,
+  "hp": 92,
+  "hpDice": "8d12+40",
+  "speed": 5,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 23,
+   "DEX": 11,
+   "CON": 21,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d10+6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "GIANT_SPIDER",
+  "name": "Giant Spider",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 14,
+  "hp": 26,
+  "hpDice": "4d10+4",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 14,
+   "DEX": 16,
+   "CON": 12,
+   "INT": 2,
+   "WIS": 11,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_TOAD",
+  "name": "Giant Toad",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 11,
+  "hp": 39,
+  "hpDice": "6d10+6",
+  "speed": 30,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 15,
+   "DEX": 13,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_VENOMOUS_SNAKE",
+  "name": "Giant Venomous Snake",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 14,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 40,
+  "dexMod": 4,
+  "abilities": {
+   "STR": 10,
+   "DEX": 18,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "1d4+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_VULTURE",
+  "name": "Giant Vulture",
+  "size": "Large",
+  "type": "Monstrosity",
+  "cr": 1.0,
+  "ac": 10,
+  "hp": 25,
+  "hpDice": "3d10+9",
+  "speed": 10,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 15,
+   "DEX": 10,
+   "CON": 16,
+   "INT": 6,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Gouge",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_WASP",
+  "name": "Giant Wasp",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 13,
+  "hp": 22,
+  "hpDice": "5d8",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 10,
+   "DEX": 14,
+   "CON": 10,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Sting",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_WEASEL",
+  "name": "Giant Weasel",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 13,
+  "hp": 9,
+  "hpDice": "2d8",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 11,
+   "DEX": 17,
+   "CON": 10,
+   "INT": 4,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GIANT_WOLF_SPIDER",
+  "name": "Giant Wolf Spider",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 12,
+   "DEX": 16,
+   "CON": 13,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+3",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "GOAT",
+  "name": "Goat",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 10,
+  "hp": 4,
+  "hpDice": "1d8",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 11,
+   "DEX": 10,
+   "CON": 11,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Ram",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HAWK",
+  "name": "Hawk",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 13,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 10,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 5,
+   "DEX": 16,
+   "CON": 8,
+   "INT": 2,
+   "WIS": 14,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Talons",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HIPPOPOTAMUS",
+  "name": "Hippopotamus",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 4.0,
+  "ac": 14,
+  "hp": 82,
+  "hpDice": "11d10+22",
+  "speed": 30,
+  "dexMod": -2,
+  "abilities": {
+   "STR": 21,
+   "DEX": 7,
+   "CON": 15,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d10+5",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Bite"
+  }
+ },
+ {
+  "key": "HUNTER_SHARK",
+  "name": "Hunter Shark",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 45,
+  "hpDice": "6d10+12",
+  "speed": 5,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 14,
+   "CON": 15,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "3d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "HYENA",
+  "name": "Hyena",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 11,
+  "hp": 5,
+  "hpDice": "1d8+1",
+  "speed": 50,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 11,
+   "DEX": 13,
+   "CON": 12,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "JACKAL",
+  "name": "Jackal",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 3,
+  "hpDice": "1d6",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 8,
+   "DEX": 15,
+   "CON": 11,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 6
+  },
+  "attacks": [],
+  "multiattack": null
+ },
+ {
+  "key": "KILLER_WHALE",
+  "name": "Killer Whale",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 3.0,
+  "ac": 12,
+  "hp": 90,
+  "hpDice": "12d12+12",
+  "speed": 5,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 19,
+   "DEX": 14,
+   "CON": 13,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "5d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "LION",
+  "name": "Lion",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 12,
+  "hp": 22,
+  "hpDice": "4d10",
+  "speed": 50,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 17,
+   "DEX": 15,
+   "CON": 11,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "LIZARD",
+  "name": "Lizard",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 10,
+  "hp": 2,
+  "hpDice": "1d4",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 2,
+   "DEX": 11,
+   "CON": 10,
+   "INT": 1,
+   "WIS": 8,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MAMMOTH",
+  "name": "Mammoth",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 6.0,
+  "ac": 13,
+  "hp": 126,
+  "hpDice": "11d12+55",
+  "speed": 50,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 24,
+   "DEX": 9,
+   "CON": 21,
+   "INT": 3,
+   "WIS": 11,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d10+7",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Gore"
+  }
+ },
+ {
+  "key": "MASTIFF",
+  "name": "Mastiff",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 12,
+  "hp": 5,
+  "hpDice": "1d8+1",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 13,
+   "DEX": 14,
+   "CON": 12,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "MULE",
+  "name": "Mule",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 10,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 14,
+   "DEX": 10,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "OCTOPUS",
+  "name": "Octopus",
+  "size": "Small",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 3,
+  "hpDice": "1d6",
+  "speed": 5,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 4,
+   "DEX": 15,
+   "CON": 11,
+   "INT": 3,
+   "WIS": 10,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Tentacles",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "OWL",
+  "name": "Owl",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 11,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 5,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 3,
+   "DEX": 13,
+   "CON": 8,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Talons",
+    "kind": "MELEE",
+    "toHit": 3,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PANTHER",
+  "name": "Panther",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 13,
+  "hpDice": "3d8",
+  "speed": 50,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 14,
+   "DEX": 16,
+   "CON": 10,
+   "INT": 3,
+   "WIS": 14,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PIRANHA",
+  "name": "Piranha",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 13,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 5,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 2,
+   "DEX": 16,
+   "CON": 9,
+   "INT": 1,
+   "WIS": 7,
+   "CHA": 2
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PLESIOSAURUS",
+  "name": "Plesiosaurus",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 68,
+  "hpDice": "8d10+24",
+  "speed": 20,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 18,
+   "DEX": 15,
+   "CON": 16,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 10,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "POLAR_BEAR",
+  "name": "Polar Bear",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 12,
+  "hp": 42,
+  "hpDice": "5d10+15",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 20,
+   "DEX": 14,
+   "CON": 16,
+   "INT": 2,
+   "WIS": 13,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+5",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "PONY",
+  "name": "Pony",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 10,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 40,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 15,
+   "DEX": 10,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 11,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "PTERANODON",
+  "name": "Pteranodon",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 13,
+  "hp": 13,
+  "hpDice": "3d8",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 12,
+   "DEX": 15,
+   "CON": 10,
+   "INT": 2,
+   "WIS": 9,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "RAT",
+  "name": "Rat",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 10,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 20,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 2,
+   "DEX": 11,
+   "CON": 9,
+   "INT": 2,
+   "WIS": 10,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "RAVEN",
+  "name": "Raven",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 2,
+  "hpDice": "1d4",
+  "speed": 10,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 2,
+   "DEX": 14,
+   "CON": 10,
+   "INT": 5,
+   "WIS": 13,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Beak",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "REEF_SHARK",
+  "name": "Reef Shark",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 12,
+  "hp": 22,
+  "hpDice": "4d8+4",
+  "speed": 5,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 14,
+   "DEX": 15,
+   "CON": 13,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "RHINOCEROS",
+  "name": "Rhinoceros",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 45,
+  "hpDice": "6d10+12",
+  "speed": 40,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 21,
+   "DEX": 8,
+   "CON": 15,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 7,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d8+5",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "RIDING_HORSE",
+  "name": "Riding Horse",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 11,
+  "hp": 13,
+  "hpDice": "2d10+2",
+  "speed": 60,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 16,
+   "DEX": 13,
+   "CON": 12,
+   "INT": 2,
+   "WIS": 11,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+3",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SABER_TOOTHED_TIGER",
+  "name": "Saber-Toothed Tiger",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 2.0,
+  "ac": 13,
+  "hp": 52,
+  "hpDice": "7d10+14",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 18,
+   "DEX": 17,
+   "CON": 15,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+4",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Rend"
+  }
+ },
+ {
+  "key": "SCORPION",
+  "name": "Scorpion",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 11,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 10,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 2,
+   "DEX": 11,
+   "CON": 8,
+   "INT": 1,
+   "WIS": 8,
+   "CHA": 2
+  },
+  "attacks": [
+   {
+    "name": "Sting",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "SEAHORSE",
+  "name": "Seahorse",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 5,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 1,
+   "DEX": 12,
+   "CON": 8,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 2
+  },
+  "attacks": [],
+  "multiattack": null
+ },
+ {
+  "key": "SPIDER",
+  "name": "Spider",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 12,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 20,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 2,
+   "DEX": 14,
+   "CON": 8,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 2
+  },
+  "attacks": [
+   {
+    "name": "Bites",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d8+4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "TIGER",
+  "name": "Tiger",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 1.0,
+  "ac": 13,
+  "hp": 30,
+  "hpDice": "4d10+8",
+  "speed": 40,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 17,
+   "DEX": 16,
+   "CON": 14,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 8
+  },
+  "attacks": [
+   {
+    "name": "Rend",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d6+3",
+    "damageType": "Slashing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "TRICERATOPS",
+  "name": "Triceratops",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 5.0,
+  "ac": 14,
+  "hp": 114,
+  "hpDice": "12d12+36",
+  "speed": 50,
+  "dexMod": -1,
+  "abilities": {
+   "STR": 22,
+   "DEX": 9,
+   "CON": 17,
+   "INT": 2,
+   "WIS": 11,
+   "CHA": 5
+  },
+  "attacks": [
+   {
+    "name": "Gore",
+    "kind": "MELEE",
+    "toHit": 9,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d12+6",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": {
+   "count": 2,
+   "attack": "Gore"
+  }
+ },
+ {
+  "key": "TYRANNOSAURUS_REX",
+  "name": "Tyrannosaurus Rex",
+  "size": "Huge",
+  "type": "Beast",
+  "cr": 8.0,
+  "ac": 13,
+  "hp": 136,
+  "hpDice": "13d12+52",
+  "speed": 50,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 25,
+   "DEX": 10,
+   "CON": 19,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 9
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 10,
+    "range": null,
+    "damageDice": "4d12+7",
+    "damageType": "Piercing"
+   },
+   {
+    "name": "Tail",
+    "kind": "MELEE",
+    "toHit": 10,
+    "reach": 15,
+    "range": null,
+    "damageDice": "4d8+7",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "VENOMOUS_SNAKE",
+  "name": "Venomous Snake",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.125,
+  "ac": 12,
+  "hp": 5,
+  "hpDice": "2d4",
+  "speed": 30,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 2,
+   "DEX": 15,
+   "CON": 11,
+   "INT": 1,
+   "WIS": 10,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "VULTURE",
+  "name": "Vulture",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 10,
+  "hp": 5,
+  "hpDice": "1d8+1",
+  "speed": 10,
+  "dexMod": 0,
+  "abilities": {
+   "STR": 7,
+   "DEX": 10,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 4
+  },
+  "attacks": [
+   {
+    "name": "Beak",
+    "kind": "MELEE",
+    "toHit": 2,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d4",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WARHORSE",
+  "name": "Warhorse",
+  "size": "Large",
+  "type": "Beast",
+  "cr": 0.5,
+  "ac": 11,
+  "hp": 19,
+  "hpDice": "3d10+3",
+  "speed": 60,
+  "dexMod": 1,
+  "abilities": {
+   "STR": 18,
+   "DEX": 12,
+   "CON": 13,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 7
+  },
+  "attacks": [
+   {
+    "name": "Hooves",
+    "kind": "MELEE",
+    "toHit": 6,
+    "reach": 5,
+    "range": null,
+    "damageDice": "2d4+4",
+    "damageType": "Bludgeoning"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WEASEL",
+  "name": "Weasel",
+  "size": "Tiny",
+  "type": "Beast",
+  "cr": 0.0,
+  "ac": 13,
+  "hp": 1,
+  "hpDice": "1d4-1",
+  "speed": 30,
+  "dexMod": 3,
+  "abilities": {
+   "STR": 3,
+   "DEX": 16,
+   "CON": 8,
+   "INT": 2,
+   "WIS": 12,
+   "CHA": 3
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 5,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ },
+ {
+  "key": "WOLF",
+  "name": "Wolf",
+  "size": "Medium",
+  "type": "Beast",
+  "cr": 0.25,
+  "ac": 12,
+  "hp": 11,
+  "hpDice": "2d8+2",
+  "speed": 40,
+  "dexMod": 2,
+  "abilities": {
+   "STR": 14,
+   "DEX": 15,
+   "CON": 12,
+   "INT": 3,
+   "WIS": 12,
+   "CHA": 6
+  },
+  "attacks": [
+   {
+    "name": "Bite",
+    "kind": "MELEE",
+    "toHit": 4,
+    "reach": 5,
+    "range": null,
+    "damageDice": "1d6+2",
+    "damageType": "Piercing"
+   }
+  ],
+  "multiattack": null
+ }
+]

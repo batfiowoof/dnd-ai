@@ -41,32 +41,40 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-  # ── Spring AI (Ollama) ──────────────────────────────
+  # ── Spring AI (cloud chat + local embeddings) ───────
   ai:
-    ollama:
-      base-url: http://localhost:11434
+    # Both the OpenAI and Ollama starters are on the classpath. These selectors pick which
+    # provider's auto-config serves each model type, so there's exactly one ChatModel and one
+    # EmbeddingModel bean: chat → OpenAI (pointed at OpenRouter), embeddings → Ollama (bge-m3).
+    model:
+      chat: openai
+      embedding: ollama
+    # Chat model runs in the cloud via OpenRouter (OpenAI-compatible). Old hardware can't run
+    # the chat model locally; OpenRouter gives free/near-cost access to many models.
+    openai:
+      # NOTE: no trailing /v1 — Spring AI appends its completions path (/v1/chat/completions).
+      # Using .../api/v1 here produces a doubled .../api/v1/v1/chat/completions → 404.
+      base-url: https://openrouter.ai/api
+      api-key: ${OPENROUTER_API_KEY}
       chat:
         options:
-          # Standard non-thinking instruct model. (qwen3.5:4b is a reasoning model that emits a
-          # <think> block instead of narration, so its visible reply came back empty.)
-          model: qwen2.5:7b
+          # Prefer a non-reasoning *instruct* model: reasoning models can emit a <think> block
+          # instead of narration (which once returned an empty visible reply). Swapping models
+          # later is a one-string change. Free tier has rate limits (~20 req/min, ~200 req/day);
+          # switch to a cheap paid model here if you hit them.
+          model: google/gemma-4-31b-it
           temperature: 0.7
           top-p: 0.9
-          # Tight context (4096) keeps the attention compute buffer small with Flash Attention
-          # off; with the embedder on CPU (below) the whole GPU is free for the chat model.
-          num-ctx: 4096
-          # Keep the model resident between turns. Without this the app unloads it right after
-          # each reply, so every turn pays the full reload-from-disk cost. 30m stays warm through
-          # a session and releases when idle (so it doesn't hold ~5 GB of VRAM forever).
-          keep-alive: 30m
+    ollama:
+      base-url: http://localhost:11434
+      # Embeddings stay local — light (~0.2 s/query on CPU) and keeps the seeded bge-m3 corpus
+      # valid (no re-seed, no migration). Local Ollama only needs `ollama pull bge-m3`.
       embedding:
         options:
           model: bge-m3
-          # Run the embedder on CPU (0 GPU layers) so all VRAM is free for the chat model.
-          # Runtime only embeds one short query per turn (~0.2 s on CPU) — the heavy one-time
-          # corpus seed already ran. Frees ~1 GB of VRAM.
+          # Run the embedder on CPU (0 GPU layers).
           num-gpu: 0
-          # Keep the embedder resident too, so it isn't reloaded every turn.
+          # Keep the embedder resident so it isn't reloaded every turn.
           keep-alive: 30m
     vectorstore:
       pgvector:
@@ -89,21 +97,21 @@ dnd:
     seed-srd: true
 
 # ── Resilience4j ────────────────────────────────────
+# DmAiService.streamToString already retries transient cloud errors (429/5xx) with backoff,
+# so the breaker should trip only on SUSTAINED outages and recover quickly.
 resilience4j:
   circuitbreaker:
     instances:
       aiService:
-        sliding-window-size: 10
+        sliding-window-size: 20
         failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
+        wait-duration-in-open-state: 15s # cloud recovers fast; was 30s (local-era)
         permitted-number-of-calls-in-half-open-state: 3
-        minimum-number-of-calls: 5
+        minimum-number-of-calls: 8 # don't open on one or two transient blips
         register-health-indicator: true
-  timelimiter:
-    instances:
-      aiService:
-        # Applies to the reactive/streaming path; local models can run long.
-        timeout-duration: 120s
+  # NOTE: no timelimiter here — resilience4j time limiting only wraps reactive / CompletableFuture
+  # returns, and DmAiService methods return String, so it never applied. The in-call retry and the
+  # circuit breaker govern latency/failures instead.
 
 # ── Actuator ────────────────────────────────────────
 management:

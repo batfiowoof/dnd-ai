@@ -1,14 +1,13 @@
 import { create } from "zustand";
 import type {
+  CombatActionEvent,
   CombatLifecycleEvent,
   CombatStateDto,
   DiceRollEvent,
   DmResponseDto,
-  EnemyActionEvent,
   GameStateDto,
   PlayerDto,
   PlayerRuntimeState,
-  RollRequestEvent,
   RoundStatusEvent,
   TurnEventDto,
   TurnMode,
@@ -63,11 +62,15 @@ interface SessionState {
   lastRoll: DiceRoll | null;
   runtimeByPlayerId: Record<string, PlayerRuntimeState>;
   combat: CombatStateDto | null;
-  lastEnemyAction: (EnemyActionEvent & { eventId: string }) | null;
+  /**
+   * FIFO buffer of combat actions awaiting animation. The backend resolves a whole
+   * combat beat (the player's action, then every enemy turn) in one burst; queueing
+   * lets the modal play them back one at a time, in order, instead of only ever showing
+   * the last event (the old single-slot bug where it looked like the enemy acted first).
+   */
+  combatActionQueue: (CombatActionEvent & { eventId: string })[];
   /** Collaborative round collection status (null when no window is open). */
   round: RoundStatus | null;
-  /** DM-requested ability check addressed to the local player (null when none). */
-  pendingCheck: RollRequestEvent | null;
 
   /* server-state seeding (React Query → store) */
   hydrateFromGameState: (gs: GameStateDto) => void;
@@ -100,16 +103,15 @@ interface SessionState {
   applyPlayerState: (state: PlayerRuntimeState) => void;
   setCombat: (combat: CombatStateDto | null) => void;
   applyCombatLifecycle: (evt: CombatLifecycleEvent) => void;
-  applyEnemyAction: (evt: EnemyActionEvent) => void;
+  applyCombatAction: (evt: CombatActionEvent) => void;
+  dequeueCombatAction: () => void;
   setTurnChange: (nextPlayerId: string | null, turnNumber: number) => void;
   applyPlayerEvent: (gs: GameStateDto) => void;
   applyGameStarted: (gs: GameStateDto) => void;
   applyGameEnded: () => void;
 
-  /* collaborative round + LLM-requested checks */
+  /* collaborative round */
   applyRoundStatus: (evt: RoundStatusEvent) => void;
-  applyRollRequest: (evt: RollRequestEvent) => void;
-  clearPendingCheck: () => void;
 
   setConnected: (connected: boolean) => void;
   setError: (error: string) => void;
@@ -130,9 +132,8 @@ const initialState = {
   lastRoll: null as DiceRoll | null,
   runtimeByPlayerId: {} as Record<string, PlayerRuntimeState>,
   combat: null as CombatStateDto | null,
-  lastEnemyAction: null as (EnemyActionEvent & { eventId: string }) | null,
+  combatActionQueue: [] as (CombatActionEvent & { eventId: string })[],
   round: null as RoundStatus | null,
-  pendingCheck: null as RollRequestEvent | null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -356,7 +357,7 @@ export const useSessionStore = create<SessionState>((set) => ({
           : "The party has fallen...";
         return {
           combat: null,
-          lastEnemyAction: null,
+          combatActionQueue: [],
           logs: [
             ...state.logs,
             {
@@ -383,15 +384,25 @@ export const useSessionStore = create<SessionState>((set) => ({
       };
     }),
 
-  /* ENEMY_ACTION — refresh combat (enemy HP) and trigger the action modal. */
-  applyEnemyAction: (evt) =>
-    set(() => ({
+  /* COMBAT_ACTION — refresh combat (HP bars) and APPEND to the playback queue so each
+     action animates in arrival order (never overwrites a pending one). */
+  applyCombatAction: (evt) =>
+    set((s) => ({
       combat: evt.combat,
-      lastEnemyAction: {
-        ...evt,
-        eventId: `ea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      },
+      combatActionQueue: [
+        ...s.combatActionQueue,
+        {
+          ...evt,
+          eventId: `ca-${evt.seq}-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 6)}`,
+        },
+      ],
     })),
+
+  /* Drop the head of the queue once its animation has played. */
+  dequeueCombatAction: () =>
+    set((s) => ({ combatActionQueue: s.combatActionQueue.slice(1) })),
 
   setTurnChange: (nextPlayerId, turnNumber) =>
     set({ currentTurnPlayerId: nextPlayerId, turnNumber }),
@@ -445,11 +456,6 @@ export const useSessionStore = create<SessionState>((set) => ({
           }
         : null,
     }),
-
-  /* ROLL_REQUEST — the DM asks the local player for an ability check. */
-  applyRollRequest: (evt) => set({ pendingCheck: evt }),
-
-  clearPendingCheck: () => set({ pendingCheck: null }),
 
   setConnected: (connected) => set({ connected }),
   setError: (error) => set({ error }),

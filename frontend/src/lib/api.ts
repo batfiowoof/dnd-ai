@@ -4,9 +4,11 @@ import type {
   CreateSessionResponse,
   GameStateDto,
   JoinSessionRequest,
+  MonsterSummary,
   PlayerDto,
   PlayerRuntimeState,
   SessionSummary,
+  SpellSummary,
   TurnEventDto,
   CharacterDto,
   CharacterCreateUpdateRequest,
@@ -196,6 +198,22 @@ export async function getActiveCombat(
     headers: getAuthHeaders(token),
   });
   if (res.status === 204) return null;
+  return handleResponse(res);
+}
+
+/** Combat spell catalog (metadata for the in-combat cast menu). */
+export async function getCombatSpells(token: string): Promise<SpellSummary[]> {
+  const res = await fetch(`${BASE_URL}/combat/spells`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+/** Available encounter monsters (for the host's encounter picker). */
+export async function getCombatMonsters(token: string): Promise<MonsterSummary[]> {
+  const res = await fetch(`${BASE_URL}/combat/monsters`, {
+    headers: getAuthHeaders(token),
+  });
   return handleResponse(res);
 }
 
