@@ -47,9 +47,10 @@ spring:
       base-url: http://localhost:11434
       chat:
         options:
-          # Standard non-thinking instruct model. (qwen3.5:4b is a reasoning model that emits a
-          # <think> block instead of narration, so its visible reply came back empty.)
-          model: gemma4:e4b
+          # qwen3.5:4b is a reasoning model: it can emit a <think> block instead of narration
+          # (which once returned an empty visible reply). If the DM comes back blank, suppress
+          # thinking — e.g. append "/no_think" to the system prompt in DmAiService.
+          model: qwen3.5:4b
           temperature: 0.7
           top-p: 0.9
           # Tight context (4096) keeps the attention compute buffer small with Flash Attention

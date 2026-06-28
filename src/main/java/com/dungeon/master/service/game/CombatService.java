@@ -215,6 +215,11 @@ public class CombatService {
         PlayerStateService.ItemUseResult result = playerStateService.useItem(player.getId(), itemName);
         broadcast(sessionId, PlayerStateEvent.of(sessionId, result.state()));
 
+        broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ITEM",
+                "uses " + result.itemName(),
+                List.of(CombatActionEvent.Target.heal(CombatantKind.PLAYER, player.getCharacterName(),
+                        result.healed(), result.state().currentHp(), result.state().maxHp())));
+
         List<String> beat = new ArrayList<>();
         beat.add(describeItemUse(player.getCharacterName(), result));
         advanceTurn(enc, beat);
@@ -486,8 +491,9 @@ public class CombatService {
                             : " hits " + e.getName() + " (failed DC " + dc + ") for ") + dealt
                             + " damage (" + e.getName() + " " + e.getCurrentHp() + "/" + e.getMaxHp() + ").");
                 }
-                default -> { // AUTO — auto-hit; multiple darts may stack on one target
-                    int hits = Math.max(1, darts[i]);
+                default -> { // AUTO — auto-hit; projectiles (darts) distributed across targets
+                    int hits = darts[i];
+                    if (hits <= 0) continue;  // this target got no darts
                     int total = 0;
                     List<Integer> faces = new ArrayList<>();
                     for (int h = 0; h < hits; h++) {
@@ -643,12 +649,14 @@ public class CombatService {
         if (effect.targetType() == SpellTargetType.SELF) {
             return List.of(caster.getId());
         }
-        Set<UUID> alive = playerStateService.getSessionStates(sessionId).stream()
-                .filter(s -> s.currentHp() > 0).map(PlayerRuntimeStateDto::playerId)
+        // Any player in the session is a valid heal/buff target — INCLUDING downed (0 HP)
+        // allies, since healing a creature at 0 HP is exactly how you revive it in 5e.
+        Set<UUID> valid = playerStateService.getSessionStates(sessionId).stream()
+                .map(PlayerRuntimeStateDto::playerId)
                 .collect(Collectors.toSet());
         List<UUID> chosen = new ArrayList<>();
         if (ids != null) {
-            for (UUID id : ids) if (alive.contains(id)) chosen.add(id);
+            for (UUID id : ids) if (valid.contains(id)) chosen.add(id);
         }
         if (chosen.isEmpty()) chosen.add(caster.getId());
         Integer max = effect.maxTargets();
