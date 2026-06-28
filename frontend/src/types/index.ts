@@ -265,21 +265,78 @@ export interface RollSummary {
   fumble: boolean;
 }
 
-export interface EnemyActionEvent {
-  type: "ENEMY_ACTION";
-  sessionId: string;
-  attackerKind: CombatantKind;
-  attackerName: string;
+/** One actor's resolution against a single target (attack / save / heal / effect). */
+export interface CombatTarget {
   targetKind: CombatantKind;
   targetName: string;
-  attackRoll: RollSummary;
-  vsAc: number;
-  hit: boolean;
+  attackRoll: RollSummary | null;
+  vsAc: number | null;
+  hit: boolean | null;
+  saveRoll: RollSummary | null;
+  saveDc: number | null;
+  saved: boolean | null;
   damageRoll: RollSummary | null;
-  targetCurrentHp: number;
-  targetMaxHp: number;
-  targetDefeated: boolean;
+  heal: number | null;
+  condition: string | null;
+  currentHp: number;
+  maxHp: number;
+  defeated: boolean;
+}
+
+export type CombatActionKind =
+  | "ATTACK"
+  | "SPELL_DAMAGE"
+  | "SPELL_HEAL"
+  | "SPELL_EFFECT"
+  | "ITEM";
+
+/**
+ * One actor's complete combat action (an attack, multiattack, AoE spell, or heal),
+ * carried as a single event. The client buffers these in arrival order and plays them
+ * back one at a time so the turn order reads correctly.
+ */
+export interface CombatActionEvent {
+  type: "COMBAT_ACTION";
+  sessionId: string;
+  seq: number;
+  actorKind: CombatantKind;
+  actorName: string;
+  actionKind: CombatActionKind;
+  label: string;
+  targets: CombatTarget[];
   combat: CombatStateDto;
+}
+
+/* ── Combat reference data (from /api/combat/*) ───────────────── */
+export type SpellEffectType =
+  | "DAMAGE"
+  | "HEAL"
+  | "BUFF"
+  | "DEBUFF"
+  | "CONTROL"
+  | "UTILITY";
+export type SpellTargetType = "ENEMY" | "ALLY" | "SELF" | "AREA" | "ANY";
+
+export interface SpellSummary {
+  name: string;
+  level: number;
+  school: string;
+  effectType: SpellEffectType;
+  targetType: SpellTargetType;
+  maxTargets: number | null;
+  concentration: boolean;
+  range: string;
+  parsed: boolean;
+}
+
+export interface MonsterSummary {
+  key: string;
+  name: string;
+  cr: number | null;
+  type: string | null;
+  size: string | null;
+  hp: number | null;
+  ac: number | null;
 }
 
 export interface CombatLifecycleEvent {
@@ -333,7 +390,7 @@ export type WebSocketMessage =
   | DmNarrationEvent
   | DiceRollEvent
   | PlayerStateEvent
-  | EnemyActionEvent
+  | CombatActionEvent
   | CombatLifecycleEvent
   | RoundStatusEvent
   | RollRequestEvent

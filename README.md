@@ -80,7 +80,7 @@ Inference uses the **host's** Ollama (not a container). Make sure it's installed
 on `0.0.0.0:11434` (`OLLAMA_HOST=0.0.0.0`), and the models are pulled:
 
 ```bash
-ollama pull qwen3.5:4b   # chat / DM narration
+ollama pull gemma4:e4b   # chat / DM narration
 ollama pull bge-m3       # embeddings (1024-dim) for RAG
 ```
 
@@ -176,7 +176,7 @@ Connect to `/ws` with STOMP, then:
 |---|---|
 | Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
 | Backend | Spring Boot 4, Java 21, Spring AI, Spring Security |
-| AI / LLM | Ollama (qwen3.5:4b), Spring AI ChatClient |
+| AI / LLM | Ollama (gemma4:e4b), Spring AI ChatClient |
 | Vector Search | pgvector (cosine similarity, IVFFlat index) |
 | Messaging | Apache Kafka (KRaft mode) |
 | Auth | Keycloak (OAuth2 / OIDC) |

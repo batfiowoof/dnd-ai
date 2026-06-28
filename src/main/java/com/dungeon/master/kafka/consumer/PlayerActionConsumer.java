@@ -38,6 +38,7 @@ public class PlayerActionConsumer {
     private final DmAiService dmAiService;
     private final TurnService turnService;
     private final CombatService combatService;
+    private final com.dungeon.master.service.game.MonsterCatalog monsterCatalog;
     private final CheckService checkService;
     private final PlayerStateService playerStateService;
     private final GameSessionRepository sessionRepository;
@@ -217,7 +218,8 @@ public class PlayerActionConsumer {
         //    not resolve a skill/ability check (a check means the action was non-combat, so it must
         //    not also spawn a fight — e.g. a lock-pick that triggered a roll).
         if (allowCombat && !checkRequestedThisTurn && combatService.getActiveCombat(sessionId).isEmpty()) {
-            List<String> keys = DmTags.parseEncounter(assembled, Bestiary.keys());
+            List<String> keys = DmTags.parseEncounter(assembled,
+                    monsterCatalog.isEmpty() ? Bestiary.keys() : monsterCatalog.keys());
             if (!keys.isEmpty()) {
                 log.info("DM-triggered encounter: session={}, enemies={}", sessionId, keys);
                 combatService.startEncounter(sessionId, keys);

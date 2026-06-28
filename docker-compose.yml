@@ -74,7 +74,7 @@ services:
   # Inference runs on the HOST's Ollama (not a container), so models you've
   # already pulled on your machine are used directly. The backend reaches it
   # via host.docker.internal. First-run, on the HOST:
-  #   ollama pull qwen3.5:4b
+  #   ollama pull gemma4:e4b
   #   ollama pull bge-m3
   # (Ensure host Ollama listens on 0.0.0.0 — set OLLAMA_HOST=0.0.0.0 if needed.)
 

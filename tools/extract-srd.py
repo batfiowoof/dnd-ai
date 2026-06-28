@@ -887,14 +887,306 @@ def parse_equipment_structured(raw_pages):
         + _parse_gear(raw_pages)
 
 
+# ════════════════════════════════════════════════════════════════════
+#  COMBAT mechanics: machine-readable spell effects + monster stat blocks
+#  (consumed by the backend SpellCatalog / MonsterCatalog at runtime)
+# ════════════════════════════════════════════════════════════════════
+
+WORD_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+ABIL_FULL = {"strength": "STR", "dexterity": "DEX", "constitution": "CON",
+             "intelligence": "INT", "wisdom": "WIS", "charisma": "CHA"}
+DMG_TYPES = ("Acid|Bludgeoning|Cold|Fire|Force|Lightning|Necrotic|"
+             "Piercing|Poison|Psychic|Radiant|Slashing|Thunder")
+CONDITIONS = ("blinded|charmed|deafened|frightened|grappled|incapacitated|"
+              "paralyzed|petrified|poisoned|prone|restrained|stunned|unconscious")
+
+
+def _dice_norm(s):
+    """'2d6 + 5' → '2d6+5'; '1d4 + 1' → '1d4+1'."""
+    return re.sub(r"\s*([+-])\s*", r"\1", s.strip())
+
+
+# ── spell combat parsing (post-process the typed spell dataset) ──────
+
+_AOE = re.compile(
+    r"(\d+)-foot(?:-radius)?(?:[ -](?:radius|wide|tall|long|high))? ?"
+    r"(Sphere|Cube|Cone|Line|Emanation|Cylinder)", re.I)
+_DMG = re.compile(
+    r"(\d+d\d+(?:\s*\+\s*\d+)?)\s+(" + DMG_TYPES + r")\s+damage")
+_HEAL = re.compile(r"(?:regain[s]?|Hit Points equal to)\b[^.]*?(\d+d\d+)", re.I)
+
+
+def parse_spell_combat(sp):
+    """Derive machine-readable combat fields from a spell's prose. Best-effort:
+    ``parsed`` is True only when the engine can resolve it mechanically
+    (damage / heal / a recognized buff or save-based control)."""
+    desc = sp.get("desc") or ""
+    higher = sp.get("higherLevel") or ""
+    rng = (sp.get("range") or "").lower()
+    low = desc.lower()
+    c = {
+        "effectType": None, "targetType": None, "resolution": None,
+        "saveAbility": None, "damageDice": None, "damageType": None,
+        "healDice": None, "addCastingMod": False, "halfOnSave": False,
+        "scaling": {"perSlotAbove": None, "cantripDie": None},
+        "aoe": None, "maxTargets": 1, "projectiles": 1,
+        "condition": None, "parsed": False,
+    }
+
+    # resolution
+    if re.search(r"make a (?:ranged|melee) spell attack", low):
+        c["resolution"] = "SPELL_ATTACK"
+    msave = re.search(
+        r"(strength|dexterity|constitution|intelligence|wisdom|charisma) "
+        r"saving throw", low)
+    if msave:
+        c["resolution"] = "SAVE"
+        c["saveAbility"] = ABIL_FULL[msave.group(1)]
+
+    # damage
+    mdmg = _DMG.search(desc)
+    if mdmg:
+        c["damageDice"] = _dice_norm(mdmg.group(1))
+        c["damageType"] = mdmg.group(2)
+    if "half as much damage" in low or "half damage" in low:
+        c["halfOnSave"] = True
+
+    # heal (exclude spells that merely mention regaining HP as a restriction)
+    if re.search(r"regain[s]? (?:a number of )?hit points", low) or \
+            "hit points equal to" in low:
+        mheal = _HEAL.search(desc)
+        if mheal:
+            c["healDice"] = mheal.group(1)
+            c["addCastingMod"] = "spellcasting ability modifier" in low
+
+    # scaling
+    mslot = re.search(r"increases by (\d+d\d+) for each spell slot level above",
+                      higher, re.I)
+    if mslot:
+        c["scaling"]["perSlotAbove"] = mslot.group(1)
+    mcan = re.search(r"increases by (\d+d\d+) when you reach", higher, re.I)
+    if mcan:
+        c["scaling"]["cantripDie"] = mcan.group(1)
+
+    # multi-projectile (Magic Missile darts / Eldritch Blast beams / rays)
+    mproj = re.search(
+        r"\b(one|two|three|four|five)\b (?:glowing )?(?:darts?|rays?|beams?)", low)
+    if mproj:
+        c["projectiles"] = WORD_NUM.get(mproj.group(1), 1)
+
+    # area of effect
+    maoe = _AOE.search(desc)
+    if maoe:
+        c["aoe"] = {"shape": maoe.group(2).lower(), "size": int(maoe.group(1))}
+
+    # imposed condition (for control/debuff)
+    mcond = re.search(r"\b(" + CONDITIONS + r")\b", low)
+    if mcond:
+        c["condition"] = mcond.group(1)
+
+    # effect type
+    if c["healDice"]:
+        c["effectType"] = "HEAL"
+    elif c["damageDice"]:
+        c["effectType"] = "DAMAGE"
+    elif re.search(r"bonus to ac|base ac becomes|temporary hit points|"
+                   r"adds 1d\d+|you have (?:advantage|resistance)", low):
+        c["effectType"] = "BUFF"
+    elif c["condition"] and c["resolution"] == "SAVE":
+        c["effectType"] = "CONTROL"
+    else:
+        c["effectType"] = "UTILITY"
+
+    # target type
+    if c["aoe"]:
+        c["targetType"] = "AREA"
+    elif c["effectType"] == "HEAL":
+        c["targetType"] = "ALLY"
+    elif c["effectType"] == "BUFF":
+        c["targetType"] = "SELF" if ("self" in rng or "yourself" in low) else "ALLY"
+    elif c["effectType"] in ("DAMAGE", "CONTROL"):
+        c["targetType"] = "ENEMY"
+    else:
+        c["targetType"] = "SELF" if "self" in rng else "ANY"
+
+    if c["resolution"] is None:
+        c["resolution"] = "AUTO"   # e.g. Magic Missile (auto-hit)
+
+    # max targets
+    if c["aoe"]:
+        c["maxTargets"] = None     # everything in the area
+    elif c["projectiles"] > 1:
+        c["maxTargets"] = c["projectiles"]
+    else:
+        mup = re.search(r"up to (one|two|three|four|five|six) "
+                        r"(?:creatures|targets)", low)
+        c["maxTargets"] = WORD_NUM.get(mup.group(1)) if mup else 1
+
+    c["parsed"] = c["effectType"] in ("DAMAGE", "HEAL", "BUFF", "CONTROL")
+    return c
+
+
+# ── monster stat-block parsing (full stats, NOT stripped) ───────────
+
+_CR_MAP = {"1/8": 0.125, "1/4": 0.25, "1/2": 0.5}
+MON_ATTACK = re.compile(
+    r"(?P<name>[A-Z][A-Za-z0-9 '/()+-]{1,38}?)\.\s+"
+    r"(?P<kind>Melee or Ranged|Melee|Ranged) Attack Roll:\s*\+(?P<tohit>\d+)"
+    r"(?P<mid>.*?)\bHit:\s*"
+    r"(?:\d+\s*\((?P<dice>\d+d\d+(?:\s*[+-]\s*\d+)?)\)|(?P<flat>\d+))\s*"
+    r"(?P<dtype>" + DMG_TYPES + r")\s+damage", re.I)
+
+
+def _cr_val(s):
+    return _CR_MAP.get(s) if "/" in s else float(s)
+
+
+def _monster_key(name):
+    return re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_")
+
+
+def parse_monsters_structured(layout_pages):
+    """Parse the two-column monster stat blocks into full combat stats. Unlike
+    ``parse_monsters`` (which strips numbers for stat-free lore), this keeps
+    AC / HP / abilities / attacks for the combat engine."""
+    lines = []
+    for page in layout_pages[257:]:
+        lines += reflow_columns(page)
+    idpos = [i for i, l in enumerate(lines) if MON_IDENT.match(l.strip())]
+    resolved = [mon_clean_name(lines, i) for i in idpos]
+    out, seen = [], set()
+    for idx, i in enumerate(idpos):
+        name, _ = resolved[idx]
+        # a stat fragment (e.g. "Initiative +2 (12)") sometimes bleeds onto the
+        # name line during column reflow — cut it back to the bare name
+        name = re.split(r"\s+Initiative\b", name)[0].strip()
+        if len(name) < 3 or not name[0].isupper():
+            continue
+        ident = lines[i].strip()
+        if idx + 1 < len(idpos):
+            body_end = resolved[idx + 1][1]
+            while body_end > i + 1 and _is_heading_like(lines[body_end - 1]):
+                body_end -= 1
+        else:
+            body_end = len(lines)
+        block = lines[i:body_end]
+        btext = " ".join(block)
+
+        mid = re.match(r"^(Tiny|Small|Medium|Large|Huge|Gargantuan)"
+                       r"(?: or \w+)? ([A-Z][a-z]+)", ident)
+        mac = re.search(r"\bAC (\d+)", btext)
+        mhp = re.search(r"\bHP (\d+)(?:\s*\(([^)]+)\))?", btext)
+        mspeed = re.search(r"\bSpeed (\d+)", btext)
+        mcr = re.search(r"\bCR (\d+/\d+|\d+)", btext)
+        abilities = {}
+        for ab in ("Str", "Dex", "Con", "Int", "Wis", "Cha"):
+            am = re.search(r"\b" + ab + r"\s+(\d+)\b", btext)
+            if am:
+                abilities[ab.upper()] = int(am.group(1))
+        dex = abilities.get("DEX", 10)
+
+        # attacks live in the Actions section (skip Legendary Actions)
+        sec = {l.strip(): k for k, l in enumerate(block) if l.strip() in MON_SECTIONS}
+        action_text = ""
+        if "Actions" in sec:
+            start = sec["Actions"]
+            end = len(block)
+            if "Legendary Actions" in sec and sec["Legendary Actions"] > start:
+                end = sec["Legendary Actions"]
+            action_text = dehyphenate_join(block[start + 1:end])
+
+        attacks = []
+        for m in MON_ATTACK.finditer(action_text):
+            midtxt = m.group("mid")
+            reach = re.search(r"reach (\d+)", midtxt)
+            arange = re.search(r"range (\d+)(?:/(\d+))?", midtxt)
+            attacks.append({
+                "name": re.sub(r"\s+", " ", m.group("name")).strip(),
+                "kind": "RANGED" if m.group("kind").lower() == "ranged" else "MELEE",
+                "toHit": int(m.group("tohit")),
+                "reach": int(reach.group(1)) if reach else None,
+                "range": int(arange.group(1)) if arange else None,
+                "damageDice": _dice_norm(m.group("dice") or m.group("flat")),
+                "damageType": m.group("dtype").title(),
+            })
+
+        multiattack = None
+        mm = re.search(r"Multiattack\.\s*([^.]*\.)", action_text)
+        if mm:
+            mc = re.search(r"makes (\w+) (\w[\w ]*?) attacks", mm.group(1).lower())
+            if mc and mc.group(1) in WORD_NUM:
+                multiattack = {"count": WORD_NUM[mc.group(1)],
+                               "attack": mc.group(2).strip().title()}
+
+        key = _monster_key(name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "key": key, "name": name,
+            "size": mid.group(1) if mid else None,
+            "type": mid.group(2) if mid else None,
+            "cr": _cr_val(mcr.group(1)) if mcr else None,
+            "ac": int(mac.group(1)) if mac else None,
+            "hp": int(mhp.group(1)) if mhp else None,
+            "hpDice": _dice_norm(mhp.group(2)) if (mhp and mhp.group(2)) else None,
+            "speed": int(mspeed.group(1)) if mspeed else None,
+            "dexMod": (dex - 10) // 2,
+            "abilities": abilities,
+            "attacks": attacks,
+            "multiattack": multiattack,
+        })
+    return out
+
+
+# ── manual overrides (deep-merge after parsing) ─────────────────────
+
+
+def _deep_merge(base, over):
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            _deep_merge(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
+def apply_overrides(spells, monsters):
+    path = Path(__file__).resolve().parent / "srd-overrides.json"
+    if not path.is_file():
+        return 0, 0
+    ov = json.loads(path.read_text(encoding="utf-8"))
+    ns = nm = 0
+    by_index = {s["index"]: s for s in spells}
+    for idx, patch in (ov.get("spells") or {}).items():
+        sp = by_index.get(idx)
+        if sp is not None:
+            sp.setdefault("combat", {})
+            _deep_merge(sp["combat"], patch)
+            ns += 1
+    by_key = {m["key"]: m for m in monsters}
+    for key, patch in (ov.get("monsters") or {}).items():
+        mon = by_key.get(key)
+        if mon is not None:
+            _deep_merge(mon, patch)
+        else:
+            monsters.append(patch)
+        nm += 1
+    return ns, nm
+
+
 def build_structured(raw_pages):
+    spells = parse_spells_structured(raw_pages)
+    for sp in spells:
+        sp["combat"] = parse_spell_combat(sp)
     return {
         "source": "SRD 5.2.1 (CC-BY-4.0)",
         "backgrounds": parse_backgrounds(raw_pages),
         "species": parse_species_structured(raw_pages),
         "classes": parse_classes_structured(raw_pages),
         "feats": parse_feats_list(raw_pages),
-        "spells": parse_spells_structured(raw_pages),
+        "spells": spells,
         "equipment": parse_equipment_structured(raw_pages),
     }
 
@@ -916,6 +1208,10 @@ def main():
 
     # structured dataset (also reused to fix the RAG feat / background gaps)
     structured = build_structured(raw_pages)
+
+    # combat stat blocks (full numbers — kept OUT of the lore corpus below)
+    monsters = parse_monsters_structured(layout_pages)
+    n_sp_ov, n_mon_ov = apply_overrides(structured["spells"], monsters)
 
     corpus = Corpus()
     parse_spells(raw_pages, corpus)
@@ -965,6 +1261,11 @@ def main():
         json.dumps(structured, ensure_ascii=False, indent=1), encoding="utf-8"
     )
 
+    monsters_path = res / "dnd5e" / "monsters.json"
+    monsters_path.write_text(
+        json.dumps(monsters, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+
     counts = {}
     for e in corpus.entries:
         counts[e["type"]] = counts.get(e["type"], 0) + 1
@@ -974,6 +1275,25 @@ def main():
     print("Wrote structured dataset to %s" % struct_path)
     for key in ("backgrounds", "species", "classes", "feats", "spells", "equipment"):
         print("  %-12s %d" % (key, len(structured[key])))
+
+    # ── combat coverage report ──────────────────────────────────────
+    spells = structured["spells"]
+    by_eff = {}
+    for s in spells:
+        by_eff[s["combat"]["effectType"]] = by_eff.get(s["combat"]["effectType"], 0) + 1
+    parsed = sum(1 for s in spells if s["combat"]["parsed"])
+    print("Spell combat coverage: %d/%d parsed (mechanical)" % (parsed, len(spells)))
+    for eff in sorted(by_eff):
+        print("  %-9s %d" % (eff, by_eff[eff]))
+
+    with_ac = sum(1 for m in monsters if m["ac"] is not None)
+    with_hp = sum(1 for m in monsters if m["hp"] is not None)
+    with_atk = sum(1 for m in monsters if m["attacks"])
+    print("Wrote %d monster stat blocks to %s" % (len(monsters), monsters_path))
+    print("  with AC %d / with HP %d / with >=1 attack %d"
+          % (with_ac, with_hp, with_atk))
+    if n_sp_ov or n_mon_ov:
+        print("  overrides applied: %d spells, %d monsters" % (n_sp_ov, n_mon_ov))
 
 
 if __name__ == "__main__":

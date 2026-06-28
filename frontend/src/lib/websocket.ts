@@ -219,6 +219,17 @@ export function sendCombatUseItem(
   });
 }
 
+export function sendCombatCast(
+  client: Client,
+  sessionId: string,
+  payload: { spellName: string; spellLevel: number; targetIds: string[] }
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/cast`,
+    body: JSON.stringify(payload),
+  });
+}
+
 export function sendCombatEndTurn(client: Client, sessionId: string) {
   client.publish({
     destination: `/app/game/${sessionId}/combat/end-turn`,

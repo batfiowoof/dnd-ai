@@ -38,3 +38,7 @@ node_modules/
 out/
 .env*.local
 tsconfig.tsbuildinfo
+
+# local SRD PDF (CC-BY but not checked in)
+tools/SRD_CC_v5.2.1.pdf
+tools/__pycache__/

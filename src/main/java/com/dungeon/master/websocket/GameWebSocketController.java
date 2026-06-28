@@ -303,6 +303,21 @@ public class GameWebSocketController {
         }
     }
 
+    @MessageMapping("/game/{sessionId}/combat/cast")
+    public void handleCombatCast(@DestinationVariable UUID sessionId,
+                                 @Payload CombatActionRequest request,
+                                 Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerCastSpell(sessionId, username, request.spellName(),
+                    request.spellLevel() == null ? 0 : request.spellLevel(),
+                    request.targetIds());
+        } catch (Exception e) {
+            log.error("Error in combat cast: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
     @MessageMapping("/game/{sessionId}/combat/use-item")
     public void handleCombatUseItem(@DestinationVariable UUID sessionId,
                                     @Payload CombatActionRequest request,

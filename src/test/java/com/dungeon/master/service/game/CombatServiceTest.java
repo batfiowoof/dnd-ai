@@ -50,6 +50,8 @@ class CombatServiceTest {
     private TurnService turnService;
     private GameEventProducer eventProducer;
     private SimpMessagingTemplate messaging;
+    private MonsterCatalog monsterCatalog;
+    private com.dungeon.master.service.ai.SpellCatalog spellCatalog;
     private CombatService combat;
 
     private final UUID sessionId = UUID.randomUUID();
@@ -66,8 +68,13 @@ class CombatServiceTest {
         turnService = mock(TurnService.class);
         eventProducer = mock(GameEventProducer.class);
         messaging = mock(SimpMessagingTemplate.class);
+        monsterCatalog = mock(MonsterCatalog.class);
+        spellCatalog = mock(com.dungeon.master.service.ai.SpellCatalog.class);
+        // Default: no catalog entry → buildEnemy falls back to the hardcoded Bestiary.
+        when(monsterCatalog.get(anyString())).thenReturn(Optional.empty());
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
-                sessionRepo, playerStateService, diceService, turnService, eventProducer, messaging);
+                sessionRepo, playerStateService, diceService, turnService, eventProducer, messaging,
+                monsterCatalog, spellCatalog);
 
         // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
         when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))

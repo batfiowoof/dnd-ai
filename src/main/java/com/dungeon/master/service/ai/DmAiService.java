@@ -42,6 +42,7 @@ public class DmAiService {
     private final CombatEncounterRepository encounterRepository;
     private final PlayerStateService playerStateService;
     private final SrdContent srdContent;
+    private final com.dungeon.master.service.game.MonsterCatalog monsterCatalog;
 
     /**
      * Generates a DM response to a player's action, streaming each token to {@code onChunk}
@@ -383,9 +384,12 @@ public class DmAiService {
             b.append("- Ability checks: do NOT request dice rolls; narrate outcomes directly and fairly.\n");
         }
         if (session.isAllowAiCombat()) {
+            String enemyKeys = monsterCatalog.isEmpty()
+                    ? String.join(", ", com.dungeon.master.service.game.Bestiary.keys())
+                    : String.join(", ", monsterCatalog.promptKeys(40));
             b.append("- Combat: when the story leads to a fight, END your reply with an encounter tag on ")
-                    .append("its own final line — [[ENCOUNTER: GOBLIN x2, ORC]] — using ONLY these enemy keys: ")
-                    .append(String.join(", ", com.dungeon.master.service.game.Bestiary.keys())).append(".\n");
+                    .append("its own final line — [[ENCOUNTER: GOBLIN_WARRIOR x2, WOLF]] — using ONLY these enemy keys: ")
+                    .append(enemyKeys).append(".\n");
         } else {
             b.append("- Combat: do NOT start encounters with tags; the host triggers combat manually.\n");
         }

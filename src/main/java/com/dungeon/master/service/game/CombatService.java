@@ -3,15 +3,18 @@ package com.dungeon.master.service.game;
 import com.dungeon.master.exception.PlayerNotFoundException;
 import com.dungeon.master.kafka.event.CombatNarrationEvent;
 import com.dungeon.master.kafka.producer.GameEventProducer;
+import com.dungeon.master.model.dto.CombatActionEvent;
 import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.CombatStateDto;
 import com.dungeon.master.model.dto.DiceRollResult;
-import com.dungeon.master.model.dto.EnemyActionEvent;
 import com.dungeon.master.model.dto.EnemyDto;
+import com.dungeon.master.model.dto.MonsterAttack;
+import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.dto.RollSummary;
+import com.dungeon.master.model.dto.SpellEffect;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
@@ -23,11 +26,16 @@ import com.dungeon.master.model.enums.CombatantKind;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.model.enums.PlayerRole;
+import com.dungeon.master.model.enums.RollMode;
+import com.dungeon.master.model.enums.SpellEffectType;
+import com.dungeon.master.model.enums.SpellResolution;
+import com.dungeon.master.model.enums.SpellTargetType;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
+import com.dungeon.master.service.ai.SpellCatalog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -36,9 +44,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -62,6 +76,11 @@ public class CombatService {
     private final TurnService turnService;
     private final GameEventProducer eventProducer;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MonsterCatalog monsterCatalog;
+    private final SpellCatalog spellCatalog;
+
+    /** Monotonic per-action ordering for {@link CombatActionEvent} (client playback queue). */
+    private final AtomicLong actionSeq = new AtomicLong();
 
     /* ── reads ───────────────────────────────────────────────────── */
 
@@ -88,27 +107,11 @@ public class CombatService {
         // Create enemies, numbering duplicates (Goblin 1, Goblin 2, ...). Difficulty scales
         // HP and attack bonus so the same key is tougher on DEADLY and softer on EASY.
         List<Enemy> enemies = new ArrayList<>();
-        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        Map<String, Integer> counts = new java.util.HashMap<>();
         for (String key : enemyKeys) {
-            Bestiary.Template t = Bestiary.get(key);
             long sameType = enemyKeys.stream().filter(k -> k.equalsIgnoreCase(key)).count();
             int n = counts.merge(key.toLowerCase(), 1, Integer::sum);
-            String name = sameType > 1 ? t.name() + " " + n : t.name();
-            int hp = scaleHp(t.hp(), difficulty);
-            int atk = t.attackBonus() + attackBonusDelta(difficulty);
-            enemies.add(Enemy.builder()
-                    .id(UUID.randomUUID())
-                    .sessionId(sessionId)
-                    .name(name)
-                    .maxHp(hp)
-                    .currentHp(hp)
-                    .armorClass(t.armorClass())
-                    .attackBonus(atk)
-                    .damageDice(t.damageDice())
-                    .initiative(diceService.roll("1d20").total() + t.dexMod())
-                    .dexMod(t.dexMod())
-                    .alive(true)
-                    .build());
+            enemies.add(buildEnemy(sessionId, key, sameType > 1 ? n : 0, difficulty));
         }
         enemyRepository.saveAll(enemies);
 
@@ -191,13 +194,10 @@ public class CombatService {
             damageSummary = RollSummary.of(dmg);
         }
 
-        broadcast(sessionId, new EnemyActionEvent(
-                EnemyActionEvent.TYPE, sessionId,
-                CombatantKind.PLAYER, player.getCharacterName(),
-                CombatantKind.ENEMY, enemy.getName(),
-                RollSummary.of(atk), enemy.getArmorClass(), hit, damageSummary,
-                enemy.getCurrentHp(), enemy.getMaxHp(), defeated,
-                toStateDto(enc)));
+        broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK", "attacks",
+                List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
+                        RollSummary.of(atk), enemy.getArmorClass(), hit, damageSummary,
+                        enemy.getCurrentHp(), enemy.getMaxHp(), defeated)));
 
         List<String> beat = new ArrayList<>();
         beat.add(describeAttack(player.getCharacterName(), enemy.getName(), atk,
@@ -217,6 +217,58 @@ public class CombatService {
 
         List<String> beat = new ArrayList<>();
         beat.add(describeItemUse(player.getCharacterName(), result));
+        advanceTurn(enc, beat);
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /**
+     * Cast a prepared spell on the player's combat turn. The spell's machine-readable
+     * effect (from {@link SpellCatalog}) decides resolution: DAMAGE rolls a spell attack
+     * vs AC or a save vs the caster's spell DC; HEAL restores ally HP; everything else is
+     * applied as a (mostly narrative) condition/buff. Leveled spells spend a slot; cantrips
+     * are free. {@code targetIds} are enemy ids (offensive) or player ids (heal/buff).
+     */
+    @Transactional
+    public void playerCastSpell(UUID sessionId, String username, String spellName,
+                                int spellLevel, List<UUID> targetIds) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+
+        PlayerRuntimeStateDto state = playerStateService.getState(player.getId());
+        if (!containsIgnoreCase(state.cantrips(), spellName)
+                && !containsIgnoreCase(state.knownSpells(), spellName)) {
+            throw new IllegalStateException("You don't have " + spellName + " prepared");
+        }
+
+        SpellEffect effect = spellCatalog.effect(spellName)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown spell: " + spellName));
+
+        // Spend a slot for leveled spells (cantrips are free). Throws if none remain.
+        if (spellLevel >= 1) {
+            PlayerRuntimeStateDto after = playerStateService.useSpellSlot(player.getId(), spellLevel);
+            broadcast(sessionId, PlayerStateEvent.of(sessionId, after));
+        }
+
+        Character caster = character(player);
+        List<CombatActionEvent.Target> results = new ArrayList<>();
+        List<String> beat = new ArrayList<>();
+        String actionKind = switch (effect.effectType()) {
+            case HEAL -> {
+                resolveHeal(sessionId, player, caster, effect, spellLevel, targetIds, results, beat);
+                yield "SPELL_HEAL";
+            }
+            case DAMAGE -> {
+                resolveSpellDamage(sessionId, player, caster, effect, spellLevel, targetIds, results, beat);
+                yield "SPELL_DAMAGE";
+            }
+            default -> {
+                resolveSpellEffect(sessionId, player, caster, effect, targetIds, results, beat);
+                yield "SPELL_EFFECT";
+            }
+        };
+
+        broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(),
+                actionKind, "casts " + effect.name(), results);
         advanceTurn(enc, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
@@ -295,6 +347,13 @@ public class CombatService {
         endEncounter(enc, allEnemiesDead(sessionId), beat);
     }
 
+    /**
+     * Resolve one enemy's turn. Multiattack monsters swing {@code attacksPerTurn} times
+     * (re-acquiring a living target between swings); all sub-attacks are reported in a
+     * single {@link CombatActionEvent} so the client animates them together, in order.
+     * Uses the stat block's primary attack ({@link Enemy#getAttacks()}), falling back to
+     * the legacy {@code attackBonus}/{@code damageDice}.
+     */
     private void enemyAct(CombatEncounter enc, Enemy enemy, List<String> beat) {
         UUID sessionId = enc.getSessionId();
         TargetPlayer target = pickTarget(sessionId);
@@ -302,36 +361,45 @@ public class CombatService {
             return;
         }
 
-        DiceRollResult atk = diceService.roll(notation(enemy.getAttackBonus()));
-        int targetAc = armorClass(target.player());
-        boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+        List<MonsterAttack> atks = enemy.getAttacks();
+        int attackBonus = atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit();
+        String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
+        int swings = Math.max(1, enemy.getAttacksPerTurn());
 
-        RollSummary damageSummary = null;
-        int targetHp = target.state().currentHp();
-        int targetMax = target.state().maxHp();
-        boolean defeated = false;
+        List<CombatActionEvent.Target> results = new ArrayList<>();
+        for (int s = 0; s < swings; s++) {
+            if (target.state().currentHp() <= 0) {     // current target down — re-acquire
+                target = pickTarget(sessionId);
+                if (target == null) break;
+            }
+            Player victim = target.player();
+            DiceRollResult atk = diceService.roll(notation(attackBonus));
+            int targetAc = armorClass(victim);
+            boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
 
-        if (hit) {
-            DiceRollResult dmg = diceService.roll(enemy.getDamageDice());
-            PlayerRuntimeStateDto updated =
-                    playerStateService.applyHpDelta(target.player().getId(), -dmg.total());
-            broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
-            targetHp = updated.currentHp();
-            targetMax = updated.maxHp();
-            defeated = updated.currentHp() <= 0;
-            damageSummary = RollSummary.of(dmg);
+            RollSummary damageSummary = null;
+            int targetHp = target.state().currentHp();
+            int targetMax = target.state().maxHp();
+            boolean defeated = false;
+            if (hit) {
+                DiceRollResult dmg = rollExpr(damageDice);
+                PlayerRuntimeStateDto updated =
+                        playerStateService.applyHpDelta(victim.getId(), -dmg.total());
+                broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
+                targetHp = updated.currentHp();
+                targetMax = updated.maxHp();
+                defeated = updated.currentHp() <= 0;
+                damageSummary = RollSummary.of(dmg);
+                target = new TargetPlayer(victim, updated);  // refresh for the next swing
+            }
+
+            results.add(CombatActionEvent.Target.attack(CombatantKind.PLAYER, victim.getCharacterName(),
+                    RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated));
+            beat.add(describeAttack(enemy.getName(), victim.getCharacterName(), atk,
+                    targetAc, hit, damageSummary, targetHp, targetMax, defeated));
         }
 
-        broadcast(sessionId, new EnemyActionEvent(
-                EnemyActionEvent.TYPE, sessionId,
-                CombatantKind.ENEMY, enemy.getName(),
-                CombatantKind.PLAYER, target.player().getCharacterName(),
-                RollSummary.of(atk), targetAc, hit, damageSummary,
-                targetHp, targetMax, defeated,
-                toStateDto(enc)));
-
-        beat.add(describeAttack(enemy.getName(), target.player().getCharacterName(), atk,
-                targetAc, hit, damageSummary, targetHp, targetMax, defeated));
+        broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "attacks", results);
     }
 
     private void advanceIndex(CombatEncounter enc) {
@@ -355,6 +423,253 @@ public class CombatService {
         }
         broadcast(enc.getSessionId(), CombatLifecycleEvent.end(enc.getSessionId(), victory, toStateDto(enc)));
         log.info("Combat ended: session={}, victory={}", enc.getSessionId(), victory);
+    }
+
+    /* ── spell resolution ────────────────────────────────────────── */
+
+    private void resolveHeal(UUID sessionId, Player caster, Character casterChar, SpellEffect effect,
+                             int spellLevel, List<UUID> targetIds,
+                             List<CombatActionEvent.Target> results, List<String> beat) {
+        String dice = scaledNotation(effect.healDice(), effect, spellLevel, casterChar);
+        for (UUID pid : playerTargets(sessionId, targetIds, effect, caster)) {
+            PlayerRuntimeStateDto before = playerStateService.getState(pid);
+            int amount = rollExpr(dice).total();
+            PlayerRuntimeStateDto updated = playerStateService.applyHpDelta(pid, amount);
+            broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
+            int healed = updated.currentHp() - before.currentHp();
+            String name = playerName(pid);
+            results.add(CombatActionEvent.Target.heal(CombatantKind.PLAYER, name, healed,
+                    updated.currentHp(), updated.maxHp()));
+            beat.add(caster.getCharacterName() + "'s " + effect.name() + " restores " + healed
+                    + " HP to " + name + " (now " + updated.currentHp() + "/" + updated.maxHp() + ").");
+        }
+    }
+
+    private void resolveSpellDamage(UUID sessionId, Player caster, Character casterChar, SpellEffect effect,
+                                    int spellLevel, List<UUID> targetIds,
+                                    List<CombatActionEvent.Target> results, List<String> beat) {
+        List<Enemy> targets = enemyTargets(sessionId, targetIds, effect);
+        String dice = scaledNotation(effect.damageDice(), effect, spellLevel, casterChar);
+        int dc = SpellcastingRules.spellSaveDc(casterChar);
+        int atkBonus = SpellcastingRules.spellAttackBonus(casterChar);
+        int[] darts = distribute(Math.max(1, effect.projectiles()), targets.size());
+        for (int i = 0; i < targets.size(); i++) {
+            Enemy e = targets.get(i);
+            String label = caster.getCharacterName() + "'s " + effect.name();
+            switch (effect.resolution()) {
+                case SPELL_ATTACK -> {
+                    DiceRollResult atk = diceService.roll(notation(atkBonus));
+                    boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= e.getArmorClass());
+                    RollSummary dmg = null;
+                    if (hit) {
+                        DiceRollResult d = rollExpr(dice);
+                        applyEnemyDamage(e, d.total());
+                        dmg = RollSummary.of(d);
+                    }
+                    results.add(CombatActionEvent.Target.attack(CombatantKind.ENEMY, e.getName(),
+                            RollSummary.of(atk), e.getArmorClass(), hit, dmg,
+                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                    beat.add(describeAttack(label, e.getName(), atk, e.getArmorClass(), hit, dmg,
+                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                }
+                case SAVE -> {
+                    int saveMod = enemySaveMod(e, effect.saveAbility());
+                    DiceRollResult save = diceService.roll(notation(saveMod));
+                    boolean saved = save.total() >= dc;
+                    DiceRollResult d = rollExpr(dice);
+                    int dealt = saved ? (effect.halfOnSave() ? d.total() / 2 : 0) : d.total();
+                    applyEnemyDamage(e, dealt);
+                    results.add(CombatActionEvent.Target.save(CombatantKind.ENEMY, e.getName(),
+                            RollSummary.of(save), dc, saved, RollSummary.of(d),
+                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                    beat.add(label + (saved ? " — " + e.getName() + " saves (DC " + dc + ") for "
+                            : " hits " + e.getName() + " (failed DC " + dc + ") for ") + dealt
+                            + " damage (" + e.getName() + " " + e.getCurrentHp() + "/" + e.getMaxHp() + ").");
+                }
+                default -> { // AUTO — auto-hit; multiple darts may stack on one target
+                    int hits = Math.max(1, darts[i]);
+                    int total = 0;
+                    List<Integer> faces = new ArrayList<>();
+                    for (int h = 0; h < hits; h++) {
+                        DiceRollResult d = rollExpr(dice);
+                        total += d.total();
+                        faces.addAll(d.faces());
+                    }
+                    applyEnemyDamage(e, total);
+                    RollSummary dmg = new RollSummary(hits > 1 ? hits + "×" + dice : dice,
+                            faces, total, false, false);
+                    results.add(CombatActionEvent.Target.autoDamage(CombatantKind.ENEMY, e.getName(),
+                            dmg, e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                    beat.add(label + " strikes " + e.getName() + " for " + total + " damage ("
+                            + e.getName() + " " + e.getCurrentHp() + "/" + e.getMaxHp() + ").");
+                }
+            }
+        }
+    }
+
+    /** BUFF / DEBUFF / CONTROL / UTILITY — tag a condition (save-gated for enemies) and narrate. */
+    private void resolveSpellEffect(UUID sessionId, Player caster, Character casterChar, SpellEffect effect,
+                                    List<UUID> targetIds,
+                                    List<CombatActionEvent.Target> results, List<String> beat) {
+        String cond = effect.condition();
+        boolean offensive = effect.targetType() == SpellTargetType.ENEMY
+                || (effect.targetType() == SpellTargetType.AREA
+                    && effect.effectType() != SpellEffectType.BUFF);
+        if (offensive) {
+            int dc = SpellcastingRules.spellSaveDc(casterChar);
+            for (Enemy e : enemyTargets(sessionId, targetIds, effect)) {
+                boolean applied = true;
+                RollSummary saveSummary = null;
+                if (effect.resolution() == SpellResolution.SAVE) {
+                    DiceRollResult save = diceService.roll(notation(enemySaveMod(e, effect.saveAbility())));
+                    applied = save.total() < dc;
+                    saveSummary = RollSummary.of(save);
+                }
+                if (applied && cond != null) {
+                    if (!e.getConditions().contains(cond)) e.getConditions().add(cond);
+                    enemyRepository.save(e);
+                }
+                results.add(new CombatActionEvent.Target(CombatantKind.ENEMY, e.getName(),
+                        null, null, null, saveSummary, saveSummary == null ? null : dc,
+                        saveSummary == null ? null : !applied, null, null,
+                        applied ? cond : null, e.getCurrentHp(), e.getMaxHp(), false));
+                beat.add(caster.getCharacterName() + "'s " + effect.name()
+                        + (applied && cond != null ? " leaves " + e.getName() + " " + cond + "."
+                        : " has no effect on " + e.getName() + "."));
+            }
+        } else {
+            for (UUID pid : playerTargets(sessionId, targetIds, effect, caster)) {
+                PlayerRuntimeStateDto s = playerStateService.getState(pid);
+                results.add(CombatActionEvent.Target.effect(CombatantKind.PLAYER, playerName(pid),
+                        cond, s.currentHp(), s.maxHp()));
+                beat.add(caster.getCharacterName() + "'s " + effect.name() + " bolsters "
+                        + playerName(pid) + ".");
+            }
+        }
+    }
+
+    /* ── spell helpers ───────────────────────────────────────────── */
+
+    private static final Pattern DICE = Pattern.compile("(\\d*)d(\\d+)([+-]\\d+)?",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Combine a base dice expression with the spell's slot/cantrip scaling and (when the
+     * spell adds it) the caster's spellcasting modifier into a single rollable notation.
+     * Scaling dice are folded into the count only when their faces match the base; an
+     * unparseable expression is returned unchanged.
+     */
+    private String scaledNotation(String baseDice, SpellEffect effect, int spellLevel, Character caster) {
+        if (baseDice == null || baseDice.isBlank()) return "0";
+        Matcher m = DICE.matcher(baseDice.trim());
+        if (!m.matches()) return baseDice;
+        int count = m.group(1).isEmpty() ? 1 : Integer.parseInt(m.group(1));
+        int sides = Integer.parseInt(m.group(2));
+        int mod = m.group(3) == null ? 0 : Integer.parseInt(m.group(3));
+
+        if (effect.perSlotAbove() != null && spellLevel > effect.level()) {
+            Matcher s = DICE.matcher(effect.perSlotAbove());
+            if (s.matches() && Integer.parseInt(s.group(2)) == sides) {
+                int per = s.group(1).isEmpty() ? 1 : Integer.parseInt(s.group(1));
+                count += per * (spellLevel - effect.level());
+            }
+        }
+        if (effect.cantripDie() != null && effect.level() == 0) {
+            int lvl = caster == null ? 1 : caster.getLevel();
+            int tier = (lvl >= 5 ? 1 : 0) + (lvl >= 11 ? 1 : 0) + (lvl >= 17 ? 1 : 0);
+            Matcher cnt = DICE.matcher(effect.cantripDie());
+            if (cnt.matches() && Integer.parseInt(cnt.group(2)) == sides) {
+                int per = cnt.group(1).isEmpty() ? 1 : Integer.parseInt(cnt.group(1));
+                count += per * tier;
+            }
+        }
+        if (effect.addCastingMod()) mod += SpellcastingRules.castingMod(caster);
+        return count + "d" + sides + (mod > 0 ? "+" + mod : mod < 0 ? String.valueOf(mod) : "");
+    }
+
+    /** Roll a damage/heal expression that may be standard dice ("8d6+3") or a flat number ("1"). */
+    private DiceRollResult rollExpr(String expr) {
+        if (expr == null || expr.isBlank()) return constant(0);
+        String e = expr.trim();
+        if (e.matches("\\d+")) return constant(Integer.parseInt(e));
+        if (DICE.matcher(e).matches()) return diceService.roll(e);
+        return constant(0);
+    }
+
+    private static DiceRollResult constant(int n) {
+        return new DiceRollResult(String.valueOf(n), 0, 0, n, RollMode.NORMAL,
+                List.of(n), null, n, false, false);
+    }
+
+    private void applyEnemyDamage(Enemy e, int dmg) {
+        if (dmg <= 0) return;
+        e.setCurrentHp(Math.max(0, e.getCurrentHp() - dmg));
+        if (e.getCurrentHp() == 0) e.setAlive(false);
+        enemyRepository.save(e);
+    }
+
+    /** An enemy's saving-throw modifier for an ability (ability mod; DEX falls back to dexMod). */
+    private int enemySaveMod(Enemy e, String ability) {
+        if (ability == null) return e.getDexMod();
+        Integer score = e.getAbilities() == null ? null : e.getAbilities().get(ability.toUpperCase());
+        if (score != null) return Math.floorDiv(score - 10, 2);
+        return "DEX".equalsIgnoreCase(ability) ? e.getDexMod() : 0;
+    }
+
+    /** Spread {@code n} darts/rays across {@code k} targets as evenly as possible. */
+    private static int[] distribute(int n, int k) {
+        if (k <= 0) return new int[0];
+        int[] out = new int[k];
+        for (int i = 0; i < k; i++) out[i] = n / k + (i < n % k ? 1 : 0);
+        return out;
+    }
+
+    private List<Enemy> enemyTargets(UUID sessionId, List<UUID> ids, SpellEffect effect) {
+        List<Enemy> alive = enemyRepository.findBySessionId(sessionId).stream()
+                .filter(Enemy::isAlive).toList();
+        List<Enemy> chosen = new ArrayList<>();
+        if (ids != null) {
+            for (UUID id : ids) {
+                alive.stream().filter(e -> e.getId().equals(id)).findFirst().ifPresent(chosen::add);
+            }
+        }
+        if (chosen.isEmpty() && !alive.isEmpty()) chosen.add(alive.get(0));
+        Integer max = effect.maxTargets();
+        int cap = max == null ? chosen.size() : Math.min(max, chosen.size());
+        return new ArrayList<>(chosen.subList(0, Math.max(0, cap)));
+    }
+
+    private List<UUID> playerTargets(UUID sessionId, List<UUID> ids, SpellEffect effect, Player caster) {
+        if (effect.targetType() == SpellTargetType.SELF) {
+            return List.of(caster.getId());
+        }
+        Set<UUID> alive = playerStateService.getSessionStates(sessionId).stream()
+                .filter(s -> s.currentHp() > 0).map(PlayerRuntimeStateDto::playerId)
+                .collect(Collectors.toSet());
+        List<UUID> chosen = new ArrayList<>();
+        if (ids != null) {
+            for (UUID id : ids) if (alive.contains(id)) chosen.add(id);
+        }
+        if (chosen.isEmpty()) chosen.add(caster.getId());
+        Integer max = effect.maxTargets();
+        int cap = max == null ? chosen.size() : Math.min(max, chosen.size());
+        return new ArrayList<>(chosen.subList(0, Math.max(0, cap)));
+    }
+
+    private String playerName(UUID playerId) {
+        return playerRepository.findById(playerId).map(Player::getCharacterName).orElse("an ally");
+    }
+
+    private static boolean containsIgnoreCase(List<String> list, String value) {
+        if (list == null || value == null) return false;
+        return list.stream().anyMatch(v -> v != null && v.equalsIgnoreCase(value));
+    }
+
+    private void broadcastAction(CombatEncounter enc, CombatantKind actorKind, String actorName,
+                                 String actionKind, String label, List<CombatActionEvent.Target> targets) {
+        broadcast(enc.getSessionId(), new CombatActionEvent(
+                CombatActionEvent.TYPE, enc.getSessionId(), actionSeq.incrementAndGet(),
+                actorKind, actorName, actionKind, label, targets, toStateDto(enc)));
     }
 
     /* ── target selection / predicates ───────────────────────────── */
@@ -408,6 +723,53 @@ public class CombatService {
             throw new IllegalStateException("It's not your combat turn");
         }
         return player;
+    }
+
+    /* ── enemy construction ──────────────────────────────────────── */
+
+    /**
+     * Build one enemy from the {@link MonsterCatalog} stat block (preferred), falling
+     * back to the legacy hardcoded {@link Bestiary} when the key has no catalog entry.
+     * {@code index} numbers duplicates ("Goblin 2"); 0 means it is the only one of its type.
+     */
+    private Enemy buildEnemy(UUID sessionId, String key, int index, Difficulty difficulty) {
+        int atkDelta = attackBonusDelta(difficulty);
+        int d20 = diceService.roll("1d20").total();
+
+        Optional<MonsterTemplate> tmpl = monsterCatalog.get(key);
+        if (tmpl.isPresent()) {
+            MonsterTemplate t = tmpl.get();
+            String name = index > 0 ? t.name() + " " + index : t.name();
+            int hp = scaleHp(t.hp(), difficulty);
+            List<MonsterAttack> scaled = new ArrayList<>();
+            for (MonsterAttack a : t.attacks()) {
+                scaled.add(new MonsterAttack(a.name(), a.kind(), a.toHit() + atkDelta,
+                        a.reach(), a.range(), a.damageDice(), a.damageType()));
+            }
+            MonsterAttack primary = scaled.isEmpty() ? null : scaled.get(0);
+            int perTurn = t.multiattack() != null ? Math.max(1, t.multiattack().count()) : 1;
+            return Enemy.builder()
+                    .id(UUID.randomUUID()).sessionId(sessionId).name(name)
+                    .maxHp(hp).currentHp(hp).armorClass(t.ac())
+                    .attackBonus(primary != null ? primary.toHit() : 2 + atkDelta)
+                    .damageDice(primary != null ? primary.damageDice() : "1d6")
+                    .attacks(scaled).attacksPerTurn(perTurn)
+                    .abilities(t.abilities() != null ? new LinkedHashMap<>(t.abilities())
+                            : new LinkedHashMap<>())
+                    .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
+                    .build();
+        }
+
+        Bestiary.Template t = Bestiary.get(key);
+        String name = index > 0 ? t.name() + " " + index : t.name();
+        int hp = scaleHp(t.hp(), difficulty);
+        return Enemy.builder()
+                .id(UUID.randomUUID()).sessionId(sessionId).name(name)
+                .maxHp(hp).currentHp(hp).armorClass(t.armorClass())
+                .attackBonus(t.attackBonus() + atkDelta).damageDice(t.damageDice())
+                .attacksPerTurn(1)
+                .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
+                .build();
     }
 
     /* ── stat helpers (load from the Character template) ─────────── */

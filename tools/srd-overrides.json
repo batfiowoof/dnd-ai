@@ -1,0 +1,16 @@
+{
+  "_comment": "Manual fixes deep-merged into the parsed combat data after extract-srd.py runs. Spell patches go under combat by spell index; monster patches by KEY. Used for entries the prose heuristics can't parse cleanly (e.g. variable damage types).",
+  "spells": {
+    "chromatic-orb": {
+      "effectType": "DAMAGE",
+      "targetType": "ENEMY",
+      "resolution": "SPELL_ATTACK",
+      "damageDice": "3d8",
+      "damageType": "Fire",
+      "scaling": { "perSlotAbove": "1d8" },
+      "maxTargets": 1,
+      "parsed": true
+    }
+  },
+  "monsters": {}
+}

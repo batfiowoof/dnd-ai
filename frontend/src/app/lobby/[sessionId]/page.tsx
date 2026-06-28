@@ -13,6 +13,7 @@ import {
   useKickPlayer,
 } from "@/hooks/useSessionQueries";
 import { useSessionStates, useActiveCombat } from "@/hooks/usePlayerStateQueries";
+import { useCombatSpells } from "@/hooks/useCombatReference";
 import { useSessionStore } from "@/store/sessionStore";
 import {
   createStompClient,
@@ -29,6 +30,7 @@ import {
   sendStartEncounter,
   sendCombatAttack,
   sendCombatUseItem,
+  sendCombatCast,
   sendCombatEndTurn,
   sendEndCombat,
   sendPass,
@@ -38,7 +40,7 @@ import type { Client } from "@stomp/stompjs";
 import type {
   DiceRollEvent,
   PlayerStateEvent,
-  EnemyActionEvent,
+  CombatActionEvent,
   CombatLifecycleEvent,
   RoundStatusEvent,
   RollRequestEvent,
@@ -56,7 +58,7 @@ import ActionBar from "@/components/game/ActionBar";
 import CharacterSheetDialog from "@/components/game/CharacterSheetDialog";
 import InventoryManager from "@/components/game/InventoryManager";
 import CombatTracker from "@/components/combat/CombatTracker";
-import EnemyActionModal from "@/components/combat/EnemyActionModal";
+import CombatActionModal from "@/components/combat/CombatActionModal";
 import StartEncounterControl from "@/components/combat/StartEncounterControl";
 
 /* ════════════════════════════════════════════════════════════════
@@ -330,8 +332,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               s.applyCombatLifecycle(data as unknown as CombatLifecycleEvent);
               scrollToBottom();
               break;
-            case "ENEMY_ACTION":
-              s.applyEnemyAction(data as unknown as EnemyActionEvent);
+            case "COMBAT_ACTION":
+              s.applyCombatAction(data as unknown as CombatActionEvent);
               break;
             case "ROUND_STATUS":
               s.applyRoundStatus(data as unknown as RoundStatusEvent);
@@ -495,6 +497,18 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     if (!clientRef.current || !connected) return;
     sendCombatUseItem(clientRef.current, sessionId, itemName);
   }
+  function handleCombatCast(
+    spellName: string,
+    spellLevel: number,
+    targetIds: string[]
+  ) {
+    if (!clientRef.current || !connected) return;
+    sendCombatCast(clientRef.current, sessionId, {
+      spellName,
+      spellLevel,
+      targetIds,
+    });
+  }
   function handleCombatEndTurn() {
     if (!clientRef.current || !connected) return;
     sendCombatEndTurn(clientRef.current, sessionId);
@@ -511,6 +525,20 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const myState = playerId ? runtimeByPlayerId[playerId] ?? null : null;
   const myPlayer = humanPlayers.find((p) => p.id === playerId);
   const inCombat = combat?.status === "ACTIVE";
+
+  // Spell metadata for the in-combat cast menu (fetched once when a fight starts).
+  const combatSpellsQuery = useCombatSpells(inCombat);
+  const combatSpells = combatSpellsQuery.data ?? [];
+  // Party HP bars — used as heal/buff targets during combat.
+  const combatAllies = humanPlayers.map((p) => {
+    const rs = runtimeByPlayerId[p.id];
+    return {
+      id: p.id,
+      name: p.characterName ?? p.username,
+      currentHp: rs?.currentHp ?? 0,
+      maxHp: rs?.maxHp ?? 0,
+    };
+  });
 
   /* ── turn/combat-aware activity signals ─────────────────────────
      During combat the single source of truth is combat.active.refId, not the
@@ -748,7 +776,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     <div className="flex h-dvh flex-col">
       {/* Dice + combat-action animation overlays */}
       <DiceRollModal />
-      <EnemyActionModal />
+      <CombatActionModal />
       <RollPromptModal
         request={pendingCheck}
         connected={connected}
@@ -930,7 +958,10 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
               myState={myState}
               isHost={isCreator}
               connected={connected}
+              spells={combatSpells}
+              allies={combatAllies}
               onAttack={handleCombatAttack}
+              onCast={handleCombatCast}
               onUseItem={handleCombatUseItem}
               onEndTurn={handleCombatEndTurn}
               onEndCombat={handleEndCombat}

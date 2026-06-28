@@ -104,11 +104,14 @@ public final class DmTags {
             }
             String key = keyPart.toUpperCase(Locale.ROOT).replaceAll("\\s+", "_");
             if (validKeys.contains(key)) {
-                for (int i = 0; i < count; i++) keys.add(key);
+                for (int i = 0; i < count && keys.size() < MAX_ENCOUNTER; i++) keys.add(key);
             }
         }
         return keys;
     }
+
+    /** Total combatants a single encounter tag may spawn (across all enemy types). */
+    private static final int MAX_ENCOUNTER = 8;
 
     /** Parse every {@code [[ROLL:…]]} tag (collaborative rounds may flag several players). */
     public static List<RollTag> parseRolls(String text) {
