@@ -91,4 +91,9 @@ public class Enemy {
     @Column(name = "attacks_per_turn", nullable = false)
     @Builder.Default
     private int attacksPerTurn = 1;
+
+    /** Walking speed in feet (the per-turn movement budget on the tactical grid), default 30. */
+    @Column(nullable = false)
+    @Builder.Default
+    private int speed = 30;
 }

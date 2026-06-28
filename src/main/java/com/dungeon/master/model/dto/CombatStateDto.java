@@ -13,6 +13,7 @@ public record CombatStateDto(
         int activeIndex,
         Combatant active,
         List<Combatant> order,
-        List<EnemyDto> enemies
+        List<EnemyDto> enemies,
+        GridState grid
 ) {
 }

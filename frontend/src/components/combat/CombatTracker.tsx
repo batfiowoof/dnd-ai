@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react";
 import type { CombatStateDto, PlayerRuntimeState, SpellSummary } from "@/types";
-import { cn } from "@/components/ui";
+import { Button, Tooltip, cn } from "@/components/ui";
+import DeathSaveTrack, {
+  StatusBadge,
+  deriveDeathStatus,
+} from "@/components/combat/DeathSaveTrack";
 
 export interface AllyTarget {
   id: string;
@@ -19,11 +23,29 @@ interface CombatTrackerProps {
   connected: boolean;
   spells: SpellSummary[];
   allies: AllyTarget[];
+  /** Per-player runtime — drives ally death-save pips / badges. */
+  runtimeByPlayerId: Record<string, PlayerRuntimeState>;
   onAttack: (enemyId: string) => void;
   onCast: (spellName: string, spellLevel: number, targetIds: string[]) => void;
+  /** Hand an AoE spell to the BattleMap for on-map origin placement. */
+  onBeginAoePlacement: (spell: {
+    name: string;
+    level: number;
+    aoeShape: string;
+    aoeSize: number;
+  }) => void;
+  /** Name of the AoE spell currently being placed on the map (drives the banner), or null. */
+  placingSpellName: string | null;
+  /** Abandon AoE placement. */
+  onCancelAoe: () => void;
   onUseItem: (itemName: string) => void;
+  onStabilize: (targetPlayerId: string) => void;
   onEndTurn: () => void;
   onEndCombat: () => void;
+  /* ── Tactical movement / defensive actions (Phase B) ── */
+  onDash: () => void;
+  onDisengage: () => void;
+  onDodge: () => void;
 }
 
 /** A castable known spell: the player's chosen name resolved to its catalog metadata. */
@@ -46,11 +68,19 @@ export default function CombatTracker({
   connected,
   spells,
   allies,
+  runtimeByPlayerId,
   onAttack,
   onCast,
+  onBeginAoePlacement,
+  placingSpellName,
+  onCancelAoe,
   onUseItem,
+  onStabilize,
   onEndTurn,
   onEndCombat,
+  onDash,
+  onDisengage,
+  onDodge,
 }: CombatTrackerProps) {
   const [itemMenu, setItemMenu] = useState(false);
   const [spellMenu, setSpellMenu] = useState(false);
@@ -60,6 +90,9 @@ export default function CombatTracker({
   const isMyTurn =
     combat.active?.kind === "PLAYER" && combat.active.refId === myPlayerId;
   const usableItems = myState?.inventory.filter((i) => i.qty > 0) ?? [];
+
+  // My token's action-economy flags (drive the toggled Dash/Disengage/Dodge state).
+  const myToken = combat.grid?.tokens[myPlayerId] ?? null;
 
   const initiativeByEnemyId: Record<string, number> = {};
   combat.order.forEach((c) => {
@@ -97,6 +130,16 @@ export default function CombatTracker({
     setSpellMenu(false);
     if (spell.targetType === "SELF") {
       onCast(spell.name, spell.level, [myPlayerId]);
+      return;
+    }
+    // AoE spell → place an origin on the battle map (server computes the hit set).
+    if (spell.aoeShape && spell.aoeSize > 0) {
+      onBeginAoePlacement({
+        name: spell.name,
+        level: spell.level,
+        aoeShape: spell.aoeShape,
+        aoeSize: spell.aoeSize,
+      });
       return;
     }
     setCasting(spell);
@@ -255,42 +298,102 @@ export default function CombatTracker({
             const ratio = a.maxHp > 0 ? a.currentHp / a.maxHp : 0;
             const selectable = targetingAllies && connected;
             const chosen = picked.includes(a.id);
+            const rs = runtimeByPlayerId[a.id];
+            const status = deriveDeathStatus(rs);
+            const canStabilize =
+              status === "DYING" && isMyTurn && connected && !casting;
             return (
-              <button
-                key={a.id}
-                type="button"
-                disabled={!selectable}
-                onClick={() => selectable && toggleTarget(a.id)}
-                className={cn(
-                  "rounded-lg border p-2 text-left transition",
-                  chosen
-                    ? "border-emerald-400 bg-emerald-400/10 shadow-[0_0_16px_rgba(52,211,153,0.25)]"
-                    : selectable
-                      ? "cursor-pointer border-emerald-400/50 bg-surface hover:border-emerald-400"
-                      : "border-border bg-surface/60"
+              <div key={a.id} className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  disabled={!selectable}
+                  onClick={() => selectable && toggleTarget(a.id)}
+                  className={cn(
+                    "rounded-lg border p-2 text-left transition",
+                    chosen
+                      ? "border-emerald-400 bg-emerald-400/10 shadow-[0_0_16px_rgba(52,211,153,0.25)]"
+                      : selectable
+                        ? "cursor-pointer border-emerald-400/50 bg-surface hover:border-emerald-400"
+                        : status === "DYING"
+                          ? "border-danger/40 bg-surface/60"
+                          : "border-border bg-surface/60"
+                  )}
+                  title={selectable ? `Target ${a.name}` : a.name}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-xs font-semibold text-text">
+                      {chosen ? "✚ " : ""}
+                      {a.name}
+                      {a.id === myPlayerId ? " (you)" : ""}
+                    </span>
+                    {status && <StatusBadge status={status} />}
+                  </div>
+                  {status ? (
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      {status === "DEAD" ? (
+                        <span className="text-[9px] uppercase tracking-wider text-text-muted">
+                          Beyond saving
+                        </span>
+                      ) : (
+                        <DeathSaveTrack
+                          successes={rs?.deathSaveSuccesses ?? 0}
+                          failures={rs?.deathSaveFailures ?? 0}
+                        />
+                      )}
+                      <span className="tabular text-[9px] text-text-muted">
+                        0/{a.maxHp}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-light">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            ratio > 0.5
+                              ? "bg-emerald-500"
+                              : ratio > 0.25
+                                ? "bg-gold"
+                                : "bg-danger"
+                          )}
+                          style={{
+                            width: `${Math.max(0, Math.min(100, ratio * 100))}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="mt-0.5 text-right text-[9px] tabular text-text-muted">
+                        {Math.max(0, a.currentHp)}/{a.maxHp}
+                      </div>
+                    </>
+                  )}
+                </button>
+                {canStabilize && (
+                  <Tooltip
+                    placement="top"
+                    className="w-full"
+                    content={
+                      <span className="block max-w-[12rem] text-xs text-text-muted">
+                        <span className="font-semibold text-gold">
+                          Stabilize
+                        </span>{" "}
+                        — DC 10 Medicine check to stabilize {a.name}. Uses your
+                        action.
+                      </span>
+                    }
+                  >
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      fullWidth
+                      disabled={!connected}
+                      onClick={() => onStabilize(a.id)}
+                    >
+                      ✚ Stabilize
+                    </Button>
+                  </Tooltip>
                 )}
-                title={selectable ? `Target ${a.name}` : a.name}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="truncate text-xs font-semibold text-text">
-                    {chosen ? "✚ " : ""}
-                    {a.name}
-                    {a.id === myPlayerId ? " (you)" : ""}
-                  </span>
-                </div>
-                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-light">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all",
-                      ratio > 0.5 ? "bg-emerald-500" : ratio > 0.25 ? "bg-gold" : "bg-danger"
-                    )}
-                    style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }}
-                  />
-                </div>
-                <div className="mt-0.5 text-right text-[9px] tabular text-text-muted">
-                  {Math.max(0, a.currentHp)}/{a.maxHp}
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -302,6 +405,22 @@ export default function CombatTracker({
           <span className="text-xs italic text-text-muted">
             Waiting for {combat.active?.name ?? "the next combatant"}…
           </span>
+        ) : placingSpellName ? (
+          <>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
+              {placingSpellName}
+            </span>
+            <span className="text-[10px] text-text-muted">
+              — click a square on the battle map to aim
+            </span>
+            <button
+              type="button"
+              onClick={onCancelAoe}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-text-muted transition hover:border-accent/60 hover:text-accent"
+            >
+              Cancel
+            </button>
+          </>
         ) : casting ? (
           <>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
@@ -402,6 +521,68 @@ export default function CombatTracker({
                 </div>
               )}
             </div>
+
+            {/* Movement / defensive actions — don't end the turn */}
+            <Tooltip
+              placement="top"
+              content={
+                <span className="block max-w-[12rem] text-xs text-text-muted">
+                  <span className="font-semibold text-gold">Dash</span> — double
+                  your movement this turn.
+                </span>
+              }
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={myToken?.dashed ? "primary" : "ghost"}
+                disabled={!connected || !!myToken?.dashed}
+                onClick={onDash}
+              >
+                🏃 Dash
+              </Button>
+            </Tooltip>
+
+            <Tooltip
+              placement="top"
+              content={
+                <span className="block max-w-[12rem] text-xs text-text-muted">
+                  <span className="font-semibold text-gold">Disengage</span> —
+                  your movement won&apos;t provoke opportunity attacks.
+                </span>
+              }
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={myToken?.disengaged ? "primary" : "ghost"}
+                disabled={!connected || !!myToken?.disengaged}
+                onClick={onDisengage}
+              >
+                🛡 Disengage
+              </Button>
+            </Tooltip>
+
+            <Tooltip
+              placement="top"
+              content={
+                <span className="block max-w-[12rem] text-xs text-text-muted">
+                  <span className="font-semibold text-gold">Dodge</span> —
+                  attacks against you have disadvantage until your next turn.
+                </span>
+              }
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={myToken?.dodging ? "primary" : "ghost"}
+                disabled={!connected || !!myToken?.dodging}
+                onClick={onDodge}
+                className={cn(myToken?.dodging && "!bg-gold !text-bg")}
+              >
+                ✦ Dodge
+              </Button>
+            </Tooltip>
 
             <button
               type="button"

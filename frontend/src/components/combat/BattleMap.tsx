@@ -1,0 +1,845 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+  CombatStateDto,
+  Combatant,
+  PlayerRuntimeState,
+  TerrainType,
+} from "@/types";
+import {
+  gridDistanceFeet,
+  reachableSquares,
+  cellKey,
+  aoeCells,
+} from "@/lib/dnd5e";
+import { Panel, Button, Alert, Spinner, cn } from "@/components/ui";
+import Portrait from "@/components/Portrait";
+import DeathSaveTrack, {
+  StatusBadge,
+  deriveDeathStatus,
+} from "@/components/combat/DeathSaveTrack";
+
+/** Logical cell size (px in the SVG user space). ≥44 keeps tap targets accessible. */
+const CELL = 48;
+/** Portrait diameter inside a token (matches Portrait `sm` = 36px). */
+const PORTRAIT = 36;
+
+/** An AoE spell awaiting placement on the board (origin captured by a board click). */
+export interface PlacingSpell {
+  name: string;
+  level: number;
+  aoeShape: string;
+  aoeSize: number;
+}
+
+interface BattleMapProps {
+  combat: CombatStateDto;
+  myPlayerId: string;
+  isMyTurn: boolean;
+  /** Walk speed (ft) of the local player — preview only; from the sheet or 30. */
+  mySpeed: number;
+  runtimeByPlayerId: Record<string, PlayerRuntimeState>;
+  onMove: (x: number, y: number) => void;
+  onAttackEnemy: (enemyId: string) => void;
+  connected: boolean;
+  /** True for the session host — gates the battle-map background upload control. */
+  isHost: boolean;
+  /** Set while an AoE spell is being placed; drives the template-preview overlay. */
+  placingSpell: PlacingSpell | null;
+  /** Commit an AoE cast at the clicked origin cell. */
+  onCastAoe: (spellName: string, spellLevel: number, x: number, y: number) => void;
+  /** Abandon AoE placement mode. */
+  onCancelAoe: () => void;
+  /** Upload a battle-map background (host only). Rejects with a message on 400/403/409. */
+  onUploadMap: (file: File) => Promise<void>;
+}
+
+/** Column letter (A, B, C…) for an x index — used in aria-labels (e.g. "C4"). */
+function colLetter(x: number): string {
+  return String.fromCharCode(65 + (x % 26));
+}
+
+/** HP-ratio ring colour — mirrors CharacterStatus (green >50% / gold >25% / red). */
+function hpColor(ratio: number): string {
+  if (ratio > 0.5) return "var(--color-success)";
+  if (ratio > 0.25) return "var(--color-gold)";
+  return "var(--color-danger)";
+}
+
+/** Reduced-motion: honour the OS setting AND the in-app preference flag. */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const read = () =>
+      setReduced(
+        !!mq?.matches ||
+          document.documentElement.dataset.reduceMotion === "true"
+      );
+    read();
+    mq?.addEventListener?.("change", read);
+    return () => mq?.removeEventListener?.("change", read);
+  }, []);
+  return reduced;
+}
+
+const TERRAIN_LABEL: Record<TerrainType, string> = {
+  WALL: "Wall",
+  DIFFICULT: "Difficult terrain",
+  HAZARD: "Hazard",
+};
+
+/**
+ * Tactical battle grid. Renders a responsive, layered SVG board: optional
+ * background image + scrim, grid lines, terrain (pattern/icon — never colour
+ * alone), feature markers, the active player's reachable-move highlight, and
+ * combatant tokens (Portrait + HP ring, gold ring for the active combatant,
+ * distinguishing glyph for enemies). On your turn, click a reachable empty cell
+ * to move or an enemy token to attack. Server stays authoritative — the
+ * reachable highlight is a client mirror of the server's movement rules.
+ *
+ * Layer order is kept explicit so an AoE-template overlay (Phase E) and
+ * death-save pips (Phase C) can slot into their reserved <g> groups.
+ */
+export default function BattleMap({
+  combat,
+  myPlayerId,
+  isMyTurn,
+  mySpeed,
+  runtimeByPlayerId,
+  onMove,
+  onAttackEnemy,
+  connected,
+  isHost,
+  placingSpell,
+  onCastAoe,
+  onCancelAoe,
+  onUploadMap,
+}: BattleMapProps) {
+  const reduced = usePrefersReducedMotion();
+  const [hovered, setHovered] = useState<string | null>(null);
+  /** Hovered origin cell while placing an AoE template ("x,y"), or null. */
+  const [placeHover, setPlaceHover] = useState<string | null>(null);
+
+  /* Host background-upload control state. */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Leaving placement mode clears any lingering template hover.
+  useEffect(() => {
+    if (!placingSpell) setPlaceHover(null);
+  }, [placingSpell]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      await onUploadMap(file);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const grid = combat.grid;
+
+  // refId → combatant (name / kind) for token labelling.
+  const combatantByRef = useMemo(() => {
+    const m: Record<string, Combatant> = {};
+    combat.order.forEach((c) => {
+      m[c.refId] = c;
+    });
+    return m;
+  }, [combat.order]);
+
+  const activeRefId = combat.active?.refId ?? null;
+  const myToken = grid?.tokens[myPlayerId] ?? null;
+
+  // Reachable highlight (my turn only) — remaining budget = speed − used.
+  const reachable = useMemo(() => {
+    if (!grid || !isMyTurn || !myToken) return new Set<string>();
+    const budget = mySpeed - myToken.movementUsedFeet;
+    return reachableSquares(grid, myPlayerId, budget);
+  }, [grid, isMyTurn, myToken, mySpeed, myPlayerId]);
+
+  // Occupied cells (can't move onto a token).
+  const occupied = useMemo(() => {
+    const s = new Set<string>();
+    if (grid) {
+      for (const t of Object.values(grid.tokens)) s.add(cellKey(t.x, t.y));
+    }
+    return s;
+  }, [grid]);
+
+  // Resume from a pre-grid encounter → nothing to draw.
+  if (!grid) return null;
+
+  const W = grid.width * CELL;
+  const H = grid.height * CELL;
+  const placing = !!placingSpell;
+  // Reachable-move interactions are suspended while aiming an AoE template.
+  const interactive = isMyTurn && connected && !placing;
+
+  const enemyById = Object.fromEntries(combat.enemies.map((e) => [e.id, e]));
+
+  // Template cells under the cursor while placing (in-bounds keys only).
+  const previewCells = (() => {
+    if (!placingSpell || !placeHover) return new Set<string>();
+    const [ox, oy] = placeHover.split(",").map(Number);
+    const all = aoeCells(
+      ox,
+      oy,
+      placingSpell.aoeShape,
+      placingSpell.aoeSize
+    );
+    const inBounds = new Set<string>();
+    for (const k of all) {
+      const [cx, cy] = k.split(",").map(Number);
+      if (cx >= 0 && cy >= 0 && cx < grid.width && cy < grid.height) {
+        inBounds.add(k);
+      }
+    }
+    return inBounds;
+  })();
+
+  return (
+    <Panel className="p-2 sm:p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-display text-xs font-bold uppercase tracking-wider text-accent">
+          Battlefield
+        </span>
+        <div className="flex items-center gap-3">
+          {isMyTurn && myToken && (
+            <span className="tabular text-[11px] text-text-muted">
+              Move{" "}
+              <span className="text-gold">
+                {Math.max(0, mySpeed - myToken.movementUsedFeet)}
+              </span>
+              /{mySpeed} ft
+            </span>
+          )}
+          {isHost && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload a battle-map background (host only)"
+              >
+                {uploading ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Spinner className="h-3 w-3 text-gold" /> Uploading…
+                  </span>
+                ) : (
+                  "⬆ Map"
+                )}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {uploadError && (
+        <Alert className="mb-2 text-xs">{uploadError}</Alert>
+      )}
+
+      {/* AoE placement banner */}
+      {placingSpell && (
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-gold/50 bg-gold-muted px-3 py-1.5">
+          <span className="text-xs text-gold">
+            Placing{" "}
+            <span className="font-semibold">{placingSpell.name}</span> — click a
+            square to aim
+          </span>
+          <Button type="button" size="sm" variant="ghost" onClick={onCancelAoe}>
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      <div className="mx-auto w-full" style={{ maxWidth: Math.min(W, 640) }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="block h-auto w-full select-none rounded-lg"
+          role="group"
+          aria-label="Tactical battle grid"
+        >
+          <defs>
+            {/* Difficult-terrain diagonal hatch (pattern, not colour-only). */}
+            <pattern
+              id="bm-difficult"
+              width="8"
+              height="8"
+              patternTransform="rotate(45)"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width="8" height="8" fill="var(--color-gold-muted)" />
+              <line
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="8"
+                stroke="var(--color-gold)"
+                strokeWidth="1.5"
+                strokeOpacity="0.5"
+              />
+            </pattern>
+
+            {/* Subtle board vignette — darkens the edges for depth. */}
+            <radialGradient id="bm-vignette" cx="50%" cy="50%" r="75%">
+              <stop offset="55%" stopColor="#000000" stopOpacity={0} />
+              <stop offset="100%" stopColor="#000000" stopOpacity={0.4} />
+            </radialGradient>
+
+            {/* Soft drop shadow lifting tokens off the board. */}
+            <filter id="bm-token-shadow" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow
+                dx="0"
+                dy="1.5"
+                stdDeviation="1.6"
+                floodColor="#000000"
+                floodOpacity="0.55"
+              />
+            </filter>
+          </defs>
+
+          {/* 1 — Background image + legibility scrim */}
+          {grid.backgroundImageUrl && (
+            <g>
+              <image
+                href={grid.backgroundImageUrl}
+                x={0}
+                y={0}
+                width={W}
+                height={H}
+                preserveAspectRatio="xMidYMid slice"
+              />
+              <rect x={0} y={0} width={W} height={H} fill="#0b0a0a" opacity={0.45} />
+            </g>
+          )}
+
+          {/* 2 — Board fill (skipped when an image already covers it) */}
+          {!grid.backgroundImageUrl && (
+            <rect x={0} y={0} width={W} height={H} fill="var(--color-surface)" />
+          )}
+
+          {/* 2b — Vignette (depth on the board edges) */}
+          <rect
+            x={0}
+            y={0}
+            width={W}
+            height={H}
+            fill="url(#bm-vignette)"
+            pointerEvents="none"
+          />
+
+          {/* 3 — Grid lines */}
+          <g
+            stroke="var(--color-border)"
+            strokeWidth={1}
+            opacity={0.5}
+            shapeRendering="crispEdges"
+          >
+            {Array.from({ length: grid.width + 1 }).map((_, i) => (
+              <line key={`v${i}`} x1={i * CELL} y1={0} x2={i * CELL} y2={H} />
+            ))}
+            {Array.from({ length: grid.height + 1 }).map((_, i) => (
+              <line key={`h${i}`} x1={0} y1={i * CELL} x2={W} y2={i * CELL} />
+            ))}
+          </g>
+
+          {/* 4 — Terrain (pattern + icon, never colour alone) */}
+          <g>
+            {grid.terrain.map((t) => {
+              const tx = t.x * CELL;
+              const ty = t.y * CELL;
+              if (t.type === "WALL") {
+                return (
+                  <g key={`t${t.x}-${t.y}`}>
+                    <rect
+                      x={tx}
+                      y={ty}
+                      width={CELL}
+                      height={CELL}
+                      fill="var(--color-bg-elevated)"
+                    />
+                    {/* top/left edge highlight for a chiselled-stone read */}
+                    <path
+                      d={`M${tx} ${ty + CELL} L${tx} ${ty} L${tx + CELL} ${ty}`}
+                      fill="none"
+                      stroke="var(--color-border)"
+                      strokeWidth={2}
+                    />
+                  </g>
+                );
+              }
+              if (t.type === "DIFFICULT") {
+                return (
+                  <rect
+                    key={`t${t.x}-${t.y}`}
+                    x={tx}
+                    y={ty}
+                    width={CELL}
+                    height={CELL}
+                    fill="url(#bm-difficult)"
+                  />
+                );
+              }
+              // HAZARD — red-tinted fill + spike glyph.
+              return (
+                <g key={`t${t.x}-${t.y}`}>
+                  <rect
+                    x={tx}
+                    y={ty}
+                    width={CELL}
+                    height={CELL}
+                    fill="var(--color-accent-glow)"
+                  />
+                  <path
+                    d={`M${tx + CELL / 2} ${ty + 10} L${tx + CELL - 12} ${
+                      ty + CELL - 12
+                    } L${tx + 12} ${ty + CELL - 12} Z`}
+                    fill="var(--color-accent)"
+                    opacity={0.85}
+                  />
+                </g>
+              );
+            })}
+          </g>
+
+          {/* 5 — Feature markers (gold diamond + label) */}
+          <g>
+            {grid.features.map((f) => {
+              const fx = f.x * CELL + CELL / 2;
+              const fy = f.y * CELL + CELL / 2;
+              return (
+                <g key={`f${f.x}-${f.y}`}>
+                  <rect
+                    x={fx - 5}
+                    y={fy - 5}
+                    width={10}
+                    height={10}
+                    transform={`rotate(45 ${fx} ${fy})`}
+                    fill="var(--color-gold)"
+                    opacity={0.85}
+                  />
+                  <text
+                    x={fx}
+                    y={fy + CELL / 2 - 4}
+                    textAnchor="middle"
+                    style={{ fontFamily: "var(--font-display)" }}
+                    fontSize={9}
+                    fill="var(--color-gold)"
+                  >
+                    {f.label}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+
+          {/* 6 — Reachable-move highlight (active player's turn only) */}
+          {interactive && (
+            <g>
+              {[...reachable].map((k) => {
+                if (occupied.has(k)) return null;
+                const [cx, cy] = k.split(",").map(Number);
+                const isHover = hovered === k;
+                return (
+                  <g
+                    key={`r${k}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Move to ${colLetter(cx)}${cy + 1} (${gridDistanceFeet(
+                      myToken!.x,
+                      myToken!.y,
+                      cx,
+                      cy
+                    )} ft)`}
+                    className="cursor-pointer focus:outline-none"
+                    onClick={() => onMove(cx, cy)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onMove(cx, cy);
+                      }
+                    }}
+                    onMouseEnter={() => setHovered(k)}
+                    onMouseLeave={() => setHovered((h) => (h === k ? null : h))}
+                    onFocus={() => setHovered(k)}
+                    onBlur={() => setHovered((h) => (h === k ? null : h))}
+                  >
+                    <rect
+                      x={cx * CELL + 2}
+                      y={cy * CELL + 2}
+                      width={CELL - 4}
+                      height={CELL - 4}
+                      rx={4}
+                      fill="var(--color-accent-glow)"
+                      stroke="var(--color-accent)"
+                      strokeOpacity={isHover ? 0.9 : 0.35}
+                      strokeWidth={isHover ? 2 : 1}
+                      className={reduced ? undefined : "transition-all"}
+                    />
+                    {isHover && (
+                      <text
+                        x={cx * CELL + CELL / 2}
+                        y={cy * CELL + CELL / 2 + 3}
+                        textAnchor="middle"
+                        className="tabular pointer-events-none"
+                        fontSize={10}
+                        fill="var(--color-accent-light)"
+                      >
+                        {gridDistanceFeet(myToken!.x, myToken!.y, cx, cy)}ft
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+          )}
+
+          {/* 7 — AoE template preview (placement mode) */}
+          {placing && (
+            <g aria-hidden="true" pointerEvents="none">
+              {[...previewCells].map((k) => {
+                const [cx, cy] = k.split(",").map(Number);
+                const isOrigin = k === placeHover;
+                return (
+                  <rect
+                    key={`aoe${k}`}
+                    x={cx * CELL + 1}
+                    y={cy * CELL + 1}
+                    width={CELL - 2}
+                    height={CELL - 2}
+                    rx={3}
+                    fill="var(--color-gold)"
+                    fillOpacity={isOrigin ? 0.42 : 0.26}
+                    stroke="var(--color-gold)"
+                    strokeOpacity={0.85}
+                    strokeWidth={isOrigin ? 2 : 1}
+                  />
+                );
+              })}
+            </g>
+          )}
+
+          {/* 8 — Tokens */}
+          <g>
+            {Object.entries(grid.tokens).map(([refId, tk]) => {
+              const c = combatantByRef[refId];
+              const isEnemy = c?.kind === "ENEMY";
+              const isActive = refId === activeRefId;
+              const cx = tk.x * CELL + CELL / 2;
+              const cy = tk.y * CELL + CELL / 2;
+
+              const enemy = isEnemy ? enemyById[refId] : undefined;
+              const runtime = !isEnemy ? runtimeByPlayerId[refId] : undefined;
+              const cur = enemy?.currentHp ?? runtime?.currentHp ?? 0;
+              const max = enemy?.maxHp ?? runtime?.maxHp ?? 1;
+              const ratio = max > 0 ? cur / max : 0;
+              const status = !isEnemy ? deriveDeathStatus(runtime) : null;
+              const downed = !isEnemy && runtime ? runtime.currentHp <= 0 : false;
+              const name = c?.name ?? enemy?.name ?? "Combatant";
+
+              const canAttack =
+                interactive && isEnemy && (enemy?.alive ?? true);
+
+              const label = `${name}, ${Math.max(0, cur)}/${max} HP, ${colLetter(
+                tk.x
+              )}${tk.y + 1}${isEnemy ? " (enemy)" : ""}${
+                isActive ? " — active" : ""
+              }`;
+
+              return (
+                <g
+                  key={`tok${refId}`}
+                  transform={`translate(${cx} ${cy})`}
+                  role={canAttack ? "button" : "img"}
+                  tabIndex={canAttack ? 0 : undefined}
+                  aria-label={canAttack ? `Attack ${label}` : label}
+                  className={cn(
+                    "focus:outline-none",
+                    canAttack && "cursor-pointer"
+                  )}
+                  onClick={canAttack ? () => onAttackEnemy(refId) : undefined}
+                  onKeyDown={
+                    canAttack
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onAttackEnemy(refId);
+                          }
+                        }
+                      : undefined
+                  }
+                  opacity={downed ? 0.45 : 1}
+                >
+                  {/* Contact shadow lifting the token off the board */}
+                  <ellipse
+                    cx={0}
+                    cy={PORTRAIT / 2 + 3}
+                    rx={PORTRAIT / 2 - 1}
+                    ry={4}
+                    fill="#000000"
+                    opacity={0.45}
+                    pointerEvents="none"
+                  />
+
+                  {/* Active-combatant gold glow (pulse stilled under reduced motion) */}
+                  {isActive && (
+                    <circle
+                      r={PORTRAIT / 2 + 5}
+                      fill="none"
+                      stroke="var(--color-gold)"
+                      strokeWidth={2}
+                      opacity={0.7}
+                      className={reduced ? undefined : "animate-pulse"}
+                    />
+                  )}
+
+                  {/* HP ring */}
+                  <circle
+                    r={PORTRAIT / 2 + 2}
+                    fill="none"
+                    stroke={hpColor(ratio)}
+                    strokeWidth={3}
+                  />
+
+                  {/* Enemy distinguishing ring (kind not conveyed by colour alone) */}
+                  {isEnemy && (
+                    <circle
+                      r={PORTRAIT / 2 + 5}
+                      fill="none"
+                      stroke="var(--color-danger)"
+                      strokeWidth={1.5}
+                      strokeDasharray="3 3"
+                      opacity={0.8}
+                    />
+                  )}
+
+                  {/* Portrait avatar */}
+                  <foreignObject
+                    x={-PORTRAIT / 2}
+                    y={-PORTRAIT / 2}
+                    width={PORTRAIT}
+                    height={PORTRAIT}
+                  >
+                    <Portrait
+                      src={isEnemy ? null : undefined}
+                      name={name}
+                      size="sm"
+                      active={isActive}
+                    />
+                  </foreignObject>
+
+                  {/* Enemy kind glyph (crossed-swords badge, top-right) */}
+                  {isEnemy && (
+                    <g transform={`translate(${PORTRAIT / 2 - 2} ${-PORTRAIT / 2 + 2})`}>
+                      <circle r={7} fill="var(--color-danger)" />
+                      <text
+                        textAnchor="middle"
+                        y={3}
+                        fontSize={9}
+                        fill="#fff"
+                        aria-hidden="true"
+                      >
+                        ⚔
+                      </text>
+                    </g>
+                  )}
+
+                  {/* Dead marker — a fallen, beyond-saving combatant (death-save
+                      pips / stable badge for the dying are drawn in layer 9). */}
+                  {status === "DEAD" && (
+                    <text
+                      textAnchor="middle"
+                      y={4}
+                      fontSize={20}
+                      fill="var(--color-danger)"
+                      aria-hidden="true"
+                    >
+                      ✕
+                    </text>
+                  )}
+
+                  {/* Movement label under my active token */}
+                  {isActive && refId === myPlayerId && (
+                    <text
+                      textAnchor="middle"
+                      y={PORTRAIT / 2 + 14}
+                      className="tabular"
+                      fontSize={9}
+                      fill="var(--color-gold)"
+                    >
+                      {Math.max(0, mySpeed - tk.movementUsedFeet)}/{mySpeed} ft
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </g>
+
+          {/* 9 — Death-save overlay (full opacity above the faded downed tokens):
+                 dying allies show their save pips, the stable show a gold badge. */}
+          <g>
+            {Object.entries(grid.tokens).map(([refId, tk]) => {
+              const c = combatantByRef[refId];
+              if (c?.kind === "ENEMY") return null;
+              const runtime = runtimeByPlayerId[refId];
+              const status = deriveDeathStatus(runtime);
+              if (status !== "DYING" && status !== "STABLE") return null;
+              const cx = tk.x * CELL + CELL / 2;
+              const oy = tk.y * CELL + CELL / 2 - (PORTRAIT / 2 + 20);
+              return (
+                <foreignObject
+                  key={`ds${refId}`}
+                  x={cx - 44}
+                  y={oy}
+                  width={88}
+                  height={18}
+                  className="overflow-visible"
+                  style={{ pointerEvents: "none" }}
+                >
+                  <div className="flex justify-center">
+                    <div className="rounded bg-bg/85 px-1 py-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.6)]">
+                      {status === "DYING" ? (
+                        <DeathSaveTrack
+                          successes={runtime?.deathSaveSuccesses ?? 0}
+                          failures={runtime?.deathSaveFailures ?? 0}
+                          size="xs"
+                        />
+                      ) : (
+                        <StatusBadge status="STABLE" />
+                      )}
+                    </div>
+                  </div>
+                </foreignObject>
+              );
+            })}
+          </g>
+
+          {/* 10 — AoE placement capture layer (transparent cells on top) */}
+          {placing && (
+            <g>
+              {Array.from({ length: grid.height }).map((_, cy) =>
+                Array.from({ length: grid.width }).map((_, cx) => {
+                  const k = cellKey(cx, cy);
+                  return (
+                    <rect
+                      key={`aim${k}`}
+                      x={cx * CELL}
+                      y={cy * CELL}
+                      width={CELL}
+                      height={CELL}
+                      fill="transparent"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Aim ${placingSpell!.name} at ${colLetter(
+                        cx
+                      )}${cy + 1}`}
+                      className="cursor-crosshair focus:outline-none"
+                      onMouseEnter={() => setPlaceHover(k)}
+                      onMouseLeave={() =>
+                        setPlaceHover((h) => (h === k ? null : h))
+                      }
+                      onFocus={() => setPlaceHover(k)}
+                      onClick={() =>
+                        connected &&
+                        onCastAoe(
+                          placingSpell!.name,
+                          placingSpell!.level,
+                          cx,
+                          cy
+                        )
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          if (connected) {
+                            onCastAoe(
+                              placingSpell!.name,
+                              placingSpell!.level,
+                              cx,
+                              cy
+                            );
+                          }
+                        }
+                      }}
+                    />
+                  );
+                })
+              )}
+            </g>
+          )}
+        </svg>
+      </div>
+
+      {/* Terrain legend */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
+        <LegendSwatch type="WALL" />
+        <LegendSwatch type="DIFFICULT" />
+        <LegendSwatch type="HAZARD" />
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-[var(--color-gold)]" />
+          Feature
+        </span>
+      </div>
+    </Panel>
+  );
+}
+
+/** A small inline terrain key swatch + label (matches the SVG treatment). */
+function LegendSwatch({ type }: { type: TerrainType }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <svg width={14} height={14} className="rounded-sm" aria-hidden="true">
+        {type === "WALL" && (
+          <>
+            <rect width={14} height={14} fill="var(--color-bg-elevated)" />
+            <path
+              d="M0 14 L0 0 L14 0"
+              fill="none"
+              stroke="var(--color-border)"
+              strokeWidth={2}
+            />
+          </>
+        )}
+        {type === "DIFFICULT" && (
+          <>
+            <rect width={14} height={14} fill="var(--color-gold-muted)" />
+            <path
+              d="M-2 4 L4 -2 M-2 12 L12 -2 M2 16 L16 2"
+              stroke="var(--color-gold)"
+              strokeWidth={1.5}
+              strokeOpacity={0.6}
+            />
+          </>
+        )}
+        {type === "HAZARD" && (
+          <>
+            <rect width={14} height={14} fill="var(--color-accent-glow)" />
+            <path d="M7 2 L12 12 L2 12 Z" fill="var(--color-accent)" />
+          </>
+        )}
+      </svg>
+      {TERRAIN_LABEL[type]}
+    </span>
+  );
+}

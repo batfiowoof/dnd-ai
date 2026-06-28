@@ -1,9 +1,13 @@
 package com.dungeon.master.service.game;
 
+import com.dungeon.master.model.dto.CombatActionEvent;
 import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.DiceRollResult;
+import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.dto.SpellEffect;
+import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
@@ -14,6 +18,9 @@ import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.CombatantKind;
 import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.model.enums.RollMode;
+import com.dungeon.master.model.enums.SpellEffectType;
+import com.dungeon.master.model.enums.SpellResolution;
+import com.dungeon.master.model.enums.SpellTargetType;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
@@ -29,12 +36,16 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,6 +63,9 @@ class CombatServiceTest {
     private SimpMessagingTemplate messaging;
     private MonsterCatalog monsterCatalog;
     private com.dungeon.master.service.ai.SpellCatalog spellCatalog;
+    private CheckModifierService checkModifierService;
+    private com.dungeon.master.service.ai.SceneGenerator sceneGenerator;
+    private com.dungeon.master.service.ai.EnemyTacticsService enemyTacticsService;
     private CombatService combat;
 
     private final UUID sessionId = UUID.randomUUID();
@@ -72,9 +86,25 @@ class CombatServiceTest {
         spellCatalog = mock(com.dungeon.master.service.ai.SpellCatalog.class);
         // Default: no catalog entry → buildEnemy falls back to the hardcoded Bestiary.
         when(monsterCatalog.get(anyString())).thenReturn(Optional.empty());
+        checkModifierService = mock(CheckModifierService.class);
+        sceneGenerator = mock(com.dungeon.master.service.ai.SceneGenerator.class);
+        enemyTacticsService = mock(com.dungeon.master.service.ai.EnemyTacticsService.class);
+        // startEncounter delegates grid construction to the SceneGenerator; mirror its default
+        // (open arena + token placement) so the produced encounter looks like production. The
+        // enemy-acting tests below build their own no-grid encounters, so the LLM-backed
+        // SceneGenerator / EnemyTacticsService are never actually exercised here.
+        when(sceneGenerator.generateScene(any(UUID.class), any(), any())).thenAnswer(inv -> {
+            GridService gs = new GridService();
+            List<String> prefs = inv.getArgument(1);
+            List<String> erefs = inv.getArgument(2);
+            GridState g = gs.defaultArena(prefs.size(), erefs.size());
+            gs.placeTokens(g, prefs, erefs);
+            return g;
+        });
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
                 sessionRepo, playerStateService, diceService, turnService, eventProducer, messaging,
-                monsterCatalog, spellCatalog);
+                monsterCatalog, spellCatalog, new GridService(), checkModifierService,
+                sceneGenerator, enemyTacticsService);
 
         // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
         when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))
@@ -123,7 +153,17 @@ class CombatServiceTest {
     }
 
     private PlayerRuntimeStateDto stateFor(UUID playerId, int hp) {
-        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false);
+        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false);
+    }
+
+    /** 0 HP, not dead, not stable — actively dying (rolling death saves). */
+    private PlayerRuntimeStateDto dyingState(UUID playerId) {
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false);
+    }
+
+    /** 0 HP, dead (three failures). */
+    private PlayerRuntimeStateDto deadState(UUID playerId) {
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 3, false, true);
     }
 
     @Test
@@ -279,5 +319,328 @@ class CombatServiceTest {
         // Aria ends turn → goblin auto-acts → order wraps back to Aria at the top of round 2.
         assertEquals(0, enc.getActiveIndex(), "active index should wrap back to the first combatant");
         assertEquals(2, enc.getRound(), "round should increment when the order wraps");
+    }
+
+    /* ── Phase B: tactical movement, action economy, opportunity attacks ── */
+
+    /** Build a single-player + single-enemy ACTIVE encounter with a grid, the player active. */
+    private CombatEncounter gridEncounter(UUID pid, int px, int py, UUID enemyId, int ex, int ey) {
+        GridState grid = GridState.builder().width(14).height(10).build();
+        grid.getTokens().put(pid.toString(), new Token(px, py, 0, true, false, false, false, false));
+        grid.getTokens().put(enemyId.toString(), new Token(ex, ey, 0, true, false, false, false, false));
+        return CombatEncounter.builder()
+                .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
+                .initiativeOrder(List.of(
+                        new Combatant(CombatantKind.PLAYER, pid, "Aria", 18, 0),
+                        new Combatant(CombatantKind.ENEMY, enemyId, "Goblin", 5, 2)))
+                .activeIndex(0).round(1).gridState(grid).build();
+    }
+
+    @Test
+    void playerMoveWithinBudgetUpdatesTokenAndKeepsTurn() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = gridEncounter(pid, 0, 0, enemyId, 12, 8); // enemy far away → no OA
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of()); // no living threats
+
+        combat.playerMove(sessionId, "Aria", 2, 0); // two squares east = 10 ft
+
+        Token t = enc.getGridState().getTokens().get(pid.toString());
+        assertEquals(2, t.getX());
+        assertEquals(10, t.getMovementUsedFeet());
+        assertEquals(0, enc.getActiveIndex(), "moving must not advance the turn");
+    }
+
+    @Test
+    void playerMoveBeyondBudgetIsRejected() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = gridEncounter(pid, 0, 0, enemyId, 12, 8);
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of());
+
+        // No character → speed 30 (6 squares). (8,0) is 40 ft away → over budget.
+        assertThrows(IllegalArgumentException.class, () -> combat.playerMove(sessionId, "Aria", 8, 0));
+    }
+
+    @Test
+    void dodgeThenAttackIsRejected() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = gridEncounter(pid, 1, 0, enemyId, 12, 8);
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of());
+
+        combat.playerDodge(sessionId, "Aria");
+        assertTrue(enc.getGridState().getTokens().get(pid.toString()).isActionUsed());
+
+        // Dodge was the action — a same-turn attack must be refused.
+        assertThrows(IllegalStateException.class, () -> combat.playerAttack(sessionId, "Aria", enemyId));
+    }
+
+    @Test
+    void leavingEnemyReachProvokesOpportunityAttack() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = gridEncounter(pid, 1, 0, enemyId, 0, 0); // adjacent enemy
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(7).currentHp(7).armorClass(15)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
+        when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
+        when(playerStateService.getState(pid)).thenReturn(stateFor(pid, 20));
+        when(diceService.roll("1d20+4")).thenReturn(res(25)); // OA hits AC 10 (no char)
+        when(diceService.roll("1d6+2")).thenReturn(res(5));
+        when(playerStateService.applyHpDelta(pid, -5, false)).thenReturn(stateFor(pid, 15));
+
+        combat.playerMove(sessionId, "Aria", 3, 0); // leaves the goblin's 5-ft reach
+
+        verify(playerStateService).applyHpDelta(pid, -5, false);
+        assertFalse(enc.getGridState().getTokens().get(enemyId.toString()).isReactionAvailable(),
+                "the goblin's reaction should be spent");
+    }
+
+    @Test
+    void disengageSuppressesOpportunityAttack() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = gridEncounter(pid, 1, 0, enemyId, 0, 0);
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(7).currentHp(7).armorClass(15)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
+
+        combat.playerDisengage(sessionId, "Aria");
+        combat.playerMove(sessionId, "Aria", 3, 0); // would normally provoke, but Disengaged
+
+        verify(playerStateService, never()).applyHpDelta(any(UUID.class), anyInt());
+    }
+
+    /* ── Phase C: death saving throws ──────────────────────────────── */
+
+    @Test
+    void dyingPlayerAutoRollsDeathSaveOnTheirTurn() {
+        UUID p1 = UUID.randomUUID();   // conscious driver
+        UUID p2 = UUID.randomUUID();   // dying
+        UUID enemyId = UUID.randomUUID();
+
+        CombatEncounter enc = CombatEncounter.builder()
+                .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
+                .initiativeOrder(List.of(
+                        new Combatant(CombatantKind.PLAYER, p1, "Aria", 20, 0),
+                        new Combatant(CombatantKind.PLAYER, p2, "Borin", 15, 0),
+                        new Combatant(CombatantKind.ENEMY, enemyId, "Goblin", 5, 2)))
+                .activeIndex(0).round(1).build();
+
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(7).currentHp(7).armorClass(15)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(p1, "Aria")));
+        when(playerRepo.findById(p1)).thenReturn(Optional.of(player(p1, "Aria")));
+        when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin)); // alive → fight continues
+        when(playerStateService.getSessionStates(sessionId))
+                .thenReturn(List.of(stateFor(p1, 20), dyingState(p2)));
+        when(playerStateService.getState(p1)).thenReturn(stateFor(p1, 20));
+        when(playerStateService.getState(p2)).thenReturn(dyingState(p2));
+        when(playerStateService.recordDeathSave(eq(p2), any(DiceRollResult.class)))
+                .thenReturn(new PlayerStateService.DeathSaveResult(
+                        dyingState(p2), PlayerStateService.DeathSaveOutcome.SUCCESS));
+        when(diceService.roll("1d20")).thenReturn(res(14));    // Borin's death save (success)
+        when(diceService.roll("1d20+4")).thenReturn(res(3));   // goblin attack vs Aria — a miss
+
+        combat.playerEndTurn(sessionId, "Aria");
+
+        // Borin's dying turn rolled a death save...
+        verify(playerStateService).recordDeathSave(eq(p2), any(DiceRollResult.class));
+
+        ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
+        verify(messaging, atLeastOnce()).convertAndSend(anyString(), events.capture());
+        boolean deathSaveBroadcast = events.getAllValues().stream()
+                .filter(e -> e instanceof com.dungeon.master.model.dto.DiceRollEvent)
+                .map(e -> (com.dungeon.master.model.dto.DiceRollEvent) e)
+                .anyMatch(e -> "Death Saving Throw".equals(e.label()));
+        assertTrue(deathSaveBroadcast, "the death save should surface as a DiceRollEvent");
+
+        // ...and combat did NOT end (Aria is still up).
+        boolean ended = events.getAllValues().stream()
+                .filter(e -> e instanceof CombatLifecycleEvent)
+                .map(e -> (CombatLifecycleEvent) e)
+                .anyMatch(e -> CombatLifecycleEvent.END.equals(e.type()));
+        assertFalse(ended, "combat must not end while a player is conscious");
+    }
+
+    @Test
+    void combatEndsInDefeatOnlyWhenPartyFullyDown() {
+        UUID p1 = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+
+        CombatEncounter enc = CombatEncounter.builder()
+                .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
+                .initiativeOrder(List.of(
+                        new Combatant(CombatantKind.PLAYER, p1, "Aria", 20, 0),
+                        new Combatant(CombatantKind.ENEMY, enemyId, "Goblin", 5, 2)))
+                .activeIndex(0).round(1).build();
+
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(7).currentHp(7).armorClass(15)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(p1, "Aria")));
+        when(playerRepo.findById(p1)).thenReturn(Optional.of(player(p1, "Aria")));
+        when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin)); // enemy never dies here
+        // Aria is conscious, then the goblin drops her (dying), then her death save kills her (dead).
+        when(playerStateService.getSessionStates(sessionId)).thenReturn(
+                List.of(stateFor(p1, 20)),   // guard before the enemy acts
+                List.of(stateFor(p1, 20)),   // pickTarget — still up
+                List.of(dyingState(p1)),     // after the hit — dying, so NO defeat yet
+                List.of(deadState(p1)));     // after the fatal death save — fully down
+        when(playerStateService.getState(p1)).thenReturn(dyingState(p1));
+        when(playerStateService.applyHpDelta(p1, -5, false)).thenReturn(dyingState(p1));
+        when(playerStateService.recordDeathSave(eq(p1), any(DiceRollResult.class)))
+                .thenReturn(new PlayerStateService.DeathSaveResult(
+                        deadState(p1), PlayerStateService.DeathSaveOutcome.DIED));
+        when(diceService.roll("1d20+4")).thenReturn(res(20)); // goblin hits AC 10
+        when(diceService.roll("1d6+2")).thenReturn(res(5));    // 5 damage drops Aria to 0
+        when(diceService.roll("1d20")).thenReturn(res(8));     // Aria's fatal death save
+
+        combat.playerEndTurn(sessionId, "Aria");
+
+        // The death save was rolled — proving we did NOT declare defeat while she was merely dying.
+        verify(playerStateService).recordDeathSave(eq(p1), any(DiceRollResult.class));
+
+        ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
+        verify(messaging, atLeastOnce()).convertAndSend(anyString(), events.capture());
+        boolean defeat = events.getAllValues().stream()
+                .filter(e -> e instanceof CombatLifecycleEvent)
+                .map(e -> (CombatLifecycleEvent) e)
+                .anyMatch(e -> CombatLifecycleEvent.END.equals(e.type())
+                        && Boolean.FALSE.equals(e.victory()));
+        assertTrue(defeat, "expected a COMBAT_END defeat once the whole party is down");
+    }
+
+    /* ── Phase E: grid-resolved AoE spell targeting ────────────────── */
+
+    /** Runtime state granting the player a cantrip (for the cast guard); conscious at 20 HP. */
+    private PlayerRuntimeStateDto stateWithCantrip(UUID playerId, String spell) {
+        return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
+                List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, false, false);
+    }
+
+    /** An AUTO-resolution DAMAGE spell — optionally an AoE template (shape != null). */
+    private SpellEffect damageSpell(String name, String aoeShape, int aoeSize) {
+        SpellTargetType target = aoeShape != null ? SpellTargetType.AREA : SpellTargetType.ENEMY;
+        return new SpellEffect(name, 0, SpellEffectType.DAMAGE, target, SpellResolution.AUTO,
+                null, "2d6", "Fire", null, false, false, null, null,
+                aoeShape, aoeSize, null, 1, null, false, true);
+    }
+
+    private Enemy enemyAt(UUID id, String name) {
+        return Enemy.builder().id(id).sessionId(sessionId).name(name)
+                .maxHp(20).currentHp(20).armorClass(12).attackBonus(3)
+                .damageDice("1d6").initiative(5).alive(true).build();
+    }
+
+    /**
+     * Single-player (active) encounter with two enemies on a grid. Initiative holds only the
+     * player so casting never auto-runs an enemy turn — keeping the assertion on AoE targeting.
+     */
+    private CombatEncounter aoeEncounter(UUID pid, UUID aId, int ax, int ay, UUID bId, int bx, int by) {
+        GridState grid = GridState.builder().width(16).height(12).build();
+        grid.getTokens().put(pid.toString(), new Token(5, 5, 0, true, false, false, false, false));
+        grid.getTokens().put(aId.toString(), new Token(ax, ay, 0, true, false, false, false, false));
+        grid.getTokens().put(bId.toString(), new Token(bx, by, 0, true, false, false, false, false));
+        return CombatEncounter.builder()
+                .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
+                .initiativeOrder(List.of(new Combatant(CombatantKind.PLAYER, pid, "Aria", 18, 0)))
+                .activeIndex(0).round(1).gridState(grid).build();
+    }
+
+    @Test
+    void aoeSpellHitsOnlyEnemiesInsideTheTemplate() {
+        UUID pid = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();   // inside the sphere
+        UUID bId = UUID.randomUUID();   // far outside
+        CombatEncounter enc = aoeEncounter(pid, aId, 10, 5, bId, 0, 0);
+        Enemy inside = enemyAt(aId, "Goblin A");
+        Enemy outside = enemyAt(bId, "Goblin B");
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(playerStateService.getState(pid)).thenReturn(stateWithCantrip(pid, "Fireball"));
+        when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
+        when(spellCatalog.effect("Fireball")).thenReturn(Optional.of(damageSpell("Fireball", "sphere", 20)));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(inside, outside));
+        when(diceService.roll("2d6")).thenReturn(res(8));
+
+        // Origin on the inside enemy; client targetIds deliberately wrong (names the outside enemy)
+        // to prove the server overrides them for an AoE.
+        combat.playerCastSpell(sessionId, "Aria", "Fireball", 0, List.of(bId), 10, 5);
+
+        assertEquals(12, inside.getCurrentHp(), "enemy inside the template takes the AoE damage");
+        assertEquals(20, outside.getCurrentHp(), "enemy outside the template is untouched");
+        assertTrue(outside.isAlive());
+    }
+
+    @Test
+    void nonAoeSpellWithoutOriginUsesClientTargetIds() {
+        UUID pid = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        CombatEncounter enc = aoeEncounter(pid, aId, 10, 5, bId, 0, 0);
+        Enemy enemyA = enemyAt(aId, "Goblin A");
+        Enemy enemyB = enemyAt(bId, "Goblin B");
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(playerStateService.getState(pid)).thenReturn(stateWithCantrip(pid, "Firebolt"));
+        when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
+        when(spellCatalog.effect("Firebolt")).thenReturn(Optional.of(damageSpell("Firebolt", null, 0)));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(enemyA, enemyB));
+        when(diceService.roll("2d6")).thenReturn(res(8));
+
+        // No origin → single-target: targetIds drive selection (enemy B), enemy A untouched.
+        combat.playerCastSpell(sessionId, "Aria", "Firebolt", 0, List.of(bId), null, null);
+
+        assertEquals(20, enemyA.getCurrentHp(), "non-targeted enemy is untouched");
+        assertEquals(12, enemyB.getCurrentHp(), "the client-selected target takes the damage");
+    }
+
+    @Test
+    void aoeSpellCatchingNoEnemiesFizzles() {
+        UUID pid = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        // Both enemy tokens sit far from the cast point — nobody is inside the template.
+        CombatEncounter enc = aoeEncounter(pid, aId, 0, 0, bId, 1, 1);
+        Enemy enemyA = enemyAt(aId, "Goblin A");
+        Enemy enemyB = enemyAt(bId, "Goblin B");
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(playerStateService.getState(pid)).thenReturn(stateWithCantrip(pid, "Fireball"));
+        when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
+        when(spellCatalog.effect("Fireball")).thenReturn(Optional.of(damageSpell("Fireball", "sphere", 20)));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(enemyA, enemyB));
+
+        // Origin far from both enemies; client targetIds names one — the AoE must still fizzle.
+        combat.playerCastSpell(sessionId, "Aria", "Fireball", 0, List.of(aId), 15, 10);
+
+        assertEquals(20, enemyA.getCurrentHp(), "an AoE that catches no one deals no damage");
+        assertEquals(20, enemyB.getCurrentHp(), "client targetIds must not revive a fizzled AoE");
     }
 }

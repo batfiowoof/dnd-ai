@@ -2,6 +2,10 @@
 
 import type { PlayerRuntimeState } from "@/types";
 import { cn } from "@/components/ui";
+import DeathSaveTrack, {
+  StatusBadge,
+  deriveDeathStatus,
+} from "@/components/combat/DeathSaveTrack";
 
 interface CharacterStatusProps {
   state: PlayerRuntimeState;
@@ -24,12 +28,16 @@ export default function CharacterStatus({
   characterName,
 }: CharacterStatusProps) {
   const ratio = state.maxHp > 0 ? state.currentHp / state.maxHp : 0;
+  const death = deriveDeathStatus(state);
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-bg-elevated p-3">
       {characterName && (
-        <div className="truncate font-display text-sm font-bold text-text">
-          {characterName}
+        <div className="flex items-center justify-between gap-2">
+          <div className="truncate font-display text-sm font-bold text-text">
+            {characterName}
+          </div>
+          {death && <StatusBadge status={death} />}
         </div>
       )}
 
@@ -44,12 +52,33 @@ export default function CharacterStatus({
             )}
           </span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-light">
-          <div
-            className={cn("h-full rounded-full transition-all", hpColor(ratio))}
-            style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }}
-          />
-        </div>
+        {death ? (
+          /* At 0 HP the bar reads as empty anyway — surface the death-save state instead. */
+          <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-surface/60 px-2 py-1.5">
+            {!characterName && <StatusBadge status={death} />}
+            {death === "DEAD" ? (
+              <span className="text-[10px] uppercase tracking-wider text-text-muted">
+                Beyond saving
+              </span>
+            ) : (
+              <DeathSaveTrack
+                successes={state.deathSaveSuccesses}
+                failures={state.deathSaveFailures}
+              />
+            )}
+            <span className="tabular text-[10px] text-text-muted">0 HP</span>
+          </div>
+        ) : (
+          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-light">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                hpColor(ratio)
+              )}
+              style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Spell slots */}

@@ -7,14 +7,17 @@ import com.dungeon.master.model.dto.CombatActionEvent;
 import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.CombatStateDto;
+import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.EnemyDto;
+import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.dto.RollSummary;
 import com.dungeon.master.model.dto.SpellEffect;
+import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
@@ -35,6 +38,11 @@ import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
+import com.dungeon.master.service.ai.EnemyTacticsService;
+import com.dungeon.master.service.ai.EnemyTacticsService.EnemyIntent;
+import com.dungeon.master.service.ai.EnemyTacticsService.EnemyTactic;
+import com.dungeon.master.service.ai.EnemyTacticsService.TargetInfo;
+import com.dungeon.master.service.ai.SceneGenerator;
 import com.dungeon.master.service.ai.SpellCatalog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,6 +86,13 @@ public class CombatService {
     private final SimpMessagingTemplate messagingTemplate;
     private final MonsterCatalog monsterCatalog;
     private final SpellCatalog spellCatalog;
+    private final GridService gridService;
+    private final CheckModifierService checkModifierService;
+    private final SceneGenerator sceneGenerator;
+    private final EnemyTacticsService enemyTacticsService;
+
+    /** DC of the Wisdom (Medicine) check to stabilize a dying creature. */
+    private static final int STABILIZE_DC = 10;
 
     /** Monotonic per-action ordering for {@link CombatActionEvent} (client playback queue). */
     private final AtomicLong actionSeq = new AtomicLong();
@@ -143,12 +158,23 @@ public class CombatService {
                 .thenComparingInt(c -> c.kind() == CombatantKind.PLAYER ? 0 : 1)
                 .thenComparing(c -> c.name() == null ? "" : c.name()));
 
+        // Lay out the tactical grid. The SceneGenerator asks the LLM (when AI combat is enabled)
+        // for a battlefield grounded in the world/recent events, and ALWAYS falls back to a default
+        // open arena on any failure — so combat is guaranteed a grid with every token placed.
+        List<String> playerRefIds = order.stream()
+                .filter(c -> c.kind() == CombatantKind.PLAYER)
+                .map(c -> c.refId().toString())
+                .toList();
+        List<String> enemyRefIds = enemies.stream().map(e -> e.getId().toString()).toList();
+        GridState grid = sceneGenerator.generateScene(sessionId, playerRefIds, enemyRefIds);
+
         CombatEncounter enc = CombatEncounter.builder()
                 .sessionId(sessionId)
                 .status(CombatStatus.ACTIVE)
                 .initiativeOrder(order)
                 .activeIndex(0)
                 .round(1)
+                .gridState(grid)
                 .build();
         enc = encounterRepository.save(enc);
 
@@ -169,6 +195,7 @@ public class CombatService {
     public void playerAttack(UUID sessionId, String username, UUID targetEnemyId) {
         CombatEncounter enc = activeEncounter(sessionId);
         Player player = requireCombatTurn(enc, sessionId, username);
+        requireActionAvailable(enc, player);
 
         Enemy enemy = enemyRepository.findById(targetEnemyId)
                 .filter(e -> e.getSessionId().equals(sessionId))
@@ -178,8 +205,12 @@ public class CombatService {
         }
 
         int attackBonus = attackBonus(player);
-        DiceRollResult atk = diceService.roll(notation(attackBonus));
-        boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= enemy.getArmorClass());
+        Token attackerTok = tokenFor(enc, player.getId().toString());
+        Token defenderTok = tokenFor(enc, enemy.getId().toString());
+        boolean disadvantage = defenderTok != null && defenderTok.isDodging();
+        DiceRollResult atk = rollAttack(attackBonus, disadvantage);
+        int targetAc = effectiveAc(enemy.getArmorClass(), attackerTok, defenderTok, enc.getGridState());
+        boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
 
         RollSummary damageSummary = null;
         boolean defeated = false;
@@ -196,12 +227,12 @@ public class CombatService {
 
         broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK", "attacks",
                 List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
-                        RollSummary.of(atk), enemy.getArmorClass(), hit, damageSummary,
+                        RollSummary.of(atk), targetAc, hit, damageSummary,
                         enemy.getCurrentHp(), enemy.getMaxHp(), defeated)));
 
         List<String> beat = new ArrayList<>();
         beat.add(describeAttack(player.getCharacterName(), enemy.getName(), atk,
-                enemy.getArmorClass(), hit, damageSummary,
+                targetAc, hit, damageSummary,
                 enemy.getCurrentHp(), enemy.getMaxHp(), defeated));
         advanceTurn(enc, beat);
         flushBeat(sessionId, player.getId(), beat);
@@ -211,6 +242,7 @@ public class CombatService {
     public void playerUseItem(UUID sessionId, String username, String itemName) {
         CombatEncounter enc = activeEncounter(sessionId);
         Player player = requireCombatTurn(enc, sessionId, username);
+        requireActionAvailable(enc, player);
 
         PlayerStateService.ItemUseResult result = playerStateService.useItem(player.getId(), itemName);
         broadcast(sessionId, PlayerStateEvent.of(sessionId, result.state()));
@@ -232,12 +264,19 @@ public class CombatService {
      * vs AC or a save vs the caster's spell DC; HEAL restores ally HP; everything else is
      * applied as a (mostly narrative) condition/buff. Leveled spells spend a slot; cantrips
      * are free. {@code targetIds} are enemy ids (offensive) or player ids (heal/buff).
+     *
+     * <p>{@code originX}/{@code originY} are the optional grid cast point for an area-of-effect
+     * spell. When the spell has an AoE template AND an origin AND a grid are present, the
+     * affected enemy targets are derived authoritatively from the template (overriding any
+     * client-sent {@code targetIds}); otherwise the {@code targetIds} are used as before.</p>
      */
     @Transactional
     public void playerCastSpell(UUID sessionId, String username, String spellName,
-                                int spellLevel, List<UUID> targetIds) {
+                                int spellLevel, List<UUID> targetIds,
+                                Integer originX, Integer originY) {
         CombatEncounter enc = activeEncounter(sessionId);
         Player player = requireCombatTurn(enc, sessionId, username);
+        requireActionAvailable(enc, player);
 
         PlayerRuntimeStateDto state = playerStateService.getState(player.getId());
         if (!containsIgnoreCase(state.cantrips(), spellName)
@@ -254,6 +293,12 @@ public class CombatService {
             broadcast(sessionId, PlayerStateEvent.of(sessionId, after));
         }
 
+        // For an offensive AoE with a cast point on the grid, the server resolves which enemies
+        // are caught in the template — those replace any client-sent targetIds. Falls back to
+        // targetIds for single-target spells, no origin, or a no-grid encounter.
+        List<UUID> aoeIds = isOffensive(effect) ? aoeEnemyIds(enc, effect, originX, originY) : null;
+        List<UUID> effectiveTargets = aoeIds != null ? aoeIds : targetIds;
+
         Character caster = character(player);
         List<CombatActionEvent.Target> results = new ArrayList<>();
         List<String> beat = new ArrayList<>();
@@ -263,11 +308,11 @@ public class CombatService {
                 yield "SPELL_HEAL";
             }
             case DAMAGE -> {
-                resolveSpellDamage(sessionId, player, caster, effect, spellLevel, targetIds, results, beat);
+                resolveSpellDamage(enc, sessionId, player, caster, effect, spellLevel, effectiveTargets, results, beat);
                 yield "SPELL_DAMAGE";
             }
             default -> {
-                resolveSpellEffect(sessionId, player, caster, effect, targetIds, results, beat);
+                resolveSpellEffect(sessionId, player, caster, effect, effectiveTargets, results, beat);
                 yield "SPELL_EFFECT";
             }
         };
@@ -289,12 +334,182 @@ public class CombatService {
         flushBeat(sessionId, player.getId(), beat);
     }
 
+    /* ── tactical movement + action economy ──────────────────────── */
+
+    /**
+     * Move the active player's token to (x,y). Validates the path against the grid
+     * (cost ≤ remaining movement budget = speed + dash − already used), provokes
+     * opportunity attacks from any hostile that the mover leaves the reach of (unless
+     * Disengaged), then broadcasts the refreshed combat state. Does NOT end the turn.
+     */
+    @Transactional
+    public void playerMove(UUID sessionId, String username, int x, int y) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+
+        GridState grid = enc.getGridState();
+        if (grid == null) {
+            throw new IllegalStateException("This encounter has no tactical grid");
+        }
+        String refId = player.getId().toString();
+        Token token = grid.getTokens() == null ? null : grid.getTokens().get(refId);
+        if (token == null) {
+            throw new IllegalStateException("You have no position on the grid");
+        }
+
+        Character c = character(player);
+        int speed = c != null ? c.getSpeed() : 30;
+        int budget = speed + (token.isDashed() ? speed : 0) - token.getMovementUsedFeet();
+
+        Integer cost = gridService.pathCostFeet(grid, token.getX(), token.getY(), x, y, refId);
+        if (cost == null) {
+            throw new IllegalArgumentException("That square is unreachable or blocked");
+        }
+        if (cost > budget) {
+            throw new IllegalArgumentException(
+                    "Not enough movement: needs " + cost + " ft but only " + budget + " ft remain");
+        }
+
+        // Snapshot hostiles currently threatening the mover (for opportunity attacks).
+        List<OaThreat> threats = collectOaThreats(enc, player, token.getX(), token.getY());
+
+        token.setX(x);
+        token.setY(y);
+        token.setMovementUsedFeet(token.getMovementUsedFeet() + cost);
+
+        // Opportunity attacks: a threatening hostile that no longer has the mover in reach
+        // (and still has its reaction) gets one swing — unless the mover Disengaged.
+        List<String> beat = new ArrayList<>();
+        if (!token.isDisengaged()) {
+            for (OaThreat threat : threats) {
+                if (withinReach(threat.attackerX(), threat.attackerY(), x, y, threat.reachFeet())) {
+                    continue; // mover is still adjacent — no opportunity
+                }
+                Token atkTok = grid.getTokens().get(threat.refId());
+                if (atkTok == null || !atkTok.isReactionAvailable()) {
+                    continue; // reaction already spent this round
+                }
+                // If an earlier OA this move already dropped the mover, there is no longer a
+                // valid target — don't waste the reaction (5e: a reaction needs its trigger).
+                if (playerDown(player.getId())) {
+                    continue;
+                }
+                atkTok.setReactionAvailable(false);
+                resolveOpportunityAttack(enc, threat, player, beat);
+            }
+        }
+
+        encounterRepository.save(enc);
+        broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /** Dash: doubles this turn's movement budget. */
+    @Transactional
+    public void playerDash(UUID sessionId, String username) {
+        actionEconomy(sessionId, username, "dash", " takes the Dash action, doubling their movement.");
+    }
+
+    /** Disengage: movement this turn no longer provokes opportunity attacks. */
+    @Transactional
+    public void playerDisengage(UUID sessionId, String username) {
+        actionEconomy(sessionId, username, "disengage", " takes the Disengage action.");
+    }
+
+    /** Dodge: attackers have disadvantage until the start of the dodger's next turn. */
+    @Transactional
+    public void playerDodge(UUID sessionId, String username) {
+        actionEconomy(sessionId, username, "dodge", " takes the Dodge action.");
+    }
+
+    /** Shared body for Dash/Disengage/Dodge: flip the token flag, persist, refresh, narrate. */
+    private void actionEconomy(UUID sessionId, String username, String which, String narration) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+        Token token = requireToken(enc, player.getId().toString());
+        if (token.isActionUsed()) {
+            throw new IllegalStateException("You have already taken your action this turn");
+        }
+        switch (which) {
+            case "dash" -> token.setDashed(true);
+            case "disengage" -> token.setDisengaged(true);
+            case "dodge" -> token.setDodging(true);
+            default -> throw new IllegalArgumentException("Unknown action: " + which);
+        }
+        token.setActionUsed(true);
+        encounterRepository.save(enc);
+        broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+        List<String> beat = new ArrayList<>();
+        beat.add(player.getCharacterName() + narration);
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /**
+     * Spend the active player's action attempting to stabilize a dying ally with a DC 10
+     * Wisdom (Medicine) check. Rolls authoritatively, broadcasts the dice + a narration beat, and on
+     * success marks the target stable (no more death saves). Consumes the actor's action and turn.
+     */
+    @Transactional
+    public void playerStabilize(UUID sessionId, String username, UUID targetPlayerId) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player actor = requireCombatTurn(enc, sessionId, username);
+        requireActionAvailable(enc, actor);
+
+        PlayerRuntimeStateDto targetState = playerStateService.getState(targetPlayerId);
+        String targetName = playerName(targetPlayerId);
+        if (targetState.dead() || targetState.currentHp() > 0 || targetState.stable()) {
+            throw new IllegalStateException(targetName + " doesn't need stabilizing");
+        }
+
+        int mod = checkModifierService.computeModifier(actor, "WIS", "Medicine");
+        DiceRollResult roll = diceService.roll(notation(mod));
+        broadcast(sessionId, DiceRollEvent.of(sessionId, actor.getId(), actor.getCharacterName(),
+                "WIS (Medicine) check", roll));
+        boolean success = roll.total() >= STABILIZE_DC;
+
+        List<String> beat = new ArrayList<>();
+        if (success) {
+            PlayerRuntimeStateDto updated = playerStateService.stabilize(targetPlayerId);
+            broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
+            beat.add(actor.getCharacterName() + " stabilizes " + targetName + " (Medicine "
+                    + roll.total() + " vs DC " + STABILIZE_DC + ").");
+        } else {
+            beat.add(actor.getCharacterName() + " fails to stabilize " + targetName + " (Medicine "
+                    + roll.total() + " vs DC " + STABILIZE_DC + ").");
+        }
+
+        // The attempt is the actor's action (grid-gated where a token exists).
+        Token token = tokenFor(enc, actor.getId().toString());
+        if (token != null) {
+            token.setActionUsed(true);
+        }
+        advanceTurn(enc, beat);
+        flushBeat(sessionId, actor.getId(), beat);
+    }
+
     @Transactional
     public void endEncounterByHost(UUID sessionId) {
         CombatEncounter enc = activeEncounter(sessionId);
         List<String> beat = new ArrayList<>();
         endEncounter(enc, allEnemiesDead(sessionId), beat);
         flushBeat(sessionId, anyPlayerId(sessionId), beat);
+    }
+
+    /**
+     * Set (or replace) the battle-map background image on the active encounter's grid and
+     * broadcast the refreshed state so every client re-renders. Throws if there is no active
+     * encounter (a map can only be set during combat) or the encounter has no tactical grid.
+     */
+    @Transactional
+    public void setMapBackground(UUID sessionId, String url) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        GridState grid = enc.getGridState();
+        if (grid == null) {
+            throw new IllegalStateException("This encounter has no tactical grid");
+        }
+        grid.setBackgroundImageUrl(url);
+        encounterRepository.save(enc);
+        broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
     }
 
     /* ── turn engine ─────────────────────────────────────────────── */
@@ -312,14 +527,16 @@ public class CombatService {
     private void resolveUntilPlayerOrEnd(CombatEncounter enc, List<String> beat) {
         UUID sessionId = enc.getSessionId();
         int order = enc.getInitiativeOrder().size();
-        int maxSteps = Math.max(1, order) * 4 + 8;
+        // Generous cap: besides enemy/player turns, a dying player rolls a death save each round and
+        // resolves (3 successes/failures, or a nat-20 revive) within a handful of rounds.
+        int maxSteps = Math.max(1, order) * 8 + 16;
 
         for (int step = 0; step < maxSteps; step++) {
             if (allEnemiesDead(sessionId)) {           // guard (a): victory
                 endEncounter(enc, true, beat);
                 return;
             }
-            if (noLivingPlayers(sessionId)) {          // guard (b): TPK
+            if (partyFullyDown(sessionId)) {           // guard (b): defeat — no one left to save
                 endEncounter(enc, false, beat);
                 return;
             }
@@ -332,16 +549,28 @@ public class CombatService {
                     advanceIndex(enc);
                     continue;
                 }
+                resetTurnFlags(enc, e.getId().toString());
                 enemyAct(enc, e, beat);
                 advanceIndex(enc);
                 continue;
             }
 
-            // PLAYER — skip if downed, otherwise it's their turn.
-            if (playerDown(active.refId())) {
-                advanceIndex(enc);
+            // PLAYER turn.
+            PlayerRuntimeStateDto state = safeState(active.refId());
+            if (state == null || state.dead() || state.stable()) {
+                advanceIndex(enc);                     // out of the fight — skip
                 continue;
             }
+            if (state.currentHp() <= 0) {
+                // Dying: their turn is spent rolling a death save. A nat-20 revive (REVIVED) puts
+                // them back on their feet at 1 HP, so they take a normal turn; otherwise advance.
+                PlayerStateService.DeathSaveOutcome outcome = rollDeathSave(enc, active, beat);
+                if (outcome != PlayerStateService.DeathSaveOutcome.REVIVED) {
+                    advanceIndex(enc);
+                    continue;
+                }
+            }
+            resetTurnFlags(enc, active.refId().toString());
             encounterRepository.save(enc);
             broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
             return;
@@ -353,19 +582,110 @@ public class CombatService {
     }
 
     /**
-     * Resolve one enemy's turn. Multiattack monsters swing {@code attacksPerTurn} times
-     * (re-acquiring a living target between swings); all sub-attacks are reported in a
-     * single {@link CombatActionEvent} so the client animates them together, in order.
-     * Uses the stat block's primary attack ({@link Enemy#getAttacks()}), falling back to
-     * the legacy {@code attackBonus}/{@code damageDice}.
+     * Resolve one enemy's turn. Dispatches on whether the encounter is a tactical grid fight:
+     * with a grid (and a token for this enemy) the enemy moves with intent before attacking
+     * ({@link #enemyActOnGrid}); without one (legacy / unit tests) it keeps the classic
+     * pick-target-and-swing behaviour with no movement.
      */
     private void enemyAct(CombatEncounter enc, Enemy enemy, List<String> beat) {
-        UUID sessionId = enc.getSessionId();
-        TargetPlayer target = pickTarget(sessionId);
+        Token enemyTok = tokenFor(enc, enemy.getId().toString());
+        if (enc.getGridState() != null && enemyTok != null) {
+            enemyActOnGrid(enc, enemy, enemyTok, beat);
+            return;
+        }
+        TargetPlayer target = pickTarget(enc.getSessionId());
         if (target == null) {                          // guard (c): no valid target
             return;
         }
+        resolveMultiattack(enc, enemy, target, beat);
+    }
 
+    /**
+     * Grid-aware enemy turn: pick a target + intent (LLM-directed when AI combat is enabled,
+     * else deterministic), move the enemy token toward an intent-appropriate square within its
+     * speed, then attack ONLY if a valid target ended up within the chosen attack's reach/range.
+     *
+     * <p><b>Known limitation:</b> a moving enemy does NOT provoke player opportunity attacks
+     * (player→enemy OAs are out of scope this phase); only enemy→player OAs (Phase B) exist.</p>
+     */
+    private void enemyActOnGrid(CombatEncounter enc, Enemy enemy, Token enemyTok, List<String> beat) {
+        UUID sessionId = enc.getSessionId();
+        GameSession session = sessionRepository.findById(sessionId).orElse(null);
+
+        List<TargetInfo> infos = consciousTargets(enc);
+        if (infos.isEmpty()) {                         // no one left to fight
+            return;
+        }
+
+        // 1. Decide target + intent. decide() falls back to a deterministic default internally
+        //    when AI combat is disabled or the LLM call fails — it never throws.
+        EnemyTactic tactic = enemyTacticsService.decide(session, enc, enemy, infos);
+        EnemyIntent intent = tactic.intent() == null ? EnemyIntent.ENGAGE_MELEE : tactic.intent();
+        TargetPlayer target = resolveTarget(tactic.targetName(), infos);
+        if (target == null) {
+            target = pickTarget(sessionId);            // hardened fallback
+            if (target == null) {
+                return;
+            }
+        }
+
+        // 2. Move toward an intent-appropriate square within the enemy's speed budget.
+        Token targetTok = tokenFor(enc, target.player().getId().toString());
+        GridState grid = enc.getGridState();
+        String refId = enemy.getId().toString();
+        int budget = Math.max(0, enemy.getSpeed());
+        int meleeReach = enemyReachFeet(enemy);
+        int bestRange = enemyBestRange(enemy);
+        int ox = enemyTok.getX();
+        int oy = enemyTok.getY();
+
+        GridService.Square dest = switch (intent) {
+            case ENGAGE_MELEE, FOCUS_CASTER -> targetTok == null ? null
+                    : gridService.approachSquare(grid, refId, targetTok.getX(), targetTok.getY(), budget, meleeReach);
+            case KITE_RANGED -> targetTok == null ? null
+                    : gridService.kiteSquare(grid, refId, targetTok.getX(), targetTok.getY(), budget,
+                            bestRange > 0 ? bestRange : meleeReach);
+            case FLEE -> gridService.fleeSquare(grid, refId, threatSquares(enc), budget);
+            case HOLD -> null;
+        };
+
+        boolean moved = dest != null && (dest.x() != ox || dest.y() != oy);
+        if (moved) {
+            enemyTok.setX(dest.x());
+            enemyTok.setY(dest.y());
+            beat.add(enemyMoveLine(enemy, intent, target.player().getCharacterName()));
+            // A standalone MOVE event so the client animates the reposition before any attack.
+            broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "MOVE", "moves", List.of());
+        }
+
+        // 3. Attack only if the (possibly moved) enemy is within the chosen attack's reach/range.
+        int effRange = switch (intent) {
+            case KITE_RANGED -> bestRange > 0 ? bestRange : meleeReach;
+            case ENGAGE_MELEE, FOCUS_CASTER -> meleeReach;
+            case HOLD -> Math.max(meleeReach, bestRange);
+            case FLEE -> 0;                            // fleeing — no attack this turn
+        };
+        int dist = targetTok == null ? Integer.MAX_VALUE
+                : gridService.distanceFeet(enemyTok.getX(), enemyTok.getY(), targetTok.getX(), targetTok.getY());
+
+        if (intent != EnemyIntent.FLEE && targetTok != null && dist <= effRange) {
+            resolveMultiattack(enc, enemy, target, beat);
+        } else if (!moved) {
+            // Didn't move and can't reach anyone — register the held turn so state still syncs.
+            beat.add(enemy.getName() + (intent == EnemyIntent.FLEE
+                    ? " hangs back, wary." : " holds, unable to reach a target."));
+            broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "HOLD", "holds", List.of());
+        }
+    }
+
+    /**
+     * Multiattack swing loop shared by the grid and legacy paths: swing {@code attacksPerTurn}
+     * times (re-acquiring a living target between swings), reporting all sub-attacks in a single
+     * {@link CombatActionEvent} so the client animates them together. Uses the stat block's
+     * primary attack, falling back to the legacy {@code attackBonus}/{@code damageDice}.
+     */
+    private void resolveMultiattack(CombatEncounter enc, Enemy enemy, TargetPlayer target, List<String> beat) {
+        UUID sessionId = enc.getSessionId();
         List<MonsterAttack> atks = enemy.getAttacks();
         int attackBonus = atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit();
         String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
@@ -378,8 +698,11 @@ public class CombatService {
                 if (target == null) break;
             }
             Player victim = target.player();
-            DiceRollResult atk = diceService.roll(notation(attackBonus));
-            int targetAc = armorClass(victim);
+            Token enemyTok = tokenFor(enc, enemy.getId().toString());
+            Token victimTok = tokenFor(enc, victim.getId().toString());
+            boolean disadvantage = victimTok != null && victimTok.isDodging();
+            DiceRollResult atk = rollAttack(attackBonus, disadvantage);
+            int targetAc = effectiveAc(armorClass(victim), enemyTok, victimTok, enc.getGridState());
             boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
 
             RollSummary damageSummary = null;
@@ -389,7 +712,7 @@ public class CombatService {
             if (hit) {
                 DiceRollResult dmg = rollExpr(damageDice);
                 PlayerRuntimeStateDto updated =
-                        playerStateService.applyHpDelta(victim.getId(), -dmg.total());
+                        playerStateService.applyHpDelta(victim.getId(), -dmg.total(), atk.crit());
                 broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
                 targetHp = updated.currentHp();
                 targetMax = updated.maxHp();
@@ -405,6 +728,86 @@ public class CombatService {
         }
 
         broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "attacks", results);
+    }
+
+    /* ── grid-aware enemy AI helpers ─────────────────────────────── */
+
+    /** Conscious player targets (HP > 0) with their grid positions, for tactics + movement. */
+    private List<TargetInfo> consciousTargets(CombatEncounter enc) {
+        UUID sessionId = enc.getSessionId();
+        GridState grid = enc.getGridState();
+        List<TargetInfo> out = new ArrayList<>();
+        for (PlayerRuntimeStateDto s : playerStateService.getSessionStates(sessionId)) {
+            if (s.currentHp() <= 0) {
+                continue;
+            }
+            Optional<Player> p = playerRepository.findById(s.playerId());
+            if (p.isEmpty() || p.get().getRole() != PlayerRole.PLAYER) {
+                continue;
+            }
+            Token t = grid == null || grid.getTokens() == null ? null
+                    : grid.getTokens().get(s.playerId().toString());
+            int x = t != null ? t.getX() : -1;
+            int y = t != null ? t.getY() : -1;
+            out.add(new TargetInfo(p.get().getCharacterName(), s.playerId(),
+                    s.currentHp(), s.maxHp(), x, y));
+        }
+        return out;
+    }
+
+    /** Resolve a tactic's chosen target name back to a live {@link TargetPlayer}, or null. */
+    private TargetPlayer resolveTarget(String name, List<TargetInfo> infos) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        String n = name.trim().toLowerCase(java.util.Locale.ROOT);
+        for (TargetInfo info : infos) {
+            String tn = info.name() == null ? "" : info.name().toLowerCase(java.util.Locale.ROOT);
+            if (tn.equals(n) || tn.startsWith(n + " ") || n.startsWith(tn + " ")) {
+                Optional<Player> p = playerRepository.findById(info.playerId());
+                if (p.isPresent()) {
+                    return new TargetPlayer(p.get(), playerStateService.getState(info.playerId()));
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Max ranged range (ft) across the enemy's attacks, or 0 if it has none. */
+    private int enemyBestRange(Enemy e) {
+        int range = 0;
+        for (MonsterAttack a : e.getAttacks()) {
+            if ("RANGED".equalsIgnoreCase(a.kind()) && a.range() != null) {
+                range = Math.max(range, a.range());
+            }
+        }
+        return range;
+    }
+
+    /** Grid squares of every conscious player — the threats a fleeing enemy runs from. */
+    private List<GridService.Square> threatSquares(CombatEncounter enc) {
+        List<GridService.Square> out = new ArrayList<>();
+        GridState grid = enc.getGridState();
+        if (grid == null || grid.getTokens() == null) {
+            return out;
+        }
+        for (TargetInfo info : consciousTargets(enc)) {
+            Token t = grid.getTokens().get(info.playerId().toString());
+            if (t != null) {
+                out.add(new GridService.Square(t.getX(), t.getY()));
+            }
+        }
+        return out;
+    }
+
+    /** One narration line for an enemy's intent-driven reposition. */
+    private String enemyMoveLine(Enemy enemy, EnemyIntent intent, String targetName) {
+        return switch (intent) {
+            case FLEE -> enemy.getName() + " retreats from the party.";
+            case KITE_RANGED -> enemy.getName() + " repositions to keep " + targetName + " at range.";
+            case HOLD -> enemy.getName() + " holds its ground.";
+            default -> enemy.getName() + " advances toward " + targetName + ".";
+        };
     }
 
     private void advanceIndex(CombatEncounter enc) {
@@ -450,21 +853,25 @@ public class CombatService {
         }
     }
 
-    private void resolveSpellDamage(UUID sessionId, Player caster, Character casterChar, SpellEffect effect,
-                                    int spellLevel, List<UUID> targetIds,
+    private void resolveSpellDamage(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
+                                    SpellEffect effect, int spellLevel, List<UUID> targetIds,
                                     List<CombatActionEvent.Target> results, List<String> beat) {
         List<Enemy> targets = enemyTargets(sessionId, targetIds, effect);
         String dice = scaledNotation(effect.damageDice(), effect, spellLevel, casterChar);
         int dc = SpellcastingRules.spellSaveDc(casterChar);
         int atkBonus = SpellcastingRules.spellAttackBonus(casterChar);
         int[] darts = distribute(Math.max(1, effect.projectiles()), targets.size());
+        Token casterTok = tokenFor(enc, caster.getId().toString());
         for (int i = 0; i < targets.size(); i++) {
             Enemy e = targets.get(i);
             String label = caster.getCharacterName() + "'s " + effect.name();
             switch (effect.resolution()) {
                 case SPELL_ATTACK -> {
-                    DiceRollResult atk = diceService.roll(notation(atkBonus));
-                    boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= e.getArmorClass());
+                    Token targetTok = tokenFor(enc, e.getId().toString());
+                    boolean disadvantage = targetTok != null && targetTok.isDodging();
+                    DiceRollResult atk = rollAttack(atkBonus, disadvantage);
+                    int targetAc = effectiveAc(e.getArmorClass(), casterTok, targetTok, enc.getGridState());
+                    boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
                     RollSummary dmg = null;
                     if (hit) {
                         DiceRollResult d = rollExpr(dice);
@@ -472,9 +879,9 @@ public class CombatService {
                         dmg = RollSummary.of(d);
                     }
                     results.add(CombatActionEvent.Target.attack(CombatantKind.ENEMY, e.getName(),
-                            RollSummary.of(atk), e.getArmorClass(), hit, dmg,
+                            RollSummary.of(atk), targetAc, hit, dmg,
                             e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
-                    beat.add(describeAttack(label, e.getName(), atk, e.getArmorClass(), hit, dmg,
+                    beat.add(describeAttack(label, e.getName(), atk, targetAc, hit, dmg,
                             e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
                 }
                 case SAVE -> {
@@ -639,7 +1046,10 @@ public class CombatService {
                 alive.stream().filter(e -> e.getId().equals(id)).findFirst().ifPresent(chosen::add);
             }
         }
-        if (chosen.isEmpty() && !alive.isEmpty()) chosen.add(alive.get(0));
+        // Fall back to the first enemy ONLY when no target list was given (null = legacy
+        // "unspecified"). A non-null but EMPTY list is an authoritative result — e.g. an AoE that
+        // caught nobody — and must fizzle rather than snap onto an enemy outside the template.
+        if (ids == null && chosen.isEmpty() && !alive.isEmpty()) chosen.add(alive.get(0));
         Integer max = effect.maxTargets();
         int cap = max == null ? chosen.size() : Math.min(max, chosen.size());
         return new ArrayList<>(chosen.subList(0, Math.max(0, cap)));
@@ -703,9 +1113,22 @@ public class CombatService {
         return enemyRepository.findBySessionId(sessionId).stream().noneMatch(Enemy::isAlive);
     }
 
-    private boolean noLivingPlayers(UUID sessionId) {
-        return playerStateService.getSessionStates(sessionId).stream()
-                .noneMatch(s -> s.currentHp() > 0);
+    /**
+     * The party is fully down — end in defeat — only when no player is conscious AND none is still
+     * dying (every player is dead or stable). While at least one player is dying we keep the loop
+     * going so their death saves can resolve.
+     */
+    private boolean partyFullyDown(UUID sessionId) {
+        boolean anyConscious = false;
+        boolean anyDying = false;
+        for (PlayerRuntimeStateDto s : playerStateService.getSessionStates(sessionId)) {
+            if (s.currentHp() > 0) {
+                anyConscious = true;
+            } else if (!s.dead() && !s.stable()) {
+                anyDying = true;
+            }
+        }
+        return !anyConscious && !anyDying;
     }
 
     private boolean playerDown(UUID playerId) {
@@ -714,6 +1137,51 @@ public class CombatService {
         } catch (RuntimeException e) {
             return true; // no runtime state — treat as unavailable
         }
+    }
+
+    /** Current runtime state, or {@code null} when the player has no state (treat as out of the fight). */
+    private PlayerRuntimeStateDto safeState(UUID playerId) {
+        try {
+            return playerStateService.getState(playerId);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Roll one death saving throw for a dying player on their turn: broadcast the d20 (so the client
+     * animates it like any other roll), record the result authoritatively, broadcast the new player
+     * state, and append a narration beat. Returns the outcome so the caller can grant a turn on a
+     * nat-20 revive.
+     */
+    private PlayerStateService.DeathSaveOutcome rollDeathSave(CombatEncounter enc, Combatant active,
+                                                             List<String> beat) {
+        UUID sessionId = enc.getSessionId();
+        UUID pid = active.refId();
+        DiceRollResult roll = diceService.roll("1d20");
+        broadcast(sessionId, DiceRollEvent.of(sessionId, pid, active.name(), "Death Saving Throw", roll));
+        PlayerStateService.DeathSaveResult result = playerStateService.recordDeathSave(pid, roll);
+        broadcast(sessionId, PlayerStateEvent.of(sessionId, result.state()));
+        beat.add(describeDeathSave(active.name(), roll, result));
+        return result.outcome();
+    }
+
+    /** One narration line for a death save, e.g. "Aria steadies — death save 14: success (2/3)." */
+    private String describeDeathSave(String name, DiceRollResult roll,
+                                     PlayerStateService.DeathSaveResult result) {
+        PlayerRuntimeStateDto s = result.state();
+        return switch (result.outcome()) {
+            case REVIVED -> name + " gasps back to life — death save " + roll.total()
+                    + " (a natural 20!), conscious again at 1 HP.";
+            case STABILIZED -> name + " stabilizes — death save " + roll.total()
+                    + ": success (" + s.deathSaveSuccesses() + "/3), now holding on at 0 HP.";
+            case DIED -> name + " slips away — death save " + roll.total()
+                    + ": failure (" + s.deathSaveFailures() + "/3).";
+            case SUCCESS -> name + " steadies — death save " + roll.total()
+                    + ": success (" + s.deathSaveSuccesses() + "/3).";
+            case FAILURE -> name + " falters — death save " + roll.total()
+                    + ": failure (" + s.deathSaveFailures() + "/3).";
+        };
     }
 
     /* ── validation ──────────────────────────────────────────────── */
@@ -731,6 +1199,200 @@ public class CombatService {
             throw new IllegalStateException("It's not your combat turn");
         }
         return player;
+    }
+
+    /* ── grid / spatial helpers ──────────────────────────────────── */
+
+    /** Whether a spell selects enemies (matches {@link #resolveSpellEffect}'s offensive test, plus DAMAGE). */
+    private boolean isOffensive(SpellEffect effect) {
+        return effect.effectType() == SpellEffectType.DAMAGE
+                || effect.targetType() == SpellTargetType.ENEMY
+                || (effect.targetType() == SpellTargetType.AREA
+                    && effect.effectType() != SpellEffectType.BUFF);
+    }
+
+    /**
+     * For an area-of-effect spell with a grid cast point, the ids of every alive enemy whose
+     * token falls inside the resolved template. Returns {@code null} when the spell is not an
+     * AoE, no origin was supplied, or the encounter has no grid — signalling the caller to keep
+     * the client-sent targetIds. A non-null (possibly empty) list overrides those targetIds.
+     */
+    private List<UUID> aoeEnemyIds(CombatEncounter enc, SpellEffect effect,
+                                   Integer originX, Integer originY) {
+        GridState grid = enc.getGridState();
+        if (effect.aoeShape() == null || originX == null || originY == null
+                || grid == null || grid.getTokens() == null) {
+            return null;
+        }
+        List<GridService.Square> cells =
+                gridService.aoeCells(originX, originY, effect.aoeShape(), effect.aoeSize());
+        List<UUID> ids = new ArrayList<>();
+        if (cells.isEmpty()) {
+            return ids;
+        }
+        for (Enemy e : enemyRepository.findBySessionId(enc.getSessionId())) {
+            if (!e.isAlive()) {
+                continue;
+            }
+            Token t = grid.getTokens().get(e.getId().toString());
+            if (t != null && cells.contains(new GridService.Square(t.getX(), t.getY()))) {
+                ids.add(e.getId());
+            }
+        }
+        return ids;
+    }
+
+    /** A combatant's token by refId (player/enemy UUID string), or {@code null} on a legacy/no-grid encounter. */
+    private Token tokenFor(CombatEncounter enc, String refId) {
+        GridState g = enc.getGridState();
+        if (g == null || g.getTokens() == null) {
+            return null;
+        }
+        return g.getTokens().get(refId);
+    }
+
+    /** Like {@link #tokenFor} but throws when the combatant has no grid position. */
+    private Token requireToken(CombatEncounter enc, String refId) {
+        Token t = tokenFor(enc, refId);
+        if (t == null) {
+            throw new IllegalStateException("No grid position for this combatant");
+        }
+        return t;
+    }
+
+    /**
+     * Guard the action economy: an attack/cast/item is the player's action, so reject it if
+     * they already spent their action this turn on Dash/Disengage/Dodge. No-ops on legacy
+     * (no-grid) encounters where the player has no token.
+     */
+    private void requireActionAvailable(CombatEncounter enc, Player player) {
+        Token t = tokenFor(enc, player.getId().toString());
+        if (t != null && t.isActionUsed()) {
+            throw new IllegalStateException("You have already taken your action this turn");
+        }
+    }
+
+    /**
+     * Defender AC including cover from intervening walls (base + 0/+2/+5). Returns the
+     * base AC unchanged when either token or the grid is absent (legacy encounters).
+     */
+    private int effectiveAc(int baseAc, Token attacker, Token defender, GridState grid) {
+        if (attacker == null || defender == null || grid == null) {
+            return baseAc;
+        }
+        return baseAc + gridService.coverBonus(grid,
+                attacker.getX(), attacker.getY(), defender.getX(), defender.getY());
+    }
+
+    /**
+     * Roll a 1d20 attack with the given bonus, applying disadvantage (e.g. against a
+     * Dodging target). The NORMAL path uses the single-arg roll so existing callers and
+     * tests see the same notation.
+     */
+    private DiceRollResult rollAttack(int bonus, boolean disadvantage) {
+        return disadvantage
+                ? diceService.roll(notation(bonus), RollMode.DISADVANTAGE)
+                : diceService.roll(notation(bonus));
+    }
+
+    /** Reset a combatant's per-turn action economy as their turn begins (Dodge from last round expires here). */
+    private void resetTurnFlags(CombatEncounter enc, String refId) {
+        Token t = tokenFor(enc, refId);
+        if (t == null) {
+            return;
+        }
+        t.setMovementUsedFeet(0);
+        t.setDashed(false);
+        t.setDisengaged(false);
+        t.setReactionAvailable(true);
+        t.setDodging(false);
+        t.setActionUsed(false);
+    }
+
+    /** A hostile that currently threatens the mover, captured before a move resolves opportunity attacks. */
+    private record OaThreat(UUID enemyId, String refId, int attackerX, int attackerY, int reachFeet) {}
+
+    /** Living, positioned enemies that have the mover within melee reach right now. */
+    private List<OaThreat> collectOaThreats(CombatEncounter enc, Player mover, int moverX, int moverY) {
+        List<OaThreat> threats = new ArrayList<>();
+        GridState grid = enc.getGridState();
+        if (grid == null || grid.getTokens() == null) {
+            return threats;
+        }
+        for (Enemy e : enemyRepository.findBySessionId(enc.getSessionId())) {
+            if (!e.isAlive()) {
+                continue;
+            }
+            Token et = grid.getTokens().get(e.getId().toString());
+            if (et == null) {
+                continue;
+            }
+            int reach = enemyReachFeet(e);
+            if (withinReach(et.getX(), et.getY(), moverX, moverY, reach)) {
+                threats.add(new OaThreat(e.getId(), e.getId().toString(), et.getX(), et.getY(), reach));
+            }
+        }
+        return threats;
+    }
+
+    /** Max melee reach (ft) across the enemy's attacks, default 5. */
+    private int enemyReachFeet(Enemy e) {
+        int reach = GridService.FEET_PER_SQUARE; // 5 ft default
+        for (MonsterAttack a : e.getAttacks()) {
+            if ("MELEE".equalsIgnoreCase(a.kind()) && a.reach() != null) {
+                reach = Math.max(reach, a.reach());
+            }
+        }
+        return reach;
+    }
+
+    private boolean withinReach(int ax, int ay, int bx, int by, int reachFeet) {
+        return gridService.distanceFeet(ax, ay, bx, by) <= reachFeet;
+    }
+
+    /** One enemy opportunity-attack swing at a moving player (rolls vs AC w/ cover & dodge, applies HP). */
+    private void resolveOpportunityAttack(CombatEncounter enc, OaThreat threat, Player victim, List<String> beat) {
+        UUID sessionId = enc.getSessionId();
+        Enemy enemy = enemyRepository.findById(threat.enemyId()).filter(Enemy::isAlive).orElse(null);
+        if (enemy == null) {
+            return;
+        }
+        PlayerRuntimeStateDto state = playerStateService.getState(victim.getId());
+        if (state.currentHp() <= 0) {
+            return; // already down — nothing to swing at
+        }
+
+        List<MonsterAttack> atks = enemy.getAttacks();
+        int attackBonus = atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit();
+        String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
+
+        Token enemyTok = tokenFor(enc, enemy.getId().toString());
+        Token victimTok = tokenFor(enc, victim.getId().toString());
+        boolean disadvantage = victimTok != null && victimTok.isDodging();
+        DiceRollResult atk = rollAttack(attackBonus, disadvantage);
+        int targetAc = effectiveAc(armorClass(victim), enemyTok, victimTok, enc.getGridState());
+        boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+
+        RollSummary damageSummary = null;
+        int targetHp = state.currentHp();
+        int targetMax = state.maxHp();
+        boolean defeated = false;
+        if (hit) {
+            DiceRollResult dmg = rollExpr(damageDice);
+            PlayerRuntimeStateDto updated =
+                    playerStateService.applyHpDelta(victim.getId(), -dmg.total(), atk.crit());
+            broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
+            targetHp = updated.currentHp();
+            targetMax = updated.maxHp();
+            defeated = updated.currentHp() <= 0;
+            damageSummary = RollSummary.of(dmg);
+        }
+
+        broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "makes an opportunity attack",
+                List.of(CombatActionEvent.Target.attack(CombatantKind.PLAYER, victim.getCharacterName(),
+                        RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated)));
+        beat.add(describeAttack(enemy.getName(), victim.getCharacterName(), atk, targetAc, hit,
+                damageSummary, targetHp, targetMax, defeated));
     }
 
     /* ── enemy construction ──────────────────────────────────────── */
@@ -764,6 +1426,7 @@ public class CombatService {
                     .attacks(scaled).attacksPerTurn(perTurn)
                     .abilities(t.abilities() != null ? new LinkedHashMap<>(t.abilities())
                             : new LinkedHashMap<>())
+                    .speed(t.speed() != null ? t.speed() : 30)
                     .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
                     .build();
         }
@@ -854,7 +1517,7 @@ public class CombatService {
                 ? order.get(enc.getActiveIndex()) : null;
         return new CombatStateDto(
                 enc.getId(), enc.getStatus(), enc.getRound(),
-                enc.getActiveIndex(), active, order, enemies);
+                enc.getActiveIndex(), active, order, enemies, enc.getGridState());
     }
 
     private void broadcast(UUID sessionId, Object event) {

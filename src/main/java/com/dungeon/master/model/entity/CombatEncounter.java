@@ -1,6 +1,7 @@
 package com.dungeon.master.model.entity;
 
 import com.dungeon.master.model.dto.Combatant;
+import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.enums.CombatStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -55,4 +56,9 @@ public class CombatEncounter {
     @Column(nullable = false)
     @Builder.Default
     private int round = 1;
+
+    /** Spatial state for tactical grid combat (nullable for legacy/non-grid encounters). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "grid_state", columnDefinition = "jsonb")
+    private GridState gridState;
 }

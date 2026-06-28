@@ -11,11 +11,13 @@ import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.HpChangeRequest;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.JoinSessionRequest;
+import com.dungeon.master.model.dto.MoveRequest;
 import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.dto.RollRequest;
+import com.dungeon.master.model.dto.StabilizeRequest;
 import com.dungeon.master.model.dto.StartEncounterRequest;
 import com.dungeon.master.model.dto.UseItemRequest;
 import com.dungeon.master.model.entity.GameSession;
@@ -295,7 +297,7 @@ public class GameWebSocketController {
         try {
             combatService.playerCastSpell(sessionId, username, request.spellName(),
                     request.spellLevel() == null ? 0 : request.spellLevel(),
-                    request.targetIds());
+                    request.targetIds(), request.originX(), request.originY());
         } catch (Exception e) {
             log.error("Error in combat cast: session={}, player={}", sessionId, username, e);
             sendError(username, e);
@@ -322,6 +324,65 @@ public class GameWebSocketController {
             combatService.playerEndTurn(sessionId, username);
         } catch (Exception e) {
             log.error("Error ending combat turn: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/move")
+    public void handleCombatMove(@DestinationVariable UUID sessionId,
+                                 @Payload MoveRequest request,
+                                 Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerMove(sessionId, username, request.x(), request.y());
+        } catch (Exception e) {
+            log.error("Error in combat move: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/dash")
+    public void handleCombatDash(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerDash(sessionId, username);
+        } catch (Exception e) {
+            log.error("Error in combat dash: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/disengage")
+    public void handleCombatDisengage(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerDisengage(sessionId, username);
+        } catch (Exception e) {
+            log.error("Error in combat disengage: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/dodge")
+    public void handleCombatDodge(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerDodge(sessionId, username);
+        } catch (Exception e) {
+            log.error("Error in combat dodge: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/stabilize")
+    public void handleCombatStabilize(@DestinationVariable UUID sessionId,
+                                      @Payload StabilizeRequest request,
+                                      Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerStabilize(sessionId, username, request.targetPlayerId());
+        } catch (Exception e) {
+            log.error("Error in combat stabilize: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
     }

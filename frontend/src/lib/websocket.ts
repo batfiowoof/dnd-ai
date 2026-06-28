@@ -207,7 +207,14 @@ export function sendCombatUseItem(
 export function sendCombatCast(
   client: Client,
   sessionId: string,
-  payload: { spellName: string; spellLevel: number; targetIds: string[] }
+  payload: {
+    spellName: string;
+    spellLevel: number;
+    targetIds: string[];
+    /** AoE origin cell — sent for area spells so the server computes the hit set. */
+    originX?: number;
+    originY?: number;
+  }
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/combat/cast`,
@@ -215,10 +222,59 @@ export function sendCombatCast(
   });
 }
 
+/* ── Tactical movement & defensive actions (Phase B) ──────────────
+   None advance the turn; each triggers a COMBAT_TURN refresh carrying
+   the updated grid/tokens. */
+
+export function sendCombatMove(
+  client: Client,
+  sessionId: string,
+  x: number,
+  y: number
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/move`,
+    body: JSON.stringify({ x, y }),
+  });
+}
+
+export function sendCombatDash(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/dash`,
+    body: JSON.stringify({}),
+  });
+}
+
+export function sendCombatDisengage(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/disengage`,
+    body: JSON.stringify({}),
+  });
+}
+
+export function sendCombatDodge(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/dodge`,
+    body: JSON.stringify({}),
+  });
+}
+
 export function sendCombatEndTurn(client: Client, sessionId: string) {
   client.publish({
     destination: `/app/game/${sessionId}/combat/end-turn`,
     body: JSON.stringify({}),
+  });
+}
+
+/** Spend your action to stabilize a dying ally (DC 10 Medicine check, server-rolled). */
+export function sendCombatStabilize(
+  client: Client,
+  sessionId: string,
+  targetPlayerId: string
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/stabilize`,
+    body: JSON.stringify({ targetPlayerId }),
   });
 }
 

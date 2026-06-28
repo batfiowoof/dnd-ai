@@ -187,6 +187,13 @@ export interface PlayerRuntimeState {
   knownSpells: string[];
   /** Whether the player currently holds Inspiration (spendable on a roll for advantage). */
   inspiration: boolean;
+  /* ── Death saving throws (mostly Phase C; types land now) ── */
+  deathSaveSuccesses: number;
+  deathSaveFailures: number;
+  /** Stabilized at 0 HP (no longer rolling death saves, still unconscious). */
+  stable: boolean;
+  /** Three failed death saves — the character has died. */
+  dead: boolean;
 }
 
 /** Summary of a session the current user belongs to, for the "your adventures" list. */
@@ -229,6 +236,45 @@ export interface EnemyDto {
   alive: boolean;
 }
 
+/* ── Tactical grid (Phase A/B) ───────────────────────────────── */
+export type TerrainType = "WALL" | "DIFFICULT" | "HAZARD";
+
+export interface TerrainCell {
+  x: number;
+  y: number;
+  type: TerrainType;
+}
+
+export interface MapFeature {
+  x: number;
+  y: number;
+  label: string;
+}
+
+/** Per-combatant position + action-economy flags on the battle grid. */
+export interface Token {
+  x: number;
+  y: number;
+  /** Feet of movement already spent this turn. */
+  movementUsedFeet: number;
+  reactionAvailable: boolean;
+  dashed: boolean;
+  disengaged: boolean;
+  dodging: boolean;
+  /** Whether this combatant has spent its action this turn (Dash/Disengage/Dodge/Attack/Cast/Item are mutually exclusive). */
+  actionUsed: boolean;
+}
+
+export interface GridState {
+  width: number;
+  height: number;
+  backgroundImageUrl: string | null;
+  terrain: TerrainCell[];
+  features: MapFeature[];
+  /** Keyed by combatant refId (player id / enemy id). */
+  tokens: Record<string, Token>;
+}
+
 export interface CombatStateDto {
   encounterId: string;
   status: CombatStatus;
@@ -237,6 +283,8 @@ export interface CombatStateDto {
   active: Combatant | null;
   order: Combatant[];
   enemies: EnemyDto[];
+  /** Tactical grid; null for encounters started before grids existed. */
+  grid: GridState | null;
 }
 
 export interface RollSummary {
@@ -309,6 +357,10 @@ export interface SpellSummary {
   concentration: boolean;
   range: string;
   parsed: boolean;
+  /** AoE template shape ("sphere"/"cube"/"cone"/"line"/…), or null for single/multi-target spells. */
+  aoeShape: string | null;
+  /** AoE size in feet (radius / cube side / cone or line length); 0 when not an area spell. */
+  aoeSize: number;
 }
 
 export interface MonsterSummary {

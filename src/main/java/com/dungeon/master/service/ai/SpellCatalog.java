@@ -39,7 +39,8 @@ public class SpellCatalog {
     public record SpellSummary(
             String name, int level, String school,
             SpellEffectType effectType, SpellTargetType targetType,
-            Integer maxTargets, boolean concentration, String range, boolean parsed) {}
+            Integer maxTargets, boolean concentration, String range, boolean parsed,
+            String aoeShape, int aoeSize) {}
 
     private static final String RESOURCE = "dnd5e/srd-5.2.1-structured.json";
 
@@ -95,7 +96,7 @@ public class SpellCatalog {
                 byName.put(name.toLowerCase(Locale.ROOT), effect);
                 summaries.add(new SpellSummary(name, level, school, effect.effectType(),
                         effect.targetType(), effect.maxTargets(), effect.concentration(),
-                        range, effect.parsed()));
+                        range, effect.parsed(), effect.aoeShape(), effect.aoeSize()));
             }
             log.info("Loaded {} SRD 5.2.1 spell effects from {}", byName.size(), RESOURCE);
         } catch (Exception e) {

@@ -1,8 +1,11 @@
 package com.dungeon.master.service.ai;
 
 import com.dungeon.master.kafka.event.RoundActionEvent.Contribution;
+import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.model.entity.Character;
+import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
@@ -46,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -543,10 +547,9 @@ public class DmAiService {
         // encounter (TPK or host-forced) leaves surviving enemies with alive=true, so keying
         // off live enemies alone would inject a phantom "In combat:" line for the rest of the
         // session and make the DM narrate a fight that already ended.
-        boolean combatActive = encounterRepository
-                .findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)
-                .isPresent();
-        if (combatActive) {
+        Optional<CombatEncounter> activeEnc = encounterRepository
+                .findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE);
+        if (activeEnc.isPresent()) {
             List<Enemy> livingEnemies = enemies.stream()
                     .filter(Enemy::isAlive)
                     .toList();
@@ -557,10 +560,70 @@ public class DmAiService {
                         .collect(Collectors.joining(", ")));
                 b.append("\n");
             }
+            // A brief grid snapshot so narration matches the tactical map (who is where, how far).
+            GridState grid = activeEnc.get().getGridState();
+            if (grid != null && grid.getTokens() != null && !grid.getTokens().isEmpty()) {
+                String positions = buildPositionsLine(players, livingEnemies, grid);
+                if (!positions.isBlank()) {
+                    b.append("Positions — ").append(positions).append("\n");
+                }
+            }
         }
 
         b.append("---\n\n");
         return b.toString();
+    }
+
+    /**
+     * Build the short "Positions" line: each player and living enemy with a token, given as a
+     * grid cell (e.g. "B3"), with each enemy annotated by its distance to the nearest hero. Kept
+     * compact — it never dumps the whole grid.
+     */
+    private String buildPositionsLine(List<Player> players, List<Enemy> enemies, GridState grid) {
+        Map<String, Token> tokens = grid.getTokens();
+        List<String> parts = new ArrayList<>();
+        for (Player p : players) {
+            Token t = tokens.get(p.getId().toString());
+            if (t != null) {
+                parts.add(partyMemberName(p) + ": " + cellLabel(t.getX(), t.getY()));
+            }
+        }
+        for (Enemy e : enemies) {
+            Token t = tokens.get(e.getId().toString());
+            if (t == null) {
+                continue;
+            }
+            String part = e.getName() + ": " + cellLabel(t.getX(), t.getY());
+            int best = Integer.MAX_VALUE;
+            String nearest = null;
+            for (Player p : players) {
+                Token pt = tokens.get(p.getId().toString());
+                if (pt == null) {
+                    continue;
+                }
+                int d = chebyshevFeet(t, pt);
+                if (d < best) {
+                    best = d;
+                    nearest = partyMemberName(p);
+                }
+            }
+            if (nearest != null) {
+                part += " (" + best + " ft from " + nearest + ")";
+            }
+            parts.add(part);
+        }
+        return String.join("; ", parts);
+    }
+
+    /** A spreadsheet-style cell label (column letter + 1-based row), e.g. (1,2) → "B3". */
+    private static String cellLabel(int x, int y) {
+        String col = (x >= 0 && x < 26) ? String.valueOf((char) ('A' + x)) : String.valueOf(x);
+        return col + (y + 1);
+    }
+
+    /** 5e Chebyshev grid distance in feet between two tokens (diagonals count as 5 ft). */
+    private static int chebyshevFeet(Token a, Token b) {
+        return Math.max(Math.abs(a.getX() - b.getX()), Math.abs(a.getY() - b.getY())) * 5;
     }
 
     /** Coarse HP band so narration can say "bloodied"/"critical" without leaking exact numbers. */

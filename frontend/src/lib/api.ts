@@ -217,6 +217,35 @@ export async function getCombatMonsters(token: string): Promise<MonsterSummary[]
   return handleResponse(res);
 }
 
+/**
+ * Host-only upload of a battle-map background image for the active encounter
+ * (`multipart/form-data`, field `file`). On success the server pins the new
+ * `grid.backgroundImageUrl` and broadcasts a combat refresh — callers only need
+ * to trigger this. Surfaces the server's message for 400 (bad type/size),
+ * 403 (not host), and 409 (no active encounter).
+ */
+export async function uploadCombatMap(
+  token: string,
+  sessionId: string,
+  file: File
+): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/combat/map`, {
+    method: "POST",
+    // No Content-Type header — the browser sets the multipart boundary itself.
+    headers: getAuthHeaders(token),
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(
+      body?.error ?? body?.message ?? `Upload failed: ${res.status}`
+    );
+  }
+  return res.json();
+}
+
 /* ── Character endpoints ─────────────────────────────────────── */
 
 export async function getMyCharacters(

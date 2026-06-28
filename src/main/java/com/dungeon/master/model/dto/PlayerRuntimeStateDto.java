@@ -17,6 +17,10 @@ public record PlayerRuntimeStateDto(
         List<String> conditions,
         List<String> cantrips,
         List<String> knownSpells,
-        boolean inspiration
+        boolean inspiration,
+        int deathSaveSuccesses,
+        int deathSaveFailures,
+        boolean stable,
+        boolean dead
 ) {
 }

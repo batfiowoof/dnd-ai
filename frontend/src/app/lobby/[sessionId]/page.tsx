@@ -33,6 +33,11 @@ import {
   sendCombatCast,
   sendCombatEndTurn,
   sendEndCombat,
+  sendCombatMove,
+  sendCombatDash,
+  sendCombatDisengage,
+  sendCombatDodge,
+  sendCombatStabilize,
   sendPass,
 } from "@/lib/websocket";
 import type { Client } from "@stomp/stompjs";
@@ -55,6 +60,9 @@ import ActionBar from "@/components/game/ActionBar";
 import CharacterSheetDialog from "@/components/game/CharacterSheetDialog";
 import InventoryManager from "@/components/game/InventoryManager";
 import CombatTracker from "@/components/combat/CombatTracker";
+import BattleMap from "@/components/combat/BattleMap";
+import type { PlacingSpell } from "@/components/combat/BattleMap";
+import { uploadCombatMap } from "@/lib/api";
 import CombatActionModal from "@/components/combat/CombatActionModal";
 import StartEncounterControl from "@/components/combat/StartEncounterControl";
 
@@ -109,6 +117,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const [spendInspiration, setSpendInspiration] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
+  /** AoE spell awaiting an origin click on the battle map (null = not placing). */
+  const [placingSpell, setPlacingSpell] = useState<PlacingSpell | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Client | null>(null);
@@ -468,9 +478,59 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
       targetIds,
     });
   }
+  /** Enter AoE placement mode — the BattleMap captures the origin. */
+  function handleBeginAoePlacement(spell: PlacingSpell) {
+    setPlacingSpell(spell);
+  }
+  function handleCancelAoe() {
+    setPlacingSpell(null);
+  }
+  /** Commit an AoE cast at the clicked origin (server computes the hit set). */
+  function handleCastAoe(
+    spellName: string,
+    spellLevel: number,
+    x: number,
+    y: number
+  ) {
+    if (!clientRef.current || !connected) return;
+    sendCombatCast(clientRef.current, sessionId, {
+      spellName,
+      spellLevel,
+      targetIds: [],
+      originX: x,
+      originY: y,
+    });
+    setPlacingSpell(null);
+  }
+  /** Host-only battle-map background upload (server broadcasts the refreshed grid). */
+  async function handleUploadMap(file: File) {
+    const token = await getToken();
+    if (!token) throw new Error("Not authenticated");
+    await uploadCombatMap(token, sessionId, file);
+  }
   function handleCombatEndTurn() {
     if (!clientRef.current || !connected) return;
     sendCombatEndTurn(clientRef.current, sessionId);
+  }
+  function handleCombatMove(x: number, y: number) {
+    if (!clientRef.current || !connected) return;
+    sendCombatMove(clientRef.current, sessionId, x, y);
+  }
+  function handleCombatDash() {
+    if (!clientRef.current || !connected) return;
+    sendCombatDash(clientRef.current, sessionId);
+  }
+  function handleCombatDisengage() {
+    if (!clientRef.current || !connected) return;
+    sendCombatDisengage(clientRef.current, sessionId);
+  }
+  function handleCombatDodge() {
+    if (!clientRef.current || !connected) return;
+    sendCombatDodge(clientRef.current, sessionId);
+  }
+  function handleCombatStabilize(targetPlayerId: string) {
+    if (!clientRef.current || !connected) return;
+    sendCombatStabilize(clientRef.current, sessionId, targetPlayerId);
   }
   function handleEndCombat() {
     if (!clientRef.current || !connected) return;
@@ -484,6 +544,20 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const myState = playerId ? runtimeByPlayerId[playerId] ?? null : null;
   const myPlayer = humanPlayers.find((p) => p.id === playerId);
   const inCombat = combat?.status === "ACTIVE";
+  const combatIsMyTurn =
+    inCombat &&
+    combat?.active?.kind === "PLAYER" &&
+    combat.active.refId === playerId;
+
+  // Abandon any in-flight AoE placement when the turn passes or combat ends.
+  useEffect(() => {
+    if (!combatIsMyTurn) setPlacingSpell(null);
+  }, [combatIsMyTurn]);
+  // Walk speed for the move preview — from the character sheet, else 30.
+  const mySpeed =
+    Number(
+      (myPlayer?.characterSheet?.speed as number | undefined) ?? 30
+    ) || 30;
 
   // Spell metadata for the in-combat cast menu (fetched once when a fight starts).
   const combatSpellsQuery = useCombatSpells(inCombat);
@@ -902,20 +976,49 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         <div className="flex flex-1 flex-col">
           {/* Combat overlay */}
           {inCombat && combat && (
-            <CombatTracker
-              combat={combat}
-              myPlayerId={playerId}
-              myState={myState}
-              isHost={isCreator}
-              connected={connected}
-              spells={combatSpells}
-              allies={combatAllies}
-              onAttack={handleCombatAttack}
-              onCast={handleCombatCast}
-              onUseItem={handleCombatUseItem}
-              onEndTurn={handleCombatEndTurn}
-              onEndCombat={handleEndCombat}
-            />
+            <>
+              <CombatTracker
+                combat={combat}
+                myPlayerId={playerId}
+                myState={myState}
+                isHost={isCreator}
+                connected={connected}
+                spells={combatSpells}
+                allies={combatAllies}
+                runtimeByPlayerId={runtimeByPlayerId}
+                onAttack={handleCombatAttack}
+                onCast={handleCombatCast}
+                onBeginAoePlacement={handleBeginAoePlacement}
+                placingSpellName={placingSpell?.name ?? null}
+                onCancelAoe={handleCancelAoe}
+                onUseItem={handleCombatUseItem}
+                onStabilize={handleCombatStabilize}
+                onEndTurn={handleCombatEndTurn}
+                onEndCombat={handleEndCombat}
+                onDash={handleCombatDash}
+                onDisengage={handleCombatDisengage}
+                onDodge={handleCombatDodge}
+              />
+              {combat.grid && (
+                <div className="border-b border-border-accent bg-accent-glow/20 p-3">
+                  <BattleMap
+                    combat={combat}
+                    myPlayerId={playerId}
+                    isMyTurn={!!combatIsMyTurn}
+                    mySpeed={mySpeed}
+                    runtimeByPlayerId={runtimeByPlayerId}
+                    onMove={handleCombatMove}
+                    onAttackEnemy={handleCombatAttack}
+                    connected={connected}
+                    isHost={isCreator}
+                    placingSpell={placingSpell}
+                    onCastAoe={handleCastAoe}
+                    onCancelAoe={handleCancelAoe}
+                    onUploadMap={handleUploadMap}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {/* Log */}

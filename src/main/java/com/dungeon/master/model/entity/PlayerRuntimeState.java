@@ -93,4 +93,24 @@ public class PlayerRuntimeState {
     @Column(name = "known_spells", columnDefinition = "jsonb")
     @Builder.Default
     private List<String> knownSpells = new ArrayList<>();
+
+    /** Death saving throw successes (0–3) while at 0 HP. Foundation for Phase C. */
+    @Column(name = "death_save_successes", nullable = false)
+    @Builder.Default
+    private int deathSaveSuccesses = 0;
+
+    /** Death saving throw failures (0–3) while at 0 HP. Foundation for Phase C. */
+    @Column(name = "death_save_failures", nullable = false)
+    @Builder.Default
+    private int deathSaveFailures = 0;
+
+    /** Whether the player is stable at 0 HP (no longer rolling death saves). */
+    @Column(name = "stable", nullable = false)
+    @Builder.Default
+    private boolean stable = false;
+
+    /** Whether the player has died (three death-save failures). */
+    @Column(name = "dead", nullable = false)
+    @Builder.Default
+    private boolean dead = false;
 }

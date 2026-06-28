@@ -82,12 +82,25 @@ spring:
         index-type: ivfflat
         distance-type: cosine_distance
 
+  # ── File uploads (battle-map backgrounds) ───────────
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   # ── Security (OAuth2 JWT) ───────────────────────────
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8180/realms/dnd-ai
+
+# ── App-specific settings ───────────────────────────
+app:
+  uploads:
+    # Directory (relative to the working dir, or absolute) where uploaded battle-map images
+    # are stored and served from under /uploads/**.
+    dir: ./uploads
 
 # ── D&D AI app settings ─────────────────────────────
 dnd:
