@@ -6,7 +6,6 @@ import com.dungeon.master.model.dto.DmResponseDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.enums.TurnMode;
 import com.dungeon.master.repository.GameSessionRepository;
-import com.dungeon.master.repository.PendingCheckRepository;
 import com.dungeon.master.service.ai.RagService;
 import com.dungeon.master.service.game.TurnService;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +24,6 @@ public class DmResponseConsumer {
     private final SimpMessagingTemplate messagingTemplate;
     private final TurnService turnService;
     private final GameSessionRepository sessionRepository;
-    private final PendingCheckRepository pendingCheckRepository;
     private final RagService ragService;
 
     @KafkaListener(topics = KafkaConfig.TOPIC_DM_RESPONSE, groupId = "dnd-ai-ws-group")
@@ -37,14 +35,11 @@ public class DmResponseConsumer {
         TurnMode mode = session == null ? TurnMode.COLLABORATIVE : session.getTurnMode();
 
         // Only initiative mode rotates a turn pointer. Collaborative/freeform leave it null.
-        // In initiative mode, hold the turn on a player who still owes a pending ability check —
-        // the check's resolution advances the turn once they roll.
+        // Rolls now resolve inline within the DM turn (engine tools), so there is no pending check to
+        // wait on — every initiative turn advances once its DM response is recorded.
         UUID nextPlayerId = null;
         if (mode == TurnMode.INITIATIVE) {
-            UUID current = session.getCurrentTurnPlayerId();
-            boolean awaitingRoll = current != null
-                    && pendingCheckRepository.findBySessionIdAndPlayerId(event.sessionId(), current).isPresent();
-            nextPlayerId = awaitingRoll ? current : turnService.advanceTurn(event.sessionId());
+            nextPlayerId = turnService.advanceTurn(event.sessionId());
         }
 
         DmResponseDto responseDto = new DmResponseDto(

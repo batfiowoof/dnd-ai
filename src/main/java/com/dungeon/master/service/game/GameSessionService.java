@@ -9,7 +9,6 @@ import com.dungeon.master.model.dto.CreateSessionRequest;
 import com.dungeon.master.model.dto.CreateSessionResponse;
 import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.JoinSessionRequest;
-import com.dungeon.master.model.dto.PendingCheckDto;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.SessionSummaryDto;
@@ -25,7 +24,6 @@ import com.dungeon.master.model.enums.TurnMode;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.GameSessionRepository;
-import com.dungeon.master.repository.PendingCheckRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,7 +54,6 @@ public class GameSessionService {
     private final TurnEventRepository turnEventRepository;
     private final CharacterRepository characterRepository;
     private final PlayerStateService playerStateService;
-    private final PendingCheckRepository pendingCheckRepository;
     private final DiceService diceService;
     private final GameEventProducer eventProducer;
 
@@ -256,17 +253,6 @@ public class GameSessionService {
                 .map(TurnEvent::getTurnNumber)
                 .orElse(0);
 
-        // Open ability checks travel on the game state so a reconnecting client can re-open its
-        // roll prompt (the ROLL_REQUEST event is transient and missed on reload).
-        List<PendingCheckDto> pendingChecks = pendingCheckRepository.findBySessionId(sessionId).stream()
-                .map(pc -> new PendingCheckDto(
-                        pc.getPlayerId(), pc.getAbility(), pc.getDc(), pc.getSkill(),
-                        pc.getReason(), abilityModHint(pc.getPlayerId(), pc.getAbility()),
-                        pc.getCheckKind() == null ? "STANDARD" : pc.getCheckKind().name(),
-                        pc.getTargetLabel(),
-                        pc.getDmMode() == null ? "NORMAL" : pc.getDmMode().name()))
-                .toList();
-
         return new GameStateDto(
                 session.getId(),
                 session.getCode(),
@@ -283,23 +269,7 @@ public class GameSessionService {
                 session.getDmLength(),
                 session.isAllowAiCombat(),
                 session.isAllowAiRolls(),
-                session.getCollabWindowSeconds(),
-                pendingChecks);
-    }
-
-    /**
-     * Informational ability-mod hint for a re-opened roll prompt (display only — the
-     * authoritative modifier, including proficiency, is computed when the check resolves).
-     */
-    private int abilityModHint(UUID playerId, String ability) {
-        try {
-            PlayerRuntimeStateDto st = playerStateService.getState(playerId);
-            int score = st.abilities() == null ? 10
-                    : st.abilities().getOrDefault(ability.toUpperCase(java.util.Locale.ROOT), 10);
-            return Math.floorDiv(score - 10, 2);
-        } catch (RuntimeException e) {
-            return 0;
-        }
+                session.getCollabWindowSeconds());
     }
 
     public List<PlayerDto> getPlayers(UUID sessionId) {

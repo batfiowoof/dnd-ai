@@ -8,7 +8,6 @@ import type {
   GameStateDto,
   PlayerDto,
   PlayerRuntimeState,
-  RollRequestEvent,
   RoundStatusEvent,
   TurnEventDto,
   TurnMode,
@@ -72,8 +71,6 @@ interface SessionState {
   combatActionQueue: (CombatActionEvent & { eventId: string })[];
   /** Collaborative round collection status (null when no window is open). */
   round: RoundStatus | null;
-  /** DM-requested ability check addressed to the local player (null when none). */
-  pendingCheck: RollRequestEvent | null;
 
   /* server-state seeding (React Query → store) */
   hydrateFromGameState: (gs: GameStateDto) => void;
@@ -113,10 +110,8 @@ interface SessionState {
   applyGameStarted: (gs: GameStateDto) => void;
   applyGameEnded: () => void;
 
-  /* collaborative round + LLM-requested checks */
+  /* collaborative round */
   applyRoundStatus: (evt: RoundStatusEvent) => void;
-  applyRollRequest: (evt: RollRequestEvent) => void;
-  clearPendingCheck: () => void;
 
   setConnected: (connected: boolean) => void;
   setError: (error: string) => void;
@@ -139,7 +134,6 @@ const initialState = {
   combat: null as CombatStateDto | null,
   combatActionQueue: [] as (CombatActionEvent & { eventId: string })[],
   round: null as RoundStatus | null,
-  pendingCheck: null as RollRequestEvent | null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -462,11 +456,6 @@ export const useSessionStore = create<SessionState>((set) => ({
           }
         : null,
     }),
-
-  /* ROLL_REQUEST — the DM asks the local player for an ability check. */
-  applyRollRequest: (evt) => set({ pendingCheck: evt }),
-
-  clearPendingCheck: () => set({ pendingCheck: null }),
 
   setConnected: (connected) => set({ connected }),
   setError: (error) => set({ error }),

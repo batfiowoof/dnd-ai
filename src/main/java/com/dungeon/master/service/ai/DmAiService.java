@@ -15,16 +15,39 @@ import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
 import com.dungeon.master.repository.GameSessionRepository;
+import com.dungeon.master.config.AiConfig;
 import com.dungeon.master.repository.PlayerRepository;
+import com.dungeon.master.service.game.CheckModifierService;
 import com.dungeon.master.service.game.PlayerStateService;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.MessageAggregator;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.model.tool.ToolExecutionResult;
+import org.springframework.ai.retry.TransientAiException;
+import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -34,6 +57,10 @@ import java.util.stream.Collectors;
 public class DmAiService {
 
     private final ChatClient dmChatClient;
+    private final ChatModel chatModel;
+    private final ToolCallingManager toolCallingManager;
+    private final DmRollTools dmRollTools;
+    private final CheckModifierService checkModifierService;
     private final RagService ragService;
     private final PlayerRepository playerRepository;
     private final CharacterRepository characterRepository;
@@ -44,200 +71,140 @@ public class DmAiService {
     private final SrdContent srdContent;
     private final com.dungeon.master.service.game.MonsterCatalog monsterCatalog;
 
-    /**
-     * Generates a DM response to a player's action, streaming each token to {@code onChunk}
-     * as it arrives and returning the fully-assembled narration once complete.
-     */
-    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackStreaming")
-    public String generateResponseStreaming(UUID sessionId, UUID playerId, String playerName,
-                                            String playerAction, Consumer<String> onChunk) {
-        log.info("Streaming DM response for session={}, player={}", sessionId, playerName);
+    /** Result of one unified narrative turn: the assembled narration and whether any roll happened. */
+    public record NarrativeTurnResult(String narration, boolean rolled) {}
 
-        String context = ragService.buildContext(sessionId, playerAction);
-        String characterBlock = characterContext(playerId);
-        String userMessage = sessionDirectives(sessionId)
-                + partySituation(sessionId)
-                + buildUserMessage(context, characterBlock, playerName, playerAction);
-
-        String response = streamToString(userMessage, onChunk);
-
-        log.info("DM response generated for session={}, length={}", sessionId, response.length());
-        return response;
-    }
+    // Cloud chat (OpenRouter) has transient failures a local model didn't — chiefly 429
+    // rate-limit/congestion. Retry the streamed call with exponential backoff before letting
+    // the circuit breaker fall back. Backoff: 2s, 4s, 8s (capped at 10s).
+    private static final int AI_MAX_RETRIES = 3;
+    private static final Duration AI_RETRY_MIN_BACKOFF = Duration.ofSeconds(2);
+    private static final Duration AI_RETRY_MAX_BACKOFF = Duration.ofSeconds(10);
 
     /**
-     * Resolves a whole collaborative round in one streamed reply, addressing every acting
-     * character by name. Exactly one LLM call per round — the {@code RoundCollector} guarantees
-     * the actions never race.
+     * Resolves a whole narrative turn in ONE DM turn. The party's action(s) are sent with the dice
+     * tools attached; the AI DM decides any checks and CALLS the engine tools ({@code rollCheck} /
+     * {@code groupCheck} / {@code contest}), which roll authoritatively and broadcast the dice, then
+     * the model narrates one cohesive resolution from the results. A single action is a one-element
+     * list; a collaborative round passes every contributor.
+     *
+     * <p>The decision round runs with tools enabled (a tool-call response carries no prose, so
+     * nothing leaks to players before the roll); the narration round runs with tools disabled so it
+     * cannot roll again. Tool execution (the only side effect) sits outside the streaming retry, so a
+     * transient 429 never double-rolls.
      */
-    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackCollaborative")
-    public String generateCollaborativeResponse(UUID sessionId, List<Contribution> actions,
-                                                 Consumer<String> onChunk) {
-        log.info("Streaming collaborative DM response for session={}, actions={}",
-                sessionId, actions.size());
+    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackNarrativeTurn")
+    public NarrativeTurnResult generateNarrativeTurn(UUID sessionId, List<Contribution> actions,
+                                                     Map<UUID, Boolean> spendInspiration,
+                                                     Consumer<String> onChunk) {
+        log.info("Streaming narrative turn for session={}, actions={}", sessionId, actions.size());
+
+        GameSession session = sessionRepository.findById(sessionId).orElse(null);
+        boolean allowRolls = session == null || session.isAllowAiRolls();
 
         String combinedForContext = actions.stream()
                 .filter(c -> !c.passed())
                 .map(Contribution::action)
                 .collect(Collectors.joining(" "));
         String context = ragService.buildContext(sessionId, combinedForContext);
+        String userMessage = sessionDirectives(sessionId)
+                + partySituation(sessionId)
+                + buildTurnUserMessage(actions, context);
 
-        StringBuilder roundBlock = new StringBuilder();
-        roundBlock.append("The party acts together this round. Resolve every character's action in a ")
-                .append("single cohesive reply, addressing each by name and weaving their actions into ")
-                .append("one unfolding scene. Do not invent actions for anyone who held back.\n\n")
-                .append("This round's actions:\n");
-        for (Contribution c : actions) {
-            if (c.passed()) {
-                roundBlock.append("- ").append(c.characterName()).append(" holds back and observes.\n");
-            } else {
-                roundBlock.append("- ").append(c.characterName()).append(": ").append(c.action()).append("\n");
+        List<Message> baseMessages = List.of(new SystemMessage(AiConfig.DM_SYSTEM_PROMPT),
+                new UserMessage(userMessage));
+
+        StringBuilder assembled = new StringBuilder();
+
+        // No rolls allowed → plain streamed narration, no tools at all.
+        if (!allowRolls) {
+            streamAggregate(new Prompt(baseMessages), assembled, onChunk);
+            return new NarrativeTurnResult(assembled.toString(), false);
+        }
+
+        ToolCallingChatOptions toolOpts = ToolCallingChatOptions.builder()
+                .toolCallbacks(ToolCallbacks.from(dmRollTools))
+                .toolContext(buildToolContext(sessionId, session, spendInspiration))
+                .internalToolExecutionEnabled(false)
+                .build();
+
+        Prompt decisionPrompt = new Prompt(baseMessages, toolOpts);
+        ChatResponse resp = streamAggregate(decisionPrompt, assembled, onChunk);
+
+        boolean rolled = false;
+        if (resp != null && resp.hasToolCalls()) {
+            ToolExecutionResult exec = toolCallingManager.executeToolCalls(decisionPrompt, resp);
+            rolled = true;
+            // Narration round: tools disabled so it can only narrate the results, never roll again.
+            ToolCallingChatOptions narrationOpts = ToolCallingChatOptions.builder()
+                    .internalToolExecutionEnabled(false)
+                    .build();
+            Prompt narrationPrompt = new Prompt(new ArrayList<>(exec.conversationHistory()), narrationOpts);
+            streamAggregate(narrationPrompt, assembled, onChunk);
+        }
+
+        log.info("Narrative turn done for session={}, rolled={}, length={}",
+                sessionId, rolled, assembled.length());
+        return new NarrativeTurnResult(assembled.toString(), rolled);
+    }
+
+    /** Build the acting block: a single action reads naturally; a round lists every contributor. */
+    private String buildTurnUserMessage(List<Contribution> actions, String context) {
+        StringBuilder message = new StringBuilder();
+        if (!context.isBlank()) {
+            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
+        }
+        if (actions.size() == 1 && !actions.get(0).passed()) {
+            Contribution c = actions.get(0);
+            message.append("Player '").append(c.characterName()).append("' says: ").append(c.action());
+        } else {
+            message.append("The party acts together this round. Resolve every character's action in a ")
+                    .append("single cohesive reply, addressing each by name and weaving their actions ")
+                    .append("into one unfolding scene. Do not invent actions for anyone who held back.\n\n")
+                    .append("This round's actions:\n");
+            for (Contribution c : actions) {
+                if (c.passed()) {
+                    message.append("- ").append(c.characterName()).append(" holds back and observes.\n");
+                } else {
+                    message.append("- ").append(c.characterName()).append(": ").append(c.action()).append("\n");
+                }
             }
         }
-
-        StringBuilder message = new StringBuilder();
-        message.append(sessionDirectives(sessionId));
-        message.append(partySituation(sessionId));
-        if (!context.isBlank()) {
-            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
-        }
-        message.append(roundBlock);
-
-        String response = streamToString(message.toString(), onChunk);
-        log.info("Collaborative DM response generated for session={}, length={}", sessionId, response.length());
-        return response;
+        return message.toString();
     }
 
-    /**
-     * Narrates the consequence of an ability check the engine has already rolled
-     * authoritatively. Like combat narration, the model adds flavor only — it must honor the
-     * given total vs DC and the success/failure verdict.
-     */
-    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackCheckResolution")
-    public String generateCheckResolution(UUID sessionId, UUID playerId, String action,
-                                          String ability, String skill, int dc, int total,
-                                          boolean success, Consumer<String> onChunk) {
-        log.info("Streaming check resolution for session={}, success={}", sessionId, success);
-
-        String context = ragService.buildContext(sessionId, action == null ? "" : action);
-        String characterBlock = characterContext(playerId);
-        String skillPart = (skill == null || skill.isBlank()) ? "" : " (" + skill + ")";
-
-        StringBuilder message = new StringBuilder();
-        message.append(sessionDirectives(sessionId));
-        if (!context.isBlank()) {
-            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
+    /** Per-turn context handed to the dice tools: session, name→player map, Inspiration intent, DCs. */
+    private Map<String, Object> buildToolContext(UUID sessionId, GameSession session,
+                                                 Map<UUID, Boolean> spendInspiration) {
+        Map<String, UUID> nameToPlayer = new HashMap<>();
+        for (Player p : playerRepository.findBySessionId(sessionId)) {
+            if (p.getRole() != PlayerRole.PLAYER) {
+                continue;
+            }
+            putName(nameToPlayer, p.getCharacterName(), p.getId());
+            putName(nameToPlayer, p.getUsername(), p.getId());
         }
-        if (!characterBlock.isBlank()) {
-            message.append(characterBlock).append("\n");
-        }
-        message.append("The character attempted: ").append(action == null ? "an uncertain action" : action)
-                .append("\nThe game engine rolled their ").append(ability).append(skillPart)
-                .append(" check: total ").append(total).append(" vs DC ").append(dc)
-                .append(" — a ").append(success ? "SUCCESS" : "FAILURE")
-                .append(". Narrate the consequence vividly and fairly from this result. The roll is ")
-                .append("FINAL and authoritative — do not change it, re-roll, or contradict the verdict. ")
-                .append("End by inviting the party to continue.");
-
-        String response = streamToString(message.toString(), onChunk);
-        log.info("Check resolution generated for session={}, length={}", sessionId, response.length());
-        return response;
+        com.dungeon.master.model.enums.Difficulty diff =
+                session == null ? null : session.getDifficulty();
+        Map<String, Object> ctx = new HashMap<>();
+        ctx.put(DmRollTools.K_SESSION, sessionId);
+        ctx.put(DmRollTools.K_NAME_TO_PLAYER, nameToPlayer);
+        ctx.put(DmRollTools.K_SPEND_INSP, spendInspiration == null ? Map.of() : spendInspiration);
+        ctx.put(DmRollTools.K_DEFAULT_DC, CheckModifierService.defaultDc(diff));
+        ctx.put(DmRollTools.K_DEFAULT_CONTEST_MOD, CheckModifierService.defaultContestMod(diff));
+        return ctx;
     }
 
-    /**
-     * Narrates the outcomes of several ability checks rolled in the same collaborative round in
-     * one cohesive reply. {@code checksSummary} lists each character's authoritative result
-     * (total vs DC, success/failure) — the model must honor every verdict, not re-roll.
-     */
-    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackBatchedCheckResolution")
-    public String generateBatchedCheckResolution(UUID sessionId, String checksSummary,
-                                                 Consumer<String> onChunk) {
-        log.info("Streaming batched check resolution for session={}", sessionId);
-
-        String context = ragService.buildContext(sessionId, checksSummary == null ? "" : checksSummary);
-
-        StringBuilder message = new StringBuilder();
-        message.append(sessionDirectives(sessionId));
-        if (!context.isBlank()) {
-            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
+    private static void putName(Map<String, UUID> map, String name, UUID id) {
+        if (name == null || name.isBlank()) {
+            return;
         }
-        message.append("The party attempted several uncertain actions this round. The game engine has ")
-                .append("ALREADY rolled each check authoritatively:\n")
-                .append(checksSummary).append("\n")
-                .append("Narrate all of these outcomes together in a single cohesive scene, addressing ")
-                .append("each character by name. The rolls are FINAL — do not change, re-roll, or ")
-                .append("contradict any verdict. End by inviting the party to continue.");
-
-        String response = streamToString(message.toString(), onChunk);
-        log.info("Batched check resolution generated for session={}, length={}", sessionId, response.length());
-        return response;
-    }
-
-    /**
-     * Narrates the outcome of a GROUP check the engine has already rolled and adjudicated. The
-     * {@code checksSummary} lists each participant's authoritative result; {@code successes}/{@code
-     * total} and {@code groupSucceeded} carry the engine's half-the-party verdict. The model honors
-     * the verdict — it never re-rolls or overturns it.
-     */
-    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackGroupCheckResolution")
-    public String generateGroupCheckResolution(UUID sessionId, String checksSummary, int successes,
-                                               int total, boolean groupSucceeded,
-                                               Consumer<String> onChunk) {
-        log.info("Streaming group check resolution for session={}, succeeded={}", sessionId, groupSucceeded);
-
-        String context = ragService.buildContext(sessionId, checksSummary == null ? "" : checksSummary);
-
-        StringBuilder message = new StringBuilder();
-        message.append(sessionDirectives(sessionId));
-        if (!context.isBlank()) {
-            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
+        String key = name.trim().toLowerCase(Locale.ROOT);
+        map.putIfAbsent(key, id);
+        int sp = key.indexOf(' ');
+        if (sp > 0) {
+            map.putIfAbsent(key.substring(0, sp), id); // first token, e.g. "aria" ← "aria brightblade"
         }
-        message.append("The whole party attempted a GROUP check together. The game engine has ALREADY ")
-                .append("rolled each participant authoritatively:\n")
-                .append(checksSummary).append("\n")
-                .append("By the group rule (the party succeeds only if at least half its members succeed), ")
-                .append(successes).append(" of ").append(total).append(" succeeded, so the group ")
-                .append(groupSucceeded ? "SUCCEEDS" : "FAILS").append(" as a whole. ")
-                .append("Narrate this collective outcome in one cohesive scene, addressing members by name ")
-                .append("and showing how the strong carried (or the weak undid) the effort. The rolls and ")
-                .append("the group verdict are FINAL — do not change, re-roll, or contradict them. End by ")
-                .append("inviting the party to continue.");
-
-        String response = streamToString(message.toString(), onChunk);
-        log.info("Group check resolution generated for session={}, length={}", sessionId, response.length());
-        return response;
-    }
-
-    /**
-     * Narrates the outcome of a CONTEST the engine has already adjudicated by rolling BOTH sides.
-     * {@code actorTotal} vs {@code targetTotal} and {@code actorWon} are authoritative (ties favour
-     * the defender). The model adds flavour only — it never overturns the winner.
-     */
-    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackContestResolution")
-    public String generateContestResolution(UUID sessionId, String actorName, int actorTotal,
-                                            String targetLabel, int targetTotal, boolean actorWon,
-                                            Consumer<String> onChunk) {
-        log.info("Streaming contest resolution for session={}, actorWon={}", sessionId, actorWon);
-
-        String context = ragService.buildContext(sessionId, actorName + " vs " + targetLabel);
-
-        StringBuilder message = new StringBuilder();
-        message.append(sessionDirectives(sessionId));
-        if (!context.isBlank()) {
-            message.append("Context from the world and recent events:\n").append(context).append("\n---\n\n");
-        }
-        message.append("A contested roll pitted ").append(actorName).append(" directly against ")
-                .append(targetLabel).append(". The game engine rolled BOTH sides authoritatively: ")
-                .append(actorName).append(" scored ").append(actorTotal).append(", ")
-                .append(targetLabel).append(" scored ").append(targetTotal).append(" — ")
-                .append(actorWon ? actorName + " WINS the contest." : targetLabel + " WINS the contest.")
-                .append(" Narrate this head-to-head outcome vividly and fairly. The totals and the ")
-                .append("winner are FINAL — do not change, re-roll, or contradict them. End by inviting ")
-                .append("the party to continue.");
-
-        String response = streamToString(message.toString(), onChunk);
-        log.info("Contest resolution generated for session={}, length={}", sessionId, response.length());
-        return response;
     }
 
     /**
@@ -317,8 +284,64 @@ public class DmAiService {
                         onChunk.accept(chunk);
                     }
                 })
+                .retryWhen(Retry.backoff(AI_MAX_RETRIES, AI_RETRY_MIN_BACKOFF)
+                        .maxBackoff(AI_RETRY_MAX_BACKOFF)
+                        // Retry only transient failures, and only while nothing has streamed yet —
+                        // a re-subscribe re-runs the prompt from scratch, so retrying after tokens
+                        // have reached the client would duplicate narration.
+                        .filter(t -> assembled.length() == 0 && isRetryable(t))
+                        // Propagate the ORIGINAL error (not Reactor's RetryExhaustedException) so the
+                        // @CircuitBreaker counts it and the fallback fires with the real cause.
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
                 .blockLast();
         return assembled.toString();
+    }
+
+    /**
+     * Stream a {@link Prompt} through the raw {@link ChatModel}, forwarding any assistant TEXT to
+     * {@code onChunk} and returning the aggregated {@link ChatResponse} (so the caller can inspect
+     * tool calls). A tool-call response carries no text, so the decision round forwards nothing. The
+     * same "retry only before the first token" guard as {@link #streamToString} keeps a transient
+     * 429 from duplicating already-streamed narration; tool execution happens OUTSIDE this method, so
+     * a retried decision round never re-rolls.
+     */
+    private ChatResponse streamAggregate(Prompt prompt, StringBuilder assembled, Consumer<String> onChunk) {
+        AtomicReference<ChatResponse> aggregated = new AtomicReference<>();
+        new MessageAggregator().aggregate(
+                chatModel.stream(prompt)
+                        .doOnNext(cr -> {
+                            String text = textOf(cr);
+                            if (text != null && !text.isEmpty()) {
+                                assembled.append(text);
+                                if (onChunk != null) {
+                                    onChunk.accept(text);
+                                }
+                            }
+                        })
+                        .retryWhen(Retry.backoff(AI_MAX_RETRIES, AI_RETRY_MIN_BACKOFF)
+                                .maxBackoff(AI_RETRY_MAX_BACKOFF)
+                                .filter(t -> assembled.length() == 0 && isRetryable(t))
+                                .onRetryExhaustedThrow((spec, signal) -> signal.failure())),
+                aggregated::set)
+                .blockLast();
+        return aggregated.get();
+    }
+
+    private static String textOf(ChatResponse cr) {
+        if (cr == null || cr.getResult() == null || cr.getResult().getOutput() == null) {
+            return null;
+        }
+        return cr.getResult().getOutput().getText();
+    }
+
+    /** Transient cloud failures worth retrying: 429 rate limits, 5xx, and connection blips. */
+    private static boolean isRetryable(Throwable t) {
+        if (t instanceof WebClientResponseException e) {
+            return e.getStatusCode().value() == 429 || e.getStatusCode().is5xxServerError();
+        }
+        return t instanceof TransientAiException
+                || t instanceof WebClientRequestException
+                || t instanceof java.io.IOException;
     }
 
     private String buildUserMessage(String context, String characterBlock,
@@ -357,25 +380,18 @@ public class DmAiService {
         b.append("- Difficulty: ").append(difficultyGuidance(session.getDifficulty())).append("\n");
         if (session.isAllowAiRolls()) {
             b.append("- Ability checks: when a narrative action's outcome is genuinely uncertain ")
-                    .append("(not trivial), set the scene briefly and END your reply with a check tag on ")
-                    .append("its own final line — [[ROLL: player=\"<character name>\" ability=DEX dc=15 ")
-                    .append("skill=Acrobatics reason=\"...\"]] — instead of narrating success or failure. ")
-                    .append("Routine actions get narrated normally. ")
-                    .append("Add mode=ADVANTAGE or mode=DISADVANTAGE to the tag ONLY when the situation ")
-                    .append("clearly warrants it (a favourable angle, or a real hindrance); omit it otherwise. ")
-                    .append("The player can spend Inspiration for advantage — do not pick the player's mode for them.\n");
+                    .append("(not trivial), CALL the rollCheck tool for the acting character instead of ")
+                    .append("narrating success or failure — emit only the tool call, no prose first. ")
+                    .append("Routine actions get narrated normally with no tool call. Use ADVANTAGE or ")
+                    .append("DISADVANTAGE only when the situation clearly warrants it; the player's own ")
+                    .append("lever is spending Inspiration, applied by the engine.\n");
             b.append("- Group checks: when the SAME uncertain task faces the whole party at once (everyone ")
-                    .append("sneaks past, all swim the rapids), END your reply with a group tag on its own ")
-                    .append("final line — [[GROUP: ability=DEX dc=15 skill=Stealth reason=\"sneak past\"]]. ")
-                    .append("Every player rolls; the engine applies the rule that the party succeeds only if ")
-                    .append("at least half its members succeed. Do not name players in a group tag.\n");
+                    .append("sneaks past, all swim the rapids), call the groupCheck tool. Every player rolls; ")
+                    .append("the engine applies the rule that the party succeeds only if at least half succeed.\n");
             b.append("- Contests: when ONE character is directly opposed by an NPC (an arm-wrestle, a ")
-                    .append("stealth-vs-perception, a shove), END your reply with a contest tag on its own ")
-                    .append("final line — [[CONTEST: actor=\"<character name>\" actorAbility=DEX ")
-                    .append("actorSkill=Stealth targetMod=3 targetLabel=\"the guard\" reason=\"slip past\"]]. ")
-                    .append("The engine rolls BOTH sides and decides the winner (ties favour the defender). ")
-                    .append("Quote the actor and targetLabel; omit targetMod if you are unsure and the engine ")
-                    .append("will set a fair one.\n");
+                    .append("stealth-vs-perception, a shove), call the contest tool. The engine rolls BOTH ")
+                    .append("sides and decides the winner (ties favour the defender); pass targetMod=0 to let ")
+                    .append("the engine set a fair one.\n");
             b.append("- Inspiration: reward standout play sparingly by ending a reply with an award tag on ")
                     .append("its own final line — [[INSPIRATION: player=\"<character name>\" reason=\"clever, brave, or great roleplay\"]]. ")
                     .append("Always wrap the character's name in double quotes so multi-word names survive; ")
@@ -609,25 +625,10 @@ public class DmAiService {
     }
 
     @SuppressWarnings("unused")
-    private String fallbackStreaming(UUID sessionId, UUID playerId, String playerName,
-                                     String playerAction, Consumer<String> onChunk,
-                                     Throwable throwable) {
-        log.error("AI service unavailable, using fallback. session={}, error={}",
-                sessionId, throwable.getMessage());
-        String message = "The Dungeon Master pauses, gathering their thoughts... " +
-                "[The AI service is temporarily unavailable. " +
-                "Your action '" + playerAction + "' has been recorded. " +
-                "The DM will respond when service is restored. Please try again in a moment.]";
-        if (onChunk != null) {
-            onChunk.accept(message);
-        }
-        return message;
-    }
-
-    @SuppressWarnings("unused")
-    private String fallbackCollaborative(UUID sessionId, List<Contribution> actions,
-                                         Consumer<String> onChunk, Throwable throwable) {
-        log.error("AI collaborative narration unavailable, using fallback. session={}, error={}",
+    private NarrativeTurnResult fallbackNarrativeTurn(UUID sessionId, List<Contribution> actions,
+                                                      Map<UUID, Boolean> spendInspiration,
+                                                      Consumer<String> onChunk, Throwable throwable) {
+        log.error("AI narrative turn unavailable, using fallback. session={}, error={}",
                 sessionId, throwable.getMessage());
         String message = "The Dungeon Master pauses, gathering their thoughts... " +
                 "[The AI service is temporarily unavailable. The party's actions have been recorded. " +
@@ -635,68 +636,7 @@ public class DmAiService {
         if (onChunk != null) {
             onChunk.accept(message);
         }
-        return message;
-    }
-
-    @SuppressWarnings("unused")
-    private String fallbackCheckResolution(UUID sessionId, UUID playerId, String action,
-                                           String ability, String skill, int dc, int total,
-                                           boolean success, Consumer<String> onChunk,
-                                           Throwable throwable) {
-        log.error("AI check resolution unavailable, using fallback. session={}, error={}",
-                sessionId, throwable.getMessage());
-        String message = (success ? "Success! " : "Failure. ")
-                + "The " + ability + " check totalled " + total + " against DC " + dc + ". "
-                + "[The DM will narrate the consequence when service is restored.]";
-        if (onChunk != null) {
-            onChunk.accept(message);
-        }
-        return message;
-    }
-
-    @SuppressWarnings("unused")
-    private String fallbackBatchedCheckResolution(UUID sessionId, String checksSummary,
-                                                  Consumer<String> onChunk, Throwable throwable) {
-        log.error("AI batched check resolution unavailable, using fallback. session={}, error={}",
-                sessionId, throwable.getMessage());
-        String message = "The dust settles on the party's efforts:\n"
-                + (checksSummary == null ? "" : checksSummary)
-                + "\n[The DM will narrate the consequences when service is restored.]";
-        if (onChunk != null) {
-            onChunk.accept(message);
-        }
-        return message;
-    }
-
-    @SuppressWarnings("unused")
-    private String fallbackGroupCheckResolution(UUID sessionId, String checksSummary, int successes,
-                                                int total, boolean groupSucceeded,
-                                                Consumer<String> onChunk, Throwable throwable) {
-        log.error("AI group check resolution unavailable, using fallback. session={}, error={}",
-                sessionId, throwable.getMessage());
-        String message = "The party's combined effort resolves — " + successes + " of " + total
-                + " succeeded, so the group " + (groupSucceeded ? "SUCCEEDS" : "FAILS") + ".\n"
-                + (checksSummary == null ? "" : checksSummary)
-                + "\n[The DM will narrate the consequences when service is restored.]";
-        if (onChunk != null) {
-            onChunk.accept(message);
-        }
-        return message;
-    }
-
-    @SuppressWarnings("unused")
-    private String fallbackContestResolution(UUID sessionId, String actorName, int actorTotal,
-                                             String targetLabel, int targetTotal, boolean actorWon,
-                                             Consumer<String> onChunk, Throwable throwable) {
-        log.error("AI contest resolution unavailable, using fallback. session={}, error={}",
-                sessionId, throwable.getMessage());
-        String message = (actorWon ? actorName + " prevails! " : targetLabel + " prevails. ")
-                + "The contest scored " + actorTotal + " against " + targetTotal + ". "
-                + "[The DM will narrate the consequence when service is restored.]";
-        if (onChunk != null) {
-            onChunk.accept(message);
-        }
-        return message;
+        return new NarrativeTurnResult(message, false);
     }
 
     @SuppressWarnings("unused")

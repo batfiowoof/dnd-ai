@@ -35,24 +35,6 @@ export interface GameStateDto {
   allowAiCombat: boolean;
   allowAiRolls: boolean;
   collabWindowSeconds: number;
-  /** Open ability checks, so a reconnecting client can re-open its roll prompt. */
-  pendingChecks: PendingCheckDto[];
-}
-
-/** An open ability check surfaced on game state (the transient ROLL_REQUEST is missed on reload). */
-export interface PendingCheckDto {
-  playerId: string;
-  ability: string;
-  dc: number;
-  skill: string | null;
-  reason: string | null;
-  suggestedModifier: number;
-  /** STANDARD / GROUP / CONTEST — lets a reconnecting client frame the re-opened prompt. */
-  checkKind: CheckKind;
-  /** Opposed party for a CONTEST (null otherwise). */
-  targetLabel: string | null;
-  /** The DM's situational grant carried so the re-opened badge survives reload (NORMAL when none). */
-  dmMode?: RollMode;
 }
 
 export interface CreateSessionRequest {
@@ -357,23 +339,6 @@ export interface RoundStatusEvent {
   open: boolean;
 }
 
-export interface RollRequestEvent {
-  type: "ROLL_REQUEST";
-  sessionId: string;
-  playerId: string;
-  ability: string;
-  dc: number;
-  skill: string | null;
-  reason: string | null;
-  suggestedModifier: number;
-  /** The DM's situational grant — ADVANTAGE/DISADVANTAGE, or NORMAL when none. */
-  dmMode: RollMode;
-  /** STANDARD / GROUP / CONTEST — frames how the prompt reads. */
-  checkKind: CheckKind;
-  /** Opposed party for a CONTEST (null otherwise). */
-  targetLabel: string | null;
-}
-
 /** Neutral system line broadcast to the room (e.g. "X gains Inspiration!"). */
 export interface SystemMessageEvent {
   type: "SYSTEM";
@@ -393,7 +358,6 @@ export type WebSocketMessage =
   | CombatActionEvent
   | CombatLifecycleEvent
   | RoundStatusEvent
-  | RollRequestEvent
   | SystemMessageEvent;
 
 /* ── Character types ──────────────────────────────────────────── */

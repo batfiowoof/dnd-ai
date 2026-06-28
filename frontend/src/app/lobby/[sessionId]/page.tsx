@@ -34,7 +34,6 @@ import {
   sendCombatEndTurn,
   sendEndCombat,
   sendPass,
-  sendRollCheck,
 } from "@/lib/websocket";
 import type { Client } from "@stomp/stompjs";
 import type {
@@ -43,7 +42,6 @@ import type {
   CombatActionEvent,
   CombatLifecycleEvent,
   RoundStatusEvent,
-  RollRequestEvent,
   ItemKind,
   PlayerRuntimeState,
   PlayerDto,
@@ -51,7 +49,6 @@ import type {
 import { Button, Panel, Brand, Alert, D20Mark, Tooltip, cn } from "@/components/ui";
 import { stripDmTags } from "@/lib/strip";
 import Portrait from "@/components/Portrait";
-import RollPromptModal from "@/components/RollPromptModal";
 import DiceRollModal from "@/components/dice/DiceRollModal";
 import QuickRollBar from "@/components/dice/QuickRollBar";
 import ActionBar from "@/components/game/ActionBar";
@@ -96,7 +93,6 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const turnNumber = useSessionStore((s) => s.turnNumber);
   const turnMode = useSessionStore((s) => s.turnMode);
   const round = useSessionStore((s) => s.round);
-  const pendingCheck = useSessionStore((s) => s.pendingCheck);
   const runtimeByPlayerId = useSessionStore((s) => s.runtimeByPlayerId);
   const combat = useSessionStore((s) => s.combat);
   const setError = useSessionStore((s) => s.setError);
@@ -109,6 +105,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   /* ── purely-local UI state ──────────────────────────────────── */
   const [copied, setCopied] = useState(false);
   const [actionText, setActionText] = useState("");
+  /** Pre-arm Inspiration for any check the AI DM rolls this turn (auto-rolls happen inline). */
+  const [spendInspiration, setSpendInspiration] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
 
@@ -163,33 +161,6 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (gameStateQuery.data) hydrateFromGameState(gameStateQuery.data);
   }, [gameStateQuery.data, hydrateFromGameState]);
-
-  /* ── re-open the roll prompt on (re)hydration ─────────────────
-     ROLL_REQUEST is a transient WebSocket event, so a reload/reconnect would miss it and
-     leave the modal closed while the pending_checks row keeps holding the turn. The open
-     check now travels on the game state — re-apply ours so the prompt comes back. */
-  useEffect(() => {
-    const gs = gameStateQuery.data;
-    if (!gs || !playerId) return;
-    const mine = gs.pendingChecks?.find((c) => c.playerId === playerId);
-    if (mine) {
-      useSessionStore.getState().applyRollRequest({
-        type: "ROLL_REQUEST",
-        sessionId,
-        playerId: mine.playerId,
-        ability: mine.ability,
-        dc: mine.dc,
-        skill: mine.skill,
-        reason: mine.reason,
-        suggestedModifier: mine.suggestedModifier,
-        // The DM's situational grant now travels on PendingCheckDto so the badge survives a
-        // reload; fall back to NORMAL for older states that predate the field.
-        dmMode: mine.dmMode ?? "NORMAL",
-        checkKind: mine.checkKind ?? "STANDARD",
-        targetLabel: mine.targetLabel ?? null,
-      });
-    }
-  }, [gameStateQuery.data, playerId, sessionId]);
 
   useEffect(() => {
     if (gameStateQuery.isError) setError("Failed to load session");
@@ -338,12 +309,6 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             case "ROUND_STATUS":
               s.applyRoundStatus(data as unknown as RoundStatusEvent);
               break;
-            case "ROLL_REQUEST": {
-              const evt = data as unknown as RollRequestEvent;
-              // Only the targeted player is prompted (and soft-locked).
-              if (evt.playerId === playerId) s.applyRollRequest(evt);
-              break;
-            }
             case "SYSTEM": {
               // Neutral room line (e.g. "X gains Inspiration!").
               const text = data.text as string | undefined;
@@ -423,24 +388,18 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     // and freeform let you act now. Collaborative submissions join the current round.
     if (!actionText.trim() || !clientRef.current || !canType) return;
 
-    sendAction(clientRef.current, sessionId, actionText.trim());
+    sendAction(clientRef.current, sessionId, actionText.trim(), spendInspiration);
 
     // No optimistic local entry: the server echoes the action via DM_THINKING,
     // so every client (including this one) renders it once, in order.
     setActionText("");
+    setSpendInspiration(false);
     scrollToBottom();
   }
 
   function handlePass() {
     if (!clientRef.current || !connected) return;
     sendPass(clientRef.current, sessionId);
-  }
-
-  function handleRollCheck(spendInspiration: boolean) {
-    if (!clientRef.current || !connected) return;
-    // Close the prompt optimistically; the resolving dice + DM narration follow.
-    useSessionStore.getState().clearPendingCheck();
-    sendRollCheck(clientRef.current, sessionId, spendInspiration);
   }
 
   function handleRoll(notation: string, label: string) {
@@ -563,14 +522,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     return m;
   }, [combat]);
 
-  const hasPendingCheck = !!pendingCheck;
-
   // Narrative input permission, branched by mode (combat uses combat actions).
   const canType =
     status === "ACTIVE" &&
     connected &&
     !inCombat &&
-    !hasPendingCheck &&
     !dmThinking &&
     (turnMode === "INITIATIVE" ? isMyTurn : true);
 
@@ -777,12 +733,6 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
       {/* Dice + combat-action animation overlays */}
       <DiceRollModal />
       <CombatActionModal />
-      <RollPromptModal
-        request={pendingCheck}
-        connected={connected}
-        hasInspiration={!!myState?.inspiration}
-        onRoll={handleRollCheck}
-      />
       <InventoryManager
         open={manageOpen}
         onClose={() => setManageOpen(false)}
@@ -1101,9 +1051,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                   placeholder={
                     inCombat
                       ? "In combat — use combat actions above"
-                      : hasPendingCheck
-                        ? "Roll the check the DM asked for…"
-                        : turnMode === "INITIATIVE" && !isMyTurn
+                      : turnMode === "INITIATIVE" && !isMyTurn
                           ? "Waiting for your turn..."
                           : dmThinking
                             ? "The DM is responding…"
@@ -1122,6 +1070,19 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                   {turnMode === "COLLABORATIVE" && round?.open ? "Add" : "Send"}
                 </Button>
               </div>
+              {/* Inspiration is now pre-armed before acting (the DM auto-rolls any check inline). */}
+              {myState?.inspiration && (
+                <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-xs text-gold">
+                  <input
+                    type="checkbox"
+                    checked={spendInspiration}
+                    onChange={(e) => setSpendInspiration(e.target.checked)}
+                    disabled={!canType}
+                    className="accent-gold"
+                  />
+                  Spend Inspiration on this action (advantage on any check)
+                </label>
+              )}
               {turnMode === "INITIATIVE" && isMyTurn && !inCombat && (
                 <p className="mt-1.5 text-xs font-medium text-gold">
                   It&apos;s your turn!

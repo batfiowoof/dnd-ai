@@ -8,11 +8,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /**
  * Enables Spring scheduling and provides a small {@link TaskScheduler} used by the
- * collaborative {@code RoundCollector} to flush debounced rounds off-thread and by the
- * {@code CheckService} GROUP-abandonment sweep. Spring Boot does not provide a scheduler bean
- * unless one is declared, so we add it explicitly. Pool size is 4 so the sweep (which blocks a
- * thread per stale group while it streams the LLM narration) does not starve the RoundCollector
- * debounce flushes that share this scheduler.
+ * collaborative {@code RoundCollector} to flush debounced rounds off-thread. Spring Boot does not
+ * provide a scheduler bean unless one is declared, so we add it explicitly.
  */
 @Configuration
 @EnableScheduling

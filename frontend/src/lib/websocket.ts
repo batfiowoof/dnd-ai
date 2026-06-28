@@ -77,11 +77,12 @@ export function subscribeToErrors(
 export function sendAction(
   client: Client,
   sessionId: string,
-  action: string
+  action: string,
+  spendInspiration = false
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/action`,
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, spendInspiration }),
   });
 }
 
@@ -90,22 +91,6 @@ export function sendPass(client: Client, sessionId: string) {
   client.publish({
     destination: `/app/game/${sessionId}/pass`,
     body: JSON.stringify({}),
-  });
-}
-
-/**
- * Resolve the DM-requested ability check pending for the player. The player's only roll-mode
- * lever is spending Inspiration (grants advantage) — the DM decides situational advantage /
- * disadvantage. The backend rolls authoritatively and narrates the outcome.
- */
-export function sendRollCheck(
-  client: Client,
-  sessionId: string,
-  spendInspiration: boolean
-) {
-  client.publish({
-    destination: `/app/game/${sessionId}/roll-check`,
-    body: JSON.stringify({ spendInspiration }),
   });
 }
 

@@ -7,26 +7,20 @@ import com.dungeon.master.kafka.event.PlayerActionEvent;
 import com.dungeon.master.kafka.event.TurnNextEvent;
 import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.entity.GameSession;
-import com.dungeon.master.model.entity.PendingCheck;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.TurnEvent;
-import com.dungeon.master.model.enums.CheckKind;
 import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.GameStatus;
 import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.model.enums.TurnMode;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.GameSessionRepository;
-import com.dungeon.master.repository.PendingCheckRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.UUID;
@@ -40,15 +34,8 @@ public class TurnService {
     private final PlayerRepository playerRepository;
     private final TurnEventRepository turnEventRepository;
     private final CombatEncounterRepository combatEncounterRepository;
-    private final PendingCheckRepository pendingCheckRepository;
     private final RoundCollector roundCollector;
     private final GameEventProducer eventProducer;
-    /**
-     * Lazily resolved to break the CheckService↔TurnService construction cycle (CheckService injects
-     * TurnService directly). An {@link ObjectProvider} hands back a factory, not the bean, so Spring
-     * can build TurnService without a fully-constructed CheckService.
-     */
-    private final ObjectProvider<CheckService> checkServiceProvider;
 
     /**
      * Validate that it is {@code username}'s turn in an ACTIVE session and return
@@ -73,8 +60,13 @@ public class TurnService {
         return player;
     }
 
-    @Transactional
+    /** Convenience overload for mechanical actions (cast/use-item/rest) that never spend Inspiration. */
     public void submitAction(UUID sessionId, String username, String action) {
+        submitAction(sessionId, username, action, false);
+    }
+
+    @Transactional
+    public void submitAction(UUID sessionId, String username, String action, boolean spendInspiration) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalStateException("Session not found: " + sessionId));
 
@@ -90,42 +82,13 @@ public class TurnService {
                 .orElseThrow(() -> new PlayerNotFoundException(
                         "Player not found: " + username + " in session " + sessionId));
 
-        // Acting overrides any ability check the DM was waiting on for this player: drop the
-        // stale pending check so its turn-hold in DmResponseConsumer is released and the new
-        // action's DM response advances normally (no permanent stall on an unrolled check).
-        PendingCheck dropped = pendingCheckRepository.findBySessionIdAndPlayerId(sessionId, player.getId())
-                .orElse(null);
-        pendingCheckRepository.deleteBySessionIdAndPlayerId(sessionId, player.getId());
-
-        // If that dropped row was the LAST outstanding roll of a GROUP check, no roller will ever be
-        // "last", so the group would never narrate and its in-memory batch would leak. Force-resolve
-        // it with the rolls already received (this player, having acted instead of rolled, is a
-        // non-responder excluded from the total — consistent with the abandonment sweep). The flush
-        // from the @Modifying delete above means the count already reflects the removed row.
-        //
-        // Fire ONLY after this tx commits: the switch below can still throw (e.g. INITIATIVE
-        // NotYourTurnException for a non-current player), which would roll back the row deletion and
-        // restore the pending check — but the group narration is irreversible. An afterCommit hook
-        // means a rollback simply never narrates, leaving the restored row for the timeout sweep.
-        if (dropped != null && dropped.getCheckKind() == CheckKind.GROUP && dropped.getRoundToken() != null
-                && pendingCheckRepository.countBySessionIdAndRoundToken(sessionId, dropped.getRoundToken()) == 0) {
-            UUID groupToken = dropped.getRoundToken();
-            UUID actingPlayerId = player.getId();
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    checkServiceProvider.getObject().handleGroupDropout(sessionId, groupToken, actingPlayerId);
-                }
-            });
-        }
-
         switch (session.getTurnMode()) {
             case COLLABORATIVE -> {
                 // Join the debounced round; the collector persists one combined TurnEvent and
                 // fires a single RoundActionEvent on flush. No per-action LLM call, no racing.
                 int expected = (int) playerRepository.countBySessionIdAndRole(sessionId, PlayerRole.PLAYER);
                 roundCollector.submit(sessionId, player.getId(), player.getCharacterName(),
-                        action, session.getCollabWindowSeconds(), expected);
+                        action, spendInspiration, session.getCollabWindowSeconds(), expected);
                 log.info("Action collected (collaborative): session={}, player={}", sessionId, username);
             }
             case INITIATIVE -> {
@@ -133,9 +96,9 @@ public class TurnService {
                     throw new NotYourTurnException("It's not your turn, " + username
                             + ". Current turn: " + session.getCurrentTurnPlayerId());
                 }
-                dispatchImmediateAction(sessionId, player, action);
+                dispatchImmediateAction(sessionId, player, action, spendInspiration);
             }
-            case FREEFORM -> dispatchImmediateAction(sessionId, player, action);
+            case FREEFORM -> dispatchImmediateAction(sessionId, player, action, spendInspiration);
         }
     }
 
@@ -163,7 +126,8 @@ public class TurnService {
     }
 
     /** Persist the action and fire the per-action DM pipeline (initiative + freeform modes). */
-    private void dispatchImmediateAction(UUID sessionId, Player player, String action) {
+    private void dispatchImmediateAction(UUID sessionId, Player player, String action,
+                                         boolean spendInspiration) {
         int nextTurnNumber = turnEventRepository.findTopBySessionIdOrderByTurnNumberDesc(sessionId)
                 .map(e -> e.getTurnNumber() + 1)
                 .orElse(1);
@@ -178,7 +142,7 @@ public class TurnService {
 
         PlayerActionEvent kafkaEvent = new PlayerActionEvent(
                 sessionId, player.getId(), player.getCharacterName(), action, nextTurnNumber,
-                turnEvent.getId());
+                turnEvent.getId(), spendInspiration);
         eventProducer.sendPlayerAction(kafkaEvent);
 
         log.info("Action submitted: session={}, player={}, turn={}",
