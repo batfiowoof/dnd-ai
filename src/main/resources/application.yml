@@ -41,33 +41,38 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-  # ── Spring AI (Ollama) ──────────────────────────────
+  # ── Spring AI (cloud chat + local embeddings) ───────
   ai:
-    ollama:
-      base-url: http://localhost:11434
+    # Both the OpenAI and Ollama starters are on the classpath. These selectors pick which
+    # provider's auto-config serves each model type, so there's exactly one ChatModel and one
+    # EmbeddingModel bean: chat → OpenAI (pointed at OpenRouter), embeddings → Ollama (bge-m3).
+    model:
+      chat: openai
+      embedding: ollama
+    # Chat model runs in the cloud via OpenRouter (OpenAI-compatible). Old hardware can't run
+    # the chat model locally; OpenRouter gives free/near-cost access to many models.
+    openai:
+      base-url: https://openrouter.ai/api/v1
+      api-key: ${OPENROUTER_API_KEY}
       chat:
         options:
-          # qwen3.5:4b is a reasoning model: it can emit a <think> block instead of narration
-          # (which once returned an empty visible reply). If the DM comes back blank, suppress
-          # thinking — e.g. append "/no_think" to the system prompt in DmAiService.
-          model: qwen3.5:4b
+          # Prefer a non-reasoning *instruct* model: reasoning models can emit a <think> block
+          # instead of narration (which once returned an empty visible reply). Swapping models
+          # later is a one-string change. Free tier has rate limits (~20 req/min, ~200 req/day);
+          # switch to a cheap paid model here if you hit them.
+          model: meta-llama/llama-3.3-70b-instruct:free
           temperature: 0.7
           top-p: 0.9
-          # Tight context (4096) keeps the attention compute buffer small with Flash Attention
-          # off; with the embedder on CPU (below) the whole GPU is free for the chat model.
-          num-ctx: 4096
-          # Keep the model resident between turns. Without this the app unloads it right after
-          # each reply, so every turn pays the full reload-from-disk cost. 30m stays warm through
-          # a session and releases when idle (so it doesn't hold ~5 GB of VRAM forever).
-          keep-alive: 30m
+    ollama:
+      base-url: http://localhost:11434
+      # Embeddings stay local — light (~0.2 s/query on CPU) and keeps the seeded bge-m3 corpus
+      # valid (no re-seed, no migration). Local Ollama only needs `ollama pull bge-m3`.
       embedding:
         options:
           model: bge-m3
-          # Run the embedder on CPU (0 GPU layers) so all VRAM is free for the chat model.
-          # Runtime only embeds one short query per turn (~0.2 s on CPU) — the heavy one-time
-          # corpus seed already ran. Frees ~1 GB of VRAM.
+          # Run the embedder on CPU (0 GPU layers).
           num-gpu: 0
-          # Keep the embedder resident too, so it isn't reloaded every turn.
+          # Keep the embedder resident so it isn't reloaded every turn.
           keep-alive: 30m
     vectorstore:
       pgvector:

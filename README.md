@@ -21,7 +21,7 @@ A multiplayer Dungeons & Dragons web application where an AI acts as the Dungeon
 ### Backend — Spring Boot 4 / Java 21
 
 - **REST + WebSocket (STOMP)** for session management and real-time gameplay
-- **Spring AI + Ollama** for LLM-based Dungeon Master responses
+- **Spring AI** for LLM-based Dungeon Master responses — chat via OpenRouter (cloud), embeddings via local Ollama (`bge-m3`)
 - **RAG pipeline** using pgvector for semantic search over world documents and session history
 - **Kafka (KRaft)** for async event processing — player actions, DM responses, turn advancement, session events
 - **Keycloak** for OAuth2/OIDC authentication (dev profile supports mock JWT via `X-User` header)
@@ -76,11 +76,18 @@ This starts all services:
 | PostgreSQL | localhost:5555 |
 | Kafka | localhost:9092 |
 
-Inference uses the **host's** Ollama (not a container). Make sure it's installed, listening
-on `0.0.0.0:11434` (`OLLAMA_HOST=0.0.0.0`), and the models are pulled:
+**Chat / DM narration** runs in the cloud via **OpenRouter** (an OpenAI-compatible gateway).
+Get a key at [openrouter.ai](https://openrouter.ai) and export it before running the backend:
 
 ```bash
-ollama pull qwen3.5:4b   # chat / DM narration
+export OPENROUTER_API_KEY=sk-or-...   # Windows: $env:OPENROUTER_API_KEY="sk-or-..."
+```
+
+**Embeddings** still run on the **host's** Ollama (not a container) — it's a light workload
+(~0.2 s per query) and keeps the seeded RAG corpus valid. Make sure Ollama is installed,
+listening on `0.0.0.0:11434` (`OLLAMA_HOST=0.0.0.0`), and the embedding model is pulled:
+
+```bash
 ollama pull bge-m3       # embeddings (1024-dim) for RAG
 ```
 
@@ -176,7 +183,7 @@ Connect to `/ws` with STOMP, then:
 |---|---|
 | Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
 | Backend | Spring Boot 4, Java 21, Spring AI, Spring Security |
-| AI / LLM | Ollama (qwen3.5:4b), Spring AI ChatClient |
+| AI / LLM | OpenRouter (chat, cloud) + Ollama (bge-m3 embeddings, local), Spring AI ChatClient |
 | Vector Search | pgvector (cosine similarity, IVFFlat index) |
 | Messaging | Apache Kafka (KRaft mode) |
 | Auth | Keycloak (OAuth2 / OIDC) |

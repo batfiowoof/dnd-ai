@@ -70,11 +70,10 @@ services:
       - ./keycloak/dnd-ai-realm.json:/opt/keycloak/data/import/dnd-ai-realm.json:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
 
-  # ── Ollama (LLM inference) ────────────────────────
-  # Inference runs on the HOST's Ollama (not a container), so models you've
-  # already pulled on your machine are used directly. The backend reaches it
-  # via host.docker.internal. First-run, on the HOST:
-  #   ollama pull qwen3.5:4b
+  # ── LLM inference ─────────────────────────────────
+  # Chat runs in the CLOUD via OpenRouter (OpenAI-compatible) — set OPENROUTER_API_KEY
+  # on the host (or in a .env file). Embeddings run on the HOST's Ollama (not a
+  # container); the backend reaches it via host.docker.internal. First-run, on the HOST:
   #   ollama pull bge-m3
   # (Ensure host Ollama listens on 0.0.0.0 — set OLLAMA_HOST=0.0.0.0 if needed.)
 
@@ -89,6 +88,9 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Cloud chat (OpenRouter) — provide OPENROUTER_API_KEY on the host or in a .env file.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      # Local Ollama for embeddings (bge-m3) only.
       SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/dnd-ai/protocol/openid-connect/certs
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:8180/realms/dnd-ai
