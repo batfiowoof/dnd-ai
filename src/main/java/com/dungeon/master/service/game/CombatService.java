@@ -234,7 +234,8 @@ public class CombatService {
         RollSummary damageSummary = null;
         boolean defeated = false;
         if (hit) {
-            DiceRollResult dmg = diceService.roll(damageDice(player));
+            String dmgDice = damageDice(player);
+            DiceRollResult dmg = diceService.roll(atk.crit() ? critDouble(dmgDice) : dmgDice);
             enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
             if (enemy.getCurrentHp() == 0) {
                 enemy.setAlive(false);
@@ -785,7 +786,7 @@ public class CombatService {
             int targetMax = target.state().maxHp();
             boolean defeated = false;
             if (hit) {
-                DiceRollResult dmg = rollExpr(damageDice);
+                DiceRollResult dmg = rollExpr(crit ? critDouble(damageDice) : damageDice);
                 PlayerRuntimeStateDto updated =
                         playerStateService.applyHpDelta(victim.getId(), -dmg.total(), crit);
                 broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
@@ -961,7 +962,7 @@ public class CombatService {
                     boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
                     RollSummary dmg = null;
                     if (hit) {
-                        DiceRollResult d = rollExpr(dice);
+                        DiceRollResult d = rollExpr(atk.crit() ? critDouble(dice) : dice);
                         applyEnemyDamage(e, d.total());
                         dmg = RollSummary.of(d);
                     }
@@ -1360,6 +1361,15 @@ public class CombatService {
     private static DiceRollResult constant(int n) {
         return new DiceRollResult(String.valueOf(n), 0, 0, n, RollMode.NORMAL,
                 List.of(n), null, n, false, false);
+    }
+
+    /** 5E crit: double the number of dice, keep the flat modifier ("1d8+3" -> "2d8+3"). */
+    private static String critDouble(String notation) {
+        if (notation == null) return null;
+        Matcher m = DICE.matcher(notation.trim());
+        if (!m.matches()) return notation;   // flat constants / unparseable left unchanged
+        int count = m.group(1).isEmpty() ? 1 : Integer.parseInt(m.group(1));
+        return (count * 2) + "d" + m.group(2) + (m.group(3) == null ? "" : m.group(3));
     }
 
     private void applyEnemyDamage(Enemy e, int dmg) {
@@ -1970,7 +1980,31 @@ public class CombatService {
         return range;
     }
 
-    /** Simplified weapon damage: 1d8 + best STR/DEX modifier. */
+    /**
+     * Keyword → base weapon damage die (SRD). Mirrors {@link #WEAPON_RANGE}: ordered
+     * most-specific first so {@code contains} matching picks "greatsword" before "sword"
+     * and "greataxe" before "axe".
+     */
+    private static final java.util.List<Map.Entry<String, String>> WEAPON_DAMAGE = java.util.List.of(
+            Map.entry("greataxe", "1d12"), Map.entry("greatsword", "2d6"), Map.entry("maul", "2d6"),
+            Map.entry("halberd", "1d10"), Map.entry("glaive", "1d10"), Map.entry("heavy crossbow", "1d10"),
+            Map.entry("pike", "1d10"), Map.entry("lance", "1d12"),
+            Map.entry("longsword", "1d8"), Map.entry("battleaxe", "1d8"), Map.entry("warhammer", "1d8"),
+            Map.entry("rapier", "1d8"), Map.entry("longbow", "1d8"), Map.entry("light crossbow", "1d8"),
+            Map.entry("morningstar", "1d8"), Map.entry("flail", "1d8"), Map.entry("war pick", "1d8"),
+            Map.entry("trident", "1d6"), Map.entry("shortsword", "1d6"), Map.entry("scimitar", "1d6"),
+            Map.entry("shortbow", "1d6"), Map.entry("hand crossbow", "1d6"), Map.entry("mace", "1d6"),
+            Map.entry("spear", "1d6"), Map.entry("handaxe", "1d6"), Map.entry("quarterstaff", "1d6"),
+            Map.entry("javelin", "1d6"), Map.entry("blowgun", "1d1"),
+            Map.entry("dagger", "1d4"), Map.entry("dart", "1d4"), Map.entry("sling", "1d4"),
+            Map.entry("club", "1d4"), Map.entry("sickle", "1d4"), Map.entry("whip", "1d4"));
+
+    /**
+     * Weapon damage = the equipped weapon's die (by name) + best STR/DEX modifier. Prefers an
+     * {@code equipped} weapon, else the first weapon carried; falls back to 1d4 (improvised /
+     * unarmed) when no weapon is found. The ability modifier keeps the finesse simplification
+     * already used for the attack bonus (best of STR/DEX).
+     */
     private String damageDice(Player player) {
         Character c = character(player);
         int mod = 0;
@@ -1979,7 +2013,30 @@ public class CombatService {
                     Math.floorDiv(c.getStrength() - 10, 2),
                     Math.floorDiv(c.getDexterity() - 10, 2));
         }
-        return "1d8" + (mod > 0 ? "+" + mod : mod < 0 ? String.valueOf(mod) : "");
+        return weaponDie(player) + (mod > 0 ? "+" + mod : mod < 0 ? String.valueOf(mod) : "");
+    }
+
+    /** Base damage die of the player's best/equipped weapon, or "1d4" when unarmed/unknown. */
+    private String weaponDie(Player player) {
+        List<InventoryItem> inv;
+        try {
+            inv = playerStateService.getState(player.getId()).inventory();
+        } catch (RuntimeException ex) {
+            return "1d4";
+        }
+        if (inv == null) return "1d4";
+        InventoryItem chosen = null;
+        for (InventoryItem item : inv) {
+            if (item.name() == null || item.kind() != ItemKind.WEAPON) continue;
+            if (chosen == null) chosen = item;        // first weapon as the default
+            if (item.equipped()) { chosen = item; break; }  // an equipped weapon wins
+        }
+        if (chosen == null) return "1d4";
+        String name = chosen.name().toLowerCase(java.util.Locale.ROOT);
+        for (Map.Entry<String, String> e : WEAPON_DAMAGE) {
+            if (name.contains(e.getKey())) return e.getValue();
+        }
+        return "1d4";
     }
 
     private String notation(int bonus) {

@@ -229,9 +229,9 @@ class CombatServiceTest {
         when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria"))
                 .thenReturn(Optional.of(attacker));
         when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
-        // null characterId → default attack bonus (+2) and damage "1d8"
+        // null characterId → default attack bonus (+2); no weapon in inventory → 1d4 (improvised)
         when(diceService.roll("1d20+2")).thenReturn(res(20)); // hits AC 10
-        when(diceService.roll("1d8")).thenReturn(res(10));     // 10 dmg kills 5-HP goblin
+        when(diceService.roll("1d4")).thenReturn(res(10));     // 10 dmg kills 5-HP goblin
         // after the kill the only enemy is dead → victory
         when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
 
@@ -804,6 +804,92 @@ class CombatServiceTest {
         combat.playerAttack(sessionId, "Aria", aId);
 
         assertEquals(15, goblin.getCurrentHp(), "a longbow reaches a 35 ft target");
+    }
+
+    /** A natural-20 d20 result (crit flag set), for exercising crit-damage doubling. */
+    private DiceRollResult crit20() {
+        return new DiceRollResult("n", 1, 20, 0, RollMode.NORMAL,
+                List.of(20), null, 20, true, false);
+    }
+
+    /** Build a no-grid ACTIVE encounter with the player active and one enemy in initiative. */
+    private CombatEncounter noGridEncounter(UUID pid, UUID enemyId) {
+        return CombatEncounter.builder()
+                .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
+                .initiativeOrder(List.of(
+                        new Combatant(CombatantKind.PLAYER, pid, "Aria", 18, 0),
+                        new Combatant(CombatantKind.ENEMY, enemyId, "Goblin", 5, 2)))
+                .activeIndex(0).round(1).build();
+    }
+
+    @Test
+    void weaponDamageUsesTheEquippedWeaponDie() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = noGridEncounter(pid, enemyId);
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(20).currentHp(20).armorClass(10)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
+        when(playerStateService.getState(pid)).thenReturn(stateWithWeapon(pid, "Greatsword"));
+        when(diceService.roll("1d20+2")).thenReturn(res(20)); // hits AC 10 (not a crit)
+        when(diceService.roll("2d6")).thenReturn(res(9));      // a greatsword rolls 2d6
+
+        combat.playerAttack(sessionId, "Aria", enemyId);
+
+        assertEquals(11, goblin.getCurrentHp(), "greatsword deals its 2d6 die, not a flat 1d8");
+        verify(diceService).roll("2d6");
+    }
+
+    @Test
+    void weaponDamageFallsBackToOneD4WhenUnarmed() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = noGridEncounter(pid, enemyId);
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(20).currentHp(20).armorClass(10)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
+        when(playerStateService.getState(pid)).thenReturn(stateFor(pid, 20)); // no weapon carried
+        when(diceService.roll("1d20+2")).thenReturn(res(20));
+        when(diceService.roll("1d4")).thenReturn(res(3));
+
+        combat.playerAttack(sessionId, "Aria", enemyId);
+
+        assertEquals(17, goblin.getCurrentHp(), "an unarmed strike falls back to 1d4");
+        verify(diceService).roll("1d4");
+    }
+
+    @Test
+    void criticalHitDoublesTheWeaponDamageDice() {
+        UUID pid = UUID.randomUUID();
+        UUID enemyId = UUID.randomUUID();
+        CombatEncounter enc = noGridEncounter(pid, enemyId);
+        Enemy goblin = Enemy.builder().id(enemyId).sessionId(sessionId)
+                .name("Goblin").maxHp(30).currentHp(30).armorClass(10)
+                .attackBonus(4).damageDice("1d6+2").initiative(5).alive(true).build();
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findById(enemyId)).thenReturn(Optional.of(goblin));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
+        when(playerStateService.getState(pid)).thenReturn(stateWithWeapon(pid, "Longsword")); // 1d8
+        when(diceService.roll("1d20+2")).thenReturn(crit20());  // natural 20 → crit
+        when(diceService.roll("2d8")).thenReturn(res(12));       // the doubled dice
+
+        combat.playerAttack(sessionId, "Aria", enemyId);
+
+        assertEquals(18, goblin.getCurrentHp(), "a crit rolls 2d8, not 1d8");
+        verify(diceService).roll("2d8");
+        verify(diceService, never()).roll("1d8");
     }
 
     @Test

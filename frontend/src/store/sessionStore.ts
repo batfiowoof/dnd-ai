@@ -14,6 +14,7 @@ import type {
 } from "@/types";
 import { conditionMeta } from "@/lib/conditions";
 import { bandMeta } from "@/lib/health";
+import { formatDamageRoll } from "@/lib/combat";
 
 /* ─── Collaborative round collection status ──────────────────── */
 export interface RoundStatus {
@@ -132,7 +133,15 @@ function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
     }
 
     const bits: string[] = [];
-    if (t.damageRoll) bits.push(`${t.damageRoll.total} dmg`);
+    if (t.damageRoll) {
+      // Hide the enemy's damage DICE — show only the total they dealt; the player's own
+      // damage shows the full notation + per-die breakdown.
+      bits.push(
+        evt.actorKind === "ENEMY"
+          ? `${t.damageRoll.total} dmg`
+          : `${t.damageRoll.notation} ${formatDamageRoll(t.damageRoll)} dmg`
+      );
+    }
     if (t.heal !== null && t.heal > 0) bits.push(`+${t.heal}`);
     // Enemy HP is hidden — show the band; players show exact HP.
     bits.push(t.healthBand ? bandMeta(t.healthBand).label : `${Math.max(0, t.currentHp)}/${t.maxHp}`);
@@ -222,6 +231,8 @@ interface SessionState {
   applyCombatLifecycle: (evt: CombatLifecycleEvent) => void;
   applyCombatAction: (evt: CombatActionEvent) => void;
   dequeueCombatAction: () => void;
+  /** Append an action's lines to the compact feed at PLAYBACK time (paced with the modal). */
+  pushCombatFeed: (evt: CombatActionEvent) => void;
   /** Defensive release of the narration gate (safety timeout if DM_NARRATION never arrives). */
   clearCombatNarrating: () => void;
   setMyPlayerId: (id: string | null) => void;
@@ -541,10 +552,11 @@ export const useSessionStore = create<SessionState>((set) => ({
       };
     }),
 
-  /* COMBAT_ACTION — refresh combat (HP/positions), push compact feed lines, AND queue the
-     action for paced one-at-a-time playback in the centre modal. EVERY action is queued (the
-     player's own, enemies', and other players') so the whole beat is watchable in initiative
-     order instead of enemy turns flashing by in the corner feed. */
+  /* COMBAT_ACTION — refresh combat (HP/positions) and queue the action for paced
+     one-at-a-time playback in the centre modal. EVERY action is queued (the player's own,
+     enemies', and other players') so the whole beat is watchable in initiative order. The
+     compact feed is NOT populated here: it's pushed at PLAYBACK time (see pushCombatFeed)
+     so its lines appear one-by-one in step with the modal rather than all at once. */
   applyCombatAction: (evt) =>
     set((s) => ({
       combat: evt.combat,
@@ -557,12 +569,16 @@ export const useSessionStore = create<SessionState>((set) => ({
             .slice(2, 6)}`,
         },
       ],
-      combatFeed: prependFeed(s.combatFeed, feedFromAction(evt)),
     })),
 
   /* Drop the head of the queue once its animation has played. */
   dequeueCombatAction: () =>
     set((s) => ({ combatActionQueue: s.combatActionQueue.slice(1) })),
+
+  /* Push one action's lines to the feed when the modal reveals it, pacing the corner feed
+     with the centre-modal playback. */
+  pushCombatFeed: (evt) =>
+    set((s) => ({ combatFeed: prependFeed(s.combatFeed, feedFromAction(evt)) })),
 
   clearCombatNarrating: () => set({ combatNarrating: false }),
 

@@ -2,8 +2,22 @@
  * Small client-side combat helpers shared by the tracker and the battle map: which side a
  * spell targets, and how to read a spell's range into feet for grid range-gating.
  */
-import type { InventoryItem, SpellSummary } from "@/types";
+import type { InventoryItem, RollSummary, SpellSummary } from "@/types";
 import { conditionMeta } from "@/lib/conditions";
+
+/**
+ * Human-readable breakdown of a rolled damage expression: "[5]+3 = 8" — the individual die
+ * faces, then the flat modifier, then the total. The modifier is recovered as
+ * total − Σfaces, so it works for any "NdM+K" the backend rolled (including crit-doubled
+ * dice, which simply arrive with more faces). Prefix with {@code roll.notation} at the call
+ * site for the full "1d8+3 [5]+3 = 8" line.
+ */
+export function formatDamageRoll(roll: RollSummary): string {
+  const faces = roll.faces.map((f) => `[${f}]`).join("");
+  const mod = roll.total - roll.faces.reduce((a, b) => a + b, 0);
+  const modStr = mod > 0 ? `+${mod}` : mod < 0 ? `${mod}` : "";
+  return `${faces}${modStr} = ${roll.total}`;
+}
 
 /** True when a spell affects allies/self (heals & buffs) rather than enemies. */
 export function isAllyTargeting(s: SpellSummary): boolean {
