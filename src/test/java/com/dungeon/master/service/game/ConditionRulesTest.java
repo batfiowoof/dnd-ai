@@ -95,4 +95,24 @@ class ConditionRulesTest {
         assertThat(ConditionRules.attackModifier(conds("baned"))).isEqualTo(-2);
         assertThat(ConditionRules.saveModifier(conds("blessed", "baned"))).isZero();
     }
+
+    @Test
+    void blurGivesAttackersDisadvantage() {
+        assertThat(ConditionRules.attackMode(List.of(), conds("blurred"), true))
+                .isEqualTo(RollMode.DISADVANTAGE);
+        // Cancels with an advantage source (e.g. the defender is also restrained).
+        assertThat(ConditionRules.attackMode(List.of(), conds("blurred", "restrained"), true))
+                .isEqualTo(RollMode.NORMAL);
+    }
+
+    @Test
+    void acAdjustAppliesBuffConditions() {
+        assertThat(ConditionRules.acAdjust(conds("mage-armor"), 10, 3)).isEqualTo(16);   // 13+3
+        assertThat(ConditionRules.acAdjust(conds("mage-armor"), 18, 3)).isEqualTo(18);   // floor never lowers
+        assertThat(ConditionRules.acAdjust(conds("barkskin"), 12, 0)).isEqualTo(16);
+        assertThat(ConditionRules.acAdjust(conds("shield-of-faith"), 15, 0)).isEqualTo(17);
+        // Floors first, then +2: max(10, 13+2)=15, then +2 = 17.
+        assertThat(ConditionRules.acAdjust(conds("mage-armor", "shield-of-faith"), 10, 2)).isEqualTo(17);
+        assertThat(ConditionRules.acAdjust(List.of(), 14, 0)).isEqualTo(14);
+    }
 }

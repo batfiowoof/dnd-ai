@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CombatStateDto, PlayerRuntimeState, SpellSummary } from "@/types";
-import { Button, Tooltip, cn } from "@/components/ui";
+import { Button, Tooltip, ConfirmDialog, cn } from "@/components/ui";
 import { useSessionStore } from "@/store/sessionStore";
 import { conditionMeta, conditionChipClasses } from "@/lib/conditions";
 import { bandMeta } from "@/lib/health";
@@ -150,6 +150,7 @@ export default function CombatTracker({
 }: CombatTrackerProps) {
   const [itemMenu, setItemMenu] = useState(false);
   const [spellMenu, setSpellMenu] = useState(false);
+  const [endTurnConfirm, setEndTurnConfirm] = useState(false);
 
   const isMyTurn =
     combat.active?.kind === "PLAYER" && combat.active.refId === myPlayerId;
@@ -468,7 +469,7 @@ export default function CombatTracker({
       )}
 
       {/* Controls */}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <div className="relative mt-3 flex flex-wrap items-center gap-1.5">
         {busy ? (
           <span className="flex items-center gap-2 text-xs italic text-text-muted">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
@@ -551,47 +552,47 @@ export default function CombatTracker({
               </span>
             </div>
 
-            {/* Cast Spell */}
-            <div className="relative">
-              <button
-                type="button"
-                disabled={!connected || castable.length === 0}
-                onClick={() => setSpellMenu((v) => !v)}
-                className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-text-muted transition hover:border-accent/60 hover:text-accent disabled:opacity-40"
-                title={castable.length === 0 ? "No spells available" : "Cast a spell"}
-              >
-                ✨ Cast Spell ▾
-              </button>
-              {spellMenu && (
-                <div className="absolute bottom-full left-0 z-20 mb-1 max-h-72 min-w-64 overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
-                  {castable.map((s) => {
-                    const bonus = s.castingTime === "Bonus Action";
-                    const disabled = bonus ? bonusSpent : actionSpent;
-                    return (
-                      <button
-                        key={s.name}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => beginCast(s)}
-                        title={s.summary || `${s.range} · ${s.castingTime}`}
-                        className="block w-full border-b border-border/50 px-3 py-2 text-left text-xs text-text transition last:border-b-0 hover:bg-accent-glow hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent"
-                      >
-                        <div className="flex items-center gap-1">
-                          <span className="font-semibold">{s.name}</span>
-                          {bonus && <span className="text-gold" title="Bonus action">⚡</span>}
-                          <span className="ml-auto text-[9px] uppercase tracking-wide text-text-muted">
-                            {s.level === 0 ? "Cantrip" : `L${s.level}`}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 text-[10px] text-gold/90">
-                          {spellMechanics(s)}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            {/* Cast Spell (the menu is rendered at row level below so it stays in-bounds) */}
+            <button
+              type="button"
+              disabled={!connected || castable.length === 0}
+              onClick={() => setSpellMenu((v) => !v)}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-text-muted transition hover:border-accent/60 hover:text-accent disabled:opacity-40"
+              title={castable.length === 0 ? "No spells available" : "Cast a spell"}
+            >
+              ✨ Cast Spell ▾
+            </button>
+            {/* Spell menu — anchored to the full-width controls row + size-capped so it can
+                never overflow the panel / viewport. */}
+            {spellMenu && (
+              <div className="absolute bottom-full left-0 z-30 mb-1 max-h-[50vh] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
+                {castable.map((s) => {
+                  const bonus = s.castingTime === "Bonus Action";
+                  const disabled = bonus ? bonusSpent : actionSpent;
+                  return (
+                    <button
+                      key={s.name}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => beginCast(s)}
+                      title={s.summary || `${s.range} · ${s.castingTime}`}
+                      className="block w-full border-b border-border/50 px-3 py-2 text-left text-xs text-text transition last:border-b-0 hover:bg-accent-glow hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold">{s.name}</span>
+                        {bonus && <span className="text-gold" title="Bonus action">⚡</span>}
+                        <span className="ml-auto text-[9px] uppercase tracking-wide text-text-muted">
+                          {s.level === 0 ? "Cantrip" : `L${s.level}`}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-gold/90">
+                        {spellMechanics(s)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Use Item */}
             <div className="relative">
@@ -696,22 +697,12 @@ export default function CombatTracker({
               type="button"
               disabled={!connected}
               onClick={() => {
-                // Guard against wasting an unused action/bonus action.
-                if (
-                  (!actionSpent || !bonusSpent) &&
-                  !window.confirm(
-                    `End your turn with your ${
-                      !actionSpent && !bonusSpent
-                        ? "action and bonus action"
-                        : !actionSpent
-                          ? "action"
-                          : "bonus action"
-                    } unused?`
-                  )
-                ) {
-                  return;
+                // Guard against wasting an unused action/bonus action — confirm via dialog.
+                if (!actionSpent || !bonusSpent) {
+                  setEndTurnConfirm(true);
+                } else {
+                  onEndTurn();
                 }
-                onEndTurn();
               }}
               className="rounded-md border border-accent/60 px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white disabled:opacity-40"
             >
@@ -720,6 +711,25 @@ export default function CombatTracker({
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={endTurnConfirm}
+        title="End your turn?"
+        message={`You still have your ${
+          !actionSpent && !bonusSpent
+            ? "action and bonus action"
+            : !actionSpent
+              ? "action"
+              : "bonus action"
+        } unused. End your turn anyway?`}
+        confirmLabel="End Turn"
+        cancelLabel="Keep going"
+        onConfirm={() => {
+          setEndTurnConfirm(false);
+          onEndTurn();
+        }}
+        onClose={() => setEndTurnConfirm(false)}
+      />
     </div>
   );
 }

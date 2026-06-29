@@ -20,7 +20,10 @@ import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.dto.RollSummary;
 import com.dungeon.master.model.dto.SpellEffect;
+import com.dungeon.master.model.dto.TerrainCell;
+import com.dungeon.master.model.dto.TerrainZone;
 import com.dungeon.master.model.dto.Token;
+import com.dungeon.master.model.enums.TerrainType;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
@@ -360,6 +363,11 @@ public class CombatService {
             markAction(enc, player);
         }
 
+        // Terrain spells (Entangle, Web, …) stamp difficult terrain over their area for the duration.
+        if (effect.hasTerrain()) {
+            stampTerrainZone(enc, effect, player, originX, originY);
+        }
+
         broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(),
                 actionKind, "casts " + effect.name(), results);
         maybeAutoEndTurn(enc, player, beat);
@@ -574,6 +582,7 @@ public class CombatService {
         int maxSteps = Math.max(1, order) * 8 + 16;
 
         for (int step = 0; step < maxSteps; step++) {
+            expireTerrainZones(enc);                    // drop timed spell terrain whose duration lapsed
             if (allEnemiesDead(sessionId)) {           // guard (a): victory
                 endEncounter(enc, true, beat);
                 return;
@@ -1047,6 +1056,12 @@ public class CombatService {
                     broadcast(sessionId, PlayerStateEvent.of(sessionId,
                             playerStateService.applyCondition(pid, c)));
                 }
+                // Temp-HP buffs (False Life, Heroism): roll and grant (doesn't stack — take higher).
+                if (effect.tempHpDice() != null) {
+                    int amount = rollExpr(effect.tempHpDice()).total();
+                    broadcast(sessionId, PlayerStateEvent.of(sessionId,
+                            playerStateService.applyTempHp(pid, amount)));
+                }
                 PlayerRuntimeStateDto s = playerStateService.getState(pid);
                 results.add(CombatActionEvent.Target.effect(CombatantKind.PLAYER, playerName(pid),
                         cond, s.currentHp(), s.maxHp()));
@@ -1097,6 +1112,10 @@ public class CombatService {
         List<PlayerRuntimeStateDto> changed = playerStateService.breakConcentration(sessionId, casterId);
         for (PlayerRuntimeStateDto dto : changed) {
             broadcast(sessionId, PlayerStateEvent.of(sessionId, dto));
+        }
+        // Clear the caster's concentration terrain (e.g. Entangle) and refresh the grid.
+        if (removeTerrainZones(enc, z -> z.concentration() && casterId.equals(z.sourceCasterId()))) {
+            broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
         }
         if ((any || !changed.isEmpty()) && beat != null) {
             beat.add(playerName(casterId) + "'s concentration ends.");
@@ -1184,6 +1203,110 @@ public class CombatService {
             }
         }
         return "incapacitated";
+    }
+
+    /* ── spell terrain zones (Entangle/Web/Grease/… create difficult terrain) ────── */
+
+    /**
+     * Stamp a terrain spell's area onto the grid for its duration: add a terrain cell for each
+     * template square not already terrain, and record the zone so its cells can be cleared when
+     * the spell ends (concentration → null expiry; otherwise ~1 minute / 10 rounds).
+     */
+    private void stampTerrainZone(CombatEncounter enc, SpellEffect effect, Player caster,
+                                  Integer originX, Integer originY) {
+        GridState grid = enc.getGridState();
+        if (grid == null || originX == null || originY == null
+                || effect.aoeShape() == null || effect.aoeSize() <= 0) {
+            return;
+        }
+        TerrainType type;
+        try {
+            type = TerrainType.valueOf(effect.terrain().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return;
+        }
+        if (grid.getZones() == null) {
+            grid.setZones(new ArrayList<>());          // legacy encounter saved before the field existed
+        }
+        List<GridService.Square> cells =
+                gridService.aoeCells(originX, originY, effect.aoeShape(), effect.aoeSize());
+        List<TerrainCell> owned = new ArrayList<>();
+        for (GridService.Square sq : cells) {
+            if (sq.x() < 0 || sq.y() < 0 || sq.x() >= grid.getWidth() || sq.y() >= grid.getHeight()) {
+                continue;
+            }
+            boolean hasTerrain = grid.getTerrain().stream()
+                    .anyMatch(t -> t.x() == sq.x() && t.y() == sq.y());
+            boolean coveredByZone = zoneCovers(grid, sq.x(), sq.y());
+            if (hasTerrain && !coveredByZone) {
+                continue;                              // base map terrain — leave it, don't own it
+            }
+            if (!hasTerrain) {
+                grid.getTerrain().add(new TerrainCell(sq.x(), sq.y(), type));
+            }
+            // Own this cell (shared with another zone if it already covered it) so overlap is tracked.
+            owned.add(new TerrainCell(sq.x(), sq.y(), type));
+        }
+        if (owned.isEmpty()) {
+            return;
+        }
+        Integer expires = effect.concentration() ? null : enc.getRound() + 10;
+        grid.getZones().add(new TerrainZone(type, owned, caster.getId(), effect.name(),
+                effect.concentration(), expires));
+        encounterRepository.save(enc);
+    }
+
+    /** True when some active terrain zone covers (x,y). */
+    private static boolean zoneCovers(GridState grid, int x, int y) {
+        if (grid.getZones() == null) {
+            return false;
+        }
+        for (TerrainZone z : grid.getZones()) {
+            for (TerrainCell c : z.cells()) {
+                if (c.x() == x && c.y() == y) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Remove the matching terrain zones, clearing each owned cell unless another zone still covers it. */
+    private boolean removeTerrainZones(CombatEncounter enc, java.util.function.Predicate<TerrainZone> match) {
+        GridState grid = enc.getGridState();
+        if (grid == null || grid.getZones() == null || grid.getZones().isEmpty()) {
+            return false;
+        }
+        List<TerrainZone> removed = new ArrayList<>();
+        grid.getZones().removeIf(z -> {
+            if (match.test(z)) {
+                removed.add(z);
+                return true;
+            }
+            return false;
+        });
+        if (removed.isEmpty()) {
+            return false;
+        }
+        // grid.getZones() now holds only the survivors; only clear a cell no survivor still covers.
+        for (TerrainZone z : removed) {
+            for (TerrainCell cell : z.cells()) {
+                if (!zoneCovers(grid, cell.x(), cell.y())) {
+                    grid.getTerrain().removeIf(t -> t.x() == cell.x() && t.y() == cell.y()
+                            && t.type() == z.type());
+                }
+            }
+        }
+        encounterRepository.save(enc);
+        return true;
+    }
+
+    /** At turn start, clear timer-expired terrain zones and broadcast the refreshed grid. */
+    private void expireTerrainZones(CombatEncounter enc) {
+        int round = enc.getRound();
+        if (removeTerrainZones(enc, z -> z.expiresAtRound() != null && round > z.expiresAtRound())) {
+            broadcast(enc.getSessionId(), CombatLifecycleEvent.turn(enc.getSessionId(), toStateDto(enc)));
+        }
     }
 
     /* ── spell helpers ───────────────────────────────────────────── */
@@ -1797,7 +1920,10 @@ public class CombatService {
 
     private int armorClass(Player player) {
         Character c = character(player);
-        return c == null ? 10 : c.getArmorClass();
+        int base = c == null ? 10 : c.getArmorClass();
+        int dex = c == null ? 0 : Math.floorDiv(c.getDexterity() - 10, 2);
+        // Fold in AC-buff conditions (Mage Armor / Shield of Faith / Barkskin), derived live.
+        return ConditionRules.acAdjust(playerConds(player.getId()), base, dex);
     }
 
     /** Attack bonus = best of STR/DEX modifier + proficiency bonus. */

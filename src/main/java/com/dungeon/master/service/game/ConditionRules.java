@@ -41,6 +41,10 @@ public final class ConditionRules {
     public static final String BLESSED = "blessed";
     public static final String SLOWED = "slowed";
     public static final String ENFEEBLED = "enfeebled";
+    public static final String BLURRED = "blurred";              // Blur — attackers have disadvantage
+    public static final String MAGE_ARMOR = "mage-armor";        // AC = max(base, 13 + DEX)
+    public static final String SHIELD_OF_FAITH = "shield-of-faith"; // +2 AC
+    public static final String BARKSKIN = "barkskin";            // AC floor 16
 
     /** Conditions that cost the creature its turn (can take no actions/reactions). */
     private static final Set<String> INCAPACITATING =
@@ -91,7 +95,8 @@ public final class ConditionRules {
         boolean advantage = anyOf(defender, ATTACKED_AT_ADVANTAGE)
                 || (has(defender, PRONE) && melee);
         boolean disadvantage = anyOf(attacker, ATTACKS_AT_DISADVANTAGE)
-                || (has(defender, PRONE) && !melee);
+                || (has(defender, PRONE) && !melee)
+                || has(defender, BLURRED);   // Blur — attacks against the caster have disadvantage
         return RollMode.combine(advantage ? RollMode.ADVANTAGE : RollMode.NORMAL,
                 disadvantage ? RollMode.DISADVANTAGE : RollMode.NORMAL);
     }
@@ -104,6 +109,19 @@ public final class ConditionRules {
     /** Flat modifier applied to the attacker's d20 attack roll (Bless +2, Bane −2; they stack). */
     public static int attackModifier(List<ActiveCondition> conds) {
         return rollAdjust(conds);
+    }
+
+    /**
+     * Effective AC after AC-buff conditions: Mage Armor floors at 13+DEX, Barkskin floors at 16,
+     * Shield of Faith adds +2 (floors applied first, then bonuses). Returns {@code baseAc}
+     * unchanged when no AC buff is active.
+     */
+    public static int acAdjust(List<ActiveCondition> conds, int baseAc, int dexMod) {
+        int ac = baseAc;
+        if (has(conds, MAGE_ARMOR)) ac = Math.max(ac, 13 + dexMod);
+        if (has(conds, BARKSKIN)) ac = Math.max(ac, 16);
+        if (has(conds, SHIELD_OF_FAITH)) ac += 2;
+        return ac;
     }
 
     /* ── saving throws ───────────────────────────────────────────────── */

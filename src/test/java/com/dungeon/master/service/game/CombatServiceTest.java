@@ -5,6 +5,7 @@ import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.GridState;
+import com.dungeon.master.model.enums.TerrainType;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.enums.ItemKind;
@@ -548,7 +549,7 @@ class CombatServiceTest {
         SpellTargetType target = aoeShape != null ? SpellTargetType.AREA : SpellTargetType.ENEMY;
         return new SpellEffect(name, 0, SpellEffectType.DAMAGE, target, SpellResolution.AUTO,
                 null, "2d6", "Fire", null, false, false, null, null,
-                aoeShape, aoeSize, null, 1, null, false, true, "Action", "120 feet");
+                aoeShape, aoeSize, null, 1, null, false, true, "Action", "120 feet", null, null);
     }
 
     private Enemy enemyAt(UUID id, String name) {
@@ -650,7 +651,7 @@ class CombatServiceTest {
     private SpellEffect controlSpell(String name, String saveAbility, String condition) {
         return new SpellEffect(name, 1, SpellEffectType.CONTROL, SpellTargetType.ENEMY,
                 SpellResolution.SAVE, saveAbility, null, null, null, false, false, null, null,
-                null, 0, null, 1, condition, true, true, "Action", "60 feet");
+                null, 0, null, 1, condition, true, true, "Action", "60 feet", null, null);
     }
 
     @Test
@@ -690,6 +691,45 @@ class CombatServiceTest {
 
     /* ── Action economy: attack/cast spend the economy but no longer auto-end the turn ── */
 
+    /** A concentration AREA spell that also stamps difficult terrain (e.g. Entangle). */
+    private SpellEffect terrainSpell(String name) {
+        return new SpellEffect(name, 1, SpellEffectType.CONTROL, SpellTargetType.AREA,
+                SpellResolution.SAVE, "STR", null, null, null, false, false, null, null,
+                "cube", 10, null, 1, "restrained", true, true, "Action", "90 feet", "DIFFICULT", null);
+    }
+
+    @Test
+    void terrainSpellStampsDifficultTerrainZone() {
+        UUID pid = UUID.randomUUID();
+        UUID charId = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        CombatEncounter enc = aoeEncounter(pid, aId, 10, 5, bId, 0, 0);
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria"))
+                .thenReturn(Optional.of(playerWithChar(pid, "Aria", charId)));
+        when(characterRepo.findById(charId)).thenReturn(Optional.of(charWithDex(10)));
+        when(playerStateService.getState(pid)).thenReturn(stateWithCantrip(pid, "Entangle"));
+        when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
+        when(playerStateService.breakConcentration(eq(sessionId), any())).thenReturn(List.of());
+        when(playerStateService.setConcentratingSpell(eq(pid), anyString())).thenReturn(stateFor(pid, 20));
+        when(spellCatalog.effect("Entangle")).thenReturn(Optional.of(terrainSpell("Entangle")));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(enemyAt(aId, "Goblin A")));
+
+        // Place the 10-ft cube (2×2) at (5,5).
+        combat.playerCastSpell(sessionId, "Aria", "Entangle", 0, List.of(), 5, 5);
+
+        GridState grid = enc.getGridState();
+        long difficult = grid.getTerrain().stream()
+                .filter(t -> t.type() == TerrainType.DIFFICULT).count();
+        assertEquals(4, difficult, "a 10-ft cube stamps a 2×2 block of difficult terrain");
+        assertEquals(1, grid.getZones().size(), "a terrain zone is recorded for cleanup");
+        assertTrue(grid.getZones().get(0).concentration(), "Entangle's terrain is concentration-bound");
+        assertEquals(null, grid.getZones().get(0).expiresAtRound(),
+                "concentration terrain has no fixed expiry");
+    }
+
     @Test
     void gridAttackSpendsActionKeepsTurnAndBlocksSecondAction() {
         UUID pid = UUID.randomUUID();
@@ -718,7 +758,7 @@ class CombatServiceTest {
     private SpellEffect bonusSelfBuff(String name) {
         return new SpellEffect(name, 1, SpellEffectType.BUFF, SpellTargetType.SELF,
                 SpellResolution.AUTO, null, null, null, null, false, false, null, null,
-                null, 0, null, 1, "blessed", false, true, "Bonus Action", "Self");
+                null, 0, null, 1, "blessed", false, true, "Bonus Action", "Self", null, null);
     }
 
     /** Runtime state carrying a single named weapon (drives attack-range inference). */

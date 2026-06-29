@@ -53,7 +53,7 @@ import type {
   SpellSummary,
 } from "@/types";
 import { targetCap } from "@/lib/combat";
-import { Button, Panel, Brand, Alert, D20Mark, Tooltip, cn } from "@/components/ui";
+import { Button, Panel, Brand, Alert, D20Mark, Tooltip, ConfirmDialog, cn } from "@/components/ui";
 import { stripDmTags } from "@/lib/strip";
 import Portrait from "@/components/Portrait";
 import DiceRollModal from "@/components/dice/DiceRollModal";
@@ -64,7 +64,7 @@ import InventoryManager from "@/components/game/InventoryManager";
 import CombatTracker from "@/components/combat/CombatTracker";
 import BattleMap from "@/components/combat/BattleMap";
 import type { PlacingSpell } from "@/components/combat/BattleMap";
-import { uploadCombatMap } from "@/lib/api";
+import { uploadCombatMap, leaveSession } from "@/lib/api";
 import CombatActionModal from "@/components/combat/CombatActionModal";
 import StartEncounterControl from "@/components/combat/StartEncounterControl";
 
@@ -127,6 +127,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   // Single/multi-target spell awaiting target selection on the grid (AoE uses placingSpell).
   const [castingSpell, setCastingSpell] = useState<SpellSummary | null>(null);
   const [pickedTargets, setPickedTargets] = useState<string[]>([]);
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Client | null>(null);
@@ -571,6 +572,23 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     setCastingSpell(null);
     setPickedTargets([]);
   }
+  /** Leave the session: best-effort backend leave, clear local keys, return to /play. */
+  async function handleLeaveSession() {
+    setLeaveConfirm(false);
+    try {
+      const token = await getToken();
+      if (token) await leaveSession(token, sessionId);
+    } catch {
+      // Ignore — navigate away regardless so the user is never stuck.
+    }
+    try {
+      localStorage.removeItem(`dnd-playerId-${sessionId}`);
+      localStorage.removeItem(`dnd-joinCode-${sessionId}`);
+    } catch {
+      /* localStorage unavailable — nothing to clean up */
+    }
+    router.push("/play");
+  }
   /** Host-only battle-map background upload (server broadcasts the refreshed grid). */
   async function handleUploadMap(file: File) {
     const token = await getToken();
@@ -961,6 +979,15 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
             title={connected ? "Connected" : "Disconnected"}
           />
 
+          <button
+            type="button"
+            onClick={() => setLeaveConfirm(true)}
+            title="Leave this session"
+            className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-text-muted transition hover:border-danger/60 hover:text-danger"
+          >
+            Leave
+          </button>
+
           {/* My character — always reachable (the sidebar is hidden below md) */}
           {myPlayer && (
             <AvatarTrigger
@@ -972,6 +999,17 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           )}
         </div>
       </header>
+
+      <ConfirmDialog
+        open={leaveConfirm}
+        title="Leave session?"
+        message="You'll return to the session picker. You can rejoin later with the invite code."
+        confirmLabel="Leave"
+        cancelLabel="Stay"
+        tone="danger"
+        onConfirm={handleLeaveSession}
+        onClose={() => setLeaveConfirm(false)}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar — players */}

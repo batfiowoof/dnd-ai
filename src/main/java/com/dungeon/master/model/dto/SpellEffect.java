@@ -31,6 +31,8 @@ import com.dungeon.master.model.enums.SpellTargetType;
  * @param parsed        true when the engine can resolve it mechanically (else narrate only)
  * @param castingTime   the spell's casting time, e.g. "Action", "Bonus Action", "Reaction"
  * @param range         the spell's range, e.g. "Touch", "60 feet", "Self" (drives melee spell attacks)
+ * @param terrain       terrain the spell creates over its area for the duration ("DIFFICULT"), else null
+ * @param tempHpDice    temporary-HP granted to ally/self targets (e.g. "1d4+4"), else null
  */
 public record SpellEffect(
         String name,
@@ -54,7 +56,9 @@ public record SpellEffect(
         boolean concentration,
         boolean parsed,
         String castingTime,
-        String range
+        String range,
+        String terrain,
+        String tempHpDice
 ) {
 
     /** True when this spell is cast as a Bonus Action (so it doesn't consume the action). */
@@ -65,5 +69,10 @@ public record SpellEffect(
     /** True for a touch-range spell attack (melee for advantage-vs-prone purposes). */
     public boolean isMeleeRange() {
         return range != null && range.toLowerCase(java.util.Locale.ROOT).startsWith("touch");
+    }
+
+    /** True when the spell stamps terrain over its area for the duration. */
+    public boolean hasTerrain() {
+        return terrain != null && !terrain.isBlank();
     }
 }

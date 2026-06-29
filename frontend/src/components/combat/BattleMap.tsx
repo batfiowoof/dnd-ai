@@ -32,7 +32,7 @@ import {
 import { useSessionStore } from "@/store/sessionStore";
 
 /** Logical cell size (px in the SVG user space). ≥44 keeps tap targets accessible. */
-const CELL = 48;
+const CELL = 56;
 /** Portrait diameter inside a token (matches Portrait `sm` = 36px). */
 const PORTRAIT = 36;
 
@@ -329,7 +329,7 @@ export default function BattleMap({
 
       <div
         className="relative mx-auto w-full"
-        style={{ maxWidth: Math.min(W, 640) }}
+        style={{ maxWidth: Math.min(W, 960) }}
       >
         {/* Compact roll feed docked on the map (enemy/NPC/other rolls). */}
         <CombatRollFeed />

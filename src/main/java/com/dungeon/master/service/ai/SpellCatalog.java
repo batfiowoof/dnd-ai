@@ -42,7 +42,8 @@ public class SpellCatalog {
             Integer maxTargets, boolean concentration, String range, boolean parsed,
             String aoeShape, int aoeSize, String castingTime,
             String damageDice, String damageType, String healDice,
-            String saveAbility, boolean halfOnSave, String condition, String summary) {}
+            String saveAbility, boolean halfOnSave, String condition, String summary,
+            String terrain, String tempHpDice) {}
 
     private static final String RESOURCE = "dnd5e/srd-5.2.1-structured.json";
 
@@ -97,7 +98,9 @@ public class SpellCatalog {
                         sp.path("concentration").asBoolean(false),
                         c.path("parsed").asBoolean(false),
                         castingTime,
-                        range);
+                        range,
+                        nullable(c, "terrain"),
+                        nullable(c, "tempHp"));
 
                 byName.put(name.toLowerCase(Locale.ROOT), effect);
                 summaries.add(new SpellSummary(name, level, school, effect.effectType(),
@@ -105,7 +108,7 @@ public class SpellCatalog {
                         range, effect.parsed(), effect.aoeShape(), effect.aoeSize(),
                         effect.castingTime(), effect.damageDice(), effect.damageType(),
                         effect.healDice(), effect.saveAbility(), effect.halfOnSave(),
-                        effect.condition(), summary));
+                        effect.condition(), summary, effect.terrain(), effect.tempHpDice()));
             }
             log.info("Loaded {} SRD 5.2.1 spell effects from {}", byName.size(), RESOURCE);
         } catch (Exception e) {

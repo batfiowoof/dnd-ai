@@ -383,6 +383,10 @@ export interface SpellSummary {
   condition: string | null;
   /** Short flavour line (first sentence of the SRD prose). */
   summary: string;
+  /** Terrain the spell creates over its area ("DIFFICULT"), else null. */
+  terrain: string | null;
+  /** Temp-HP granted to ally/self (e.g. "1d4+4"), else null. */
+  tempHpDice: string | null;
 }
 
 export interface MonsterSummary {

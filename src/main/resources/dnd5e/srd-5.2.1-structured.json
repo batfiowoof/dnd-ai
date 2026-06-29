@@ -1701,8 +1701,8 @@
    "desc": "You touch a willing creature. Until the spell ends, the target's skin assumes a bark-like appearance, and the target has an Armor Class of 17 if its AC is lower than that.",
    "higherLevel": null,
    "combat": {
-    "effectType": "UTILITY",
-    "targetType": "ANY",
+    "effectType": "BUFF",
+    "targetType": "ALLY",
     "resolution": "AUTO",
     "saveAbility": null,
     "damageDice": null,
@@ -1717,8 +1717,8 @@
     "aoe": null,
     "maxTargets": 1,
     "projectiles": 1,
-    "condition": null,
-    "parsed": false
+    "condition": "barkskin",
+    "parsed": true
    }
   },
   {
@@ -1874,7 +1874,8 @@
     "maxTargets": 1,
     "projectiles": 1,
     "condition": "restrained",
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -2088,7 +2089,7 @@
    "desc": "Your body becomes blurred. For the duration, any creature has Disadvantage on attack rolls against you. An attacker is immune to this effect if it perceives you with Blindsight or Truesight.",
    "higherLevel": null,
    "combat": {
-    "effectType": "UTILITY",
+    "effectType": "BUFF",
     "targetType": "SELF",
     "resolution": "AUTO",
     "saveAbility": null,
@@ -2104,8 +2105,8 @@
     "aoe": null,
     "maxTargets": 1,
     "projectiles": 1,
-    "condition": null,
-    "parsed": false
+    "condition": "blurred",
+    "parsed": true
    }
   },
   {
@@ -4716,7 +4717,8 @@
     "maxTargets": 1,
     "projectiles": 1,
     "condition": "prone",
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -4955,7 +4957,8 @@
     "maxTargets": 1,
     "projectiles": 1,
     "condition": "restrained",
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -5269,7 +5272,8 @@
     "maxTargets": 1,
     "projectiles": 1,
     "condition": null,
-    "parsed": true
+    "parsed": true,
+    "tempHp": "1d4+4"
    }
   },
   {
@@ -6551,7 +6555,7 @@
    "higherLevel": null,
    "combat": {
     "effectType": "CONTROL",
-    "targetType": "ENEMY",
+    "targetType": "AREA",
     "resolution": "SAVE",
     "saveAbility": "DEX",
     "damageDice": null,
@@ -6563,11 +6567,15 @@
      "perSlotAbove": null,
      "cantripDie": null
     },
-    "aoe": null,
+    "aoe": {
+     "shape": "cube",
+     "size": 10
+    },
     "maxTargets": 1,
     "projectiles": 1,
     "condition": "prone",
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -7223,8 +7231,9 @@
     "aoe": null,
     "maxTargets": 1,
     "projectiles": 1,
-    "condition": "frightened",
-    "parsed": true
+    "condition": null,
+    "parsed": true,
+    "tempHp": "1d4"
    }
   },
   {
@@ -7583,7 +7592,8 @@
     "maxTargets": null,
     "projectiles": 1,
     "condition": null,
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -7819,7 +7829,8 @@
     "maxTargets": null,
     "projectiles": 1,
     "condition": null,
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -8412,7 +8423,7 @@
     "aoe": null,
     "maxTargets": 1,
     "projectiles": 1,
-    "condition": null,
+    "condition": "mage-armor",
     "parsed": true
    }
   },
@@ -11583,7 +11594,7 @@
     "aoe": null,
     "maxTargets": 1,
     "projectiles": 1,
-    "condition": null,
+    "condition": "shield-of-faith",
     "parsed": true
    }
   },
@@ -11901,7 +11912,8 @@
     "maxTargets": null,
     "projectiles": 1,
     "condition": "prone",
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -12219,7 +12231,8 @@
     "maxTargets": null,
     "projectiles": 1,
     "condition": null,
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {
@@ -13827,7 +13840,8 @@
     "maxTargets": null,
     "projectiles": 1,
     "condition": "restrained",
-    "parsed": true
+    "parsed": true,
+    "terrain": "DIFFICULT"
    }
   },
   {

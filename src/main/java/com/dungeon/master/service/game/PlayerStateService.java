@@ -416,6 +416,14 @@ public class PlayerStateService {
         return new ArrayList<>(require(playerId).getConditions());
     }
 
+    /** Grant temporary HP (5E temp HP doesn't stack — take the higher). Returns updated state. */
+    @Transactional
+    public PlayerRuntimeStateDto applyTempHp(UUID playerId, int amount) {
+        PlayerRuntimeState s = require(playerId);
+        s.setTempHp(Math.max(s.getTempHp(), Math.max(0, amount)));
+        return toDto(repository.save(s));
+    }
+
     /** Apply (or replace by name) a condition on a player. Returns the updated state. */
     @Transactional
     public PlayerRuntimeStateDto applyCondition(UUID playerId, ActiveCondition c) {
@@ -580,12 +588,17 @@ public class PlayerStateService {
     }
 
     private PlayerRuntimeStateDto toDto(PlayerRuntimeState s) {
+        // Effective AC includes any active AC-buff conditions (Mage Armor / Shield of Faith /
+        // Barkskin), derived from the base AC so it reverts automatically when they end.
+        Integer dex = s.getAbilities() == null ? null : s.getAbilities().get("DEX");
+        int dexMod = dex == null ? 0 : Math.floorDiv(dex - 10, 2);
+        int effectiveAc = ConditionRules.acAdjust(s.getConditions(), s.getArmorClass(), dexMod);
         return new PlayerRuntimeStateDto(
                 s.getPlayerId(),
                 s.getCurrentHp(),
                 s.getMaxHp(),
                 s.getTempHp(),
-                s.getArmorClass(),
+                effectiveAc,
                 s.getAbilities(),
                 s.getSpellSlots(),
                 s.getInventory(),

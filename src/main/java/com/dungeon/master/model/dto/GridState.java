@@ -45,4 +45,12 @@ public class GridState {
     /** Combatant tokens keyed by refId (player/enemy UUID string). */
     @Builder.Default
     private Map<String, Token> tokens = new LinkedHashMap<>();
+
+    /**
+     * Active spell-created terrain effects (e.g. Entangle's difficult terrain). Bookkeeping for
+     * the lifecycle — the cells themselves live in {@link #terrain}; this lets the engine remove
+     * exactly a spell's cells when it ends. Empty when no terrain spell is active.
+     */
+    @Builder.Default
+    private List<TerrainZone> zones = new ArrayList<>();
 }

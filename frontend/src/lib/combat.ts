@@ -43,11 +43,13 @@ export function spellMechanics(s: SpellSummary): string {
     parts.push(`${s.damageDice}${s.damageType ? ` ${s.damageType}` : ""}`);
   }
   if (s.healDice) parts.push(`Heals ${s.healDice}`);
+  if (s.tempHpDice) parts.push(`Temp HP ${s.tempHpDice}`);
   if (s.saveAbility) {
     parts.push(`${s.saveAbility} save${s.halfOnSave ? " (half)" : ""}`);
   }
   if (s.condition) parts.push(`→ ${conditionMeta(s.condition).label}`);
   if (s.aoeShape && s.aoeSize > 0) parts.push(`${s.aoeSize}-ft ${s.aoeShape}`);
+  if (s.terrain) parts.push("difficult terrain");
   if (parts.length === 0) {
     // No parsed mechanics — fall back to range so the line isn't empty.
     parts.push(s.range);
@@ -128,6 +130,7 @@ export function attackModePreview(
     has(attackerConds, "prone") ||
     has(attackerConds, "restrained") ||
     has(attackerConds, "enfeebled") ||
+    has(defenderConds, "blurred") ||
     (has(defenderConds, "prone") && !melee);
   if (advantage && disadvantage) return "normal";
   if (advantage) return "advantage";

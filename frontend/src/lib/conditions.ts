@@ -37,6 +37,10 @@ const META: Record<string, ConditionMeta> = {
   blessed: { label: "Bless", code: "Bs", tone: "buff", hint: "+2 to attack rolls and saving throws." },
   slowed: { label: "Slowed", code: "Sl", tone: "debuff", hint: "Speed halved." },
   enfeebled: { label: "Enfeebled", code: "En", tone: "debuff", hint: "Disadvantage on Strength-based attacks." },
+  blurred: { label: "Blur", code: "Bu", tone: "buff", hint: "Attacks against you have disadvantage." },
+  "mage-armor": { label: "Mage Armor", code: "MA", tone: "buff", hint: "AC = 13 + DEX while unarmored." },
+  "shield-of-faith": { label: "Shield of Faith", code: "SF", tone: "buff", hint: "+2 AC." },
+  barkskin: { label: "Barkskin", code: "Bk", tone: "buff", hint: "AC can't be lower than 16." },
 };
 
 /** Look up a condition's display metadata, falling back to a sensible default for unknown keys. */
