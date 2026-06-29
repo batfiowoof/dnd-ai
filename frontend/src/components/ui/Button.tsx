@@ -1,5 +1,6 @@
 import { cn } from "./cn";
 import Spinner from "./Spinner";
+import { playSound } from "@/lib/sound";
 
 type Variant = "primary" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
@@ -9,10 +10,12 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: Size;
   loading?: boolean;
   fullWidth?: boolean;
+  /** Suppress the click sound (e.g. where it would be noisy / repeated rapidly). */
+  silent?: boolean;
 }
 
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-semibold tracking-wide transition duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2";
+  "inline-flex items-center justify-center gap-2 rounded-lg font-semibold tracking-wide transition duration-200 cursor-pointer active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2";
 
 const variants: Record<Variant, string> = {
   primary:
@@ -35,9 +38,11 @@ export default function Button({
   size = "md",
   loading = false,
   fullWidth = false,
+  silent = false,
   className,
   children,
   disabled,
+  onClick,
   ...props
 }: ButtonProps) {
   return (
@@ -50,6 +55,10 @@ export default function Button({
         className
       )}
       disabled={disabled || loading}
+      onClick={(e) => {
+        if (!silent) playSound("click");
+        onClick?.(e);
+      }}
       {...props}
     >
       {loading && <Spinner className="h-3.5 w-3.5" />}

@@ -56,7 +56,8 @@ export default function LobbyWaitingView({
             </p>
             <button
               onClick={onCopy}
-              className="tabular inline-block cursor-pointer rounded-lg border border-border-accent bg-bg-elevated px-6 py-3 text-3xl font-bold tracking-[0.3em] text-accent transition hover:border-accent hover:shadow-[0_0_24px_var(--color-accent-glow)]"
+              data-spotlight=""
+              className="spotlight tabular inline-block cursor-pointer rounded-lg border border-border-accent bg-bg-elevated px-6 py-3 text-3xl font-bold tracking-[0.3em] text-accent transition hover:border-accent hover:shadow-[0_0_24px_var(--color-accent-glow)]"
             >
               {joinCode}
             </button>

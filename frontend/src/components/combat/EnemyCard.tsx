@@ -34,8 +34,9 @@ export default function EnemyCard({
       type="button"
       disabled={!attackable && !selectable}
       onClick={() => (selectable ? onSelect() : attackable && onAttack())}
+      data-spotlight=""
       className={cn(
-        "rounded-lg border p-2 text-left transition",
+        "spotlight rounded-lg border p-2 text-left transition",
         !e.alive
           ? "border-border bg-surface/40 opacity-50"
           : chosen

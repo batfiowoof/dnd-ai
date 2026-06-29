@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { loadPrefs, savePrefs, type Prefs } from "@/lib/prefs";
+import { playSound } from "@/lib/sound";
 import { ACCOUNT_URL } from "@/lib/config";
 import { Panel, Button, Brand, Divider, cn } from "@/components/ui";
 
@@ -169,7 +170,11 @@ function Toggle({
         role="switch"
         aria-checked={checked}
         aria-label={label}
-        onClick={() => onChange(!checked)}
+        onClick={() => {
+          // Sound on the toggle press itself — so enabling it gives instant feedback.
+          playSound("toggle");
+          onChange(!checked);
+        }}
         className={cn(
           "relative h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border transition",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",

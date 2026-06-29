@@ -44,7 +44,10 @@ export default function GameLog({ playerByName, scrollRef }: GameLogProps) {
             </div>
           )}
           {entry.type === "dm" && (
-            <div className="ml-4 rounded-lg border border-border-accent bg-accent-glow px-4 py-3 shadow-[0_0_24px_var(--color-accent-glow)]">
+            <div
+              data-spotlight=""
+              className="spotlight ml-4 rounded-lg border border-border-accent bg-accent-glow px-4 py-3 shadow-[0_0_24px_var(--color-accent-glow)]"
+            >
               <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
                 <D20Mark className="h-3.5 w-3.5" />
                 Dungeon Master

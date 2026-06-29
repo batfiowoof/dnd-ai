@@ -45,8 +45,9 @@ export default function SpellPicker({
                 aria-pressed={selected}
                 disabled={disabled}
                 onClick={() => onToggle(spell.name)}
+                data-spotlight={disabled ? undefined : ""}
                 className={cn(
-                  "rounded-lg border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                  "spotlight rounded-lg border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
                   selected
                     ? "border-accent bg-accent-glow"
                     : disabled

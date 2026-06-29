@@ -117,6 +117,56 @@ h3 {
   text-shadow: 0 0 18px var(--color-accent-glow);
 }
 
+/* ── Spotlight border — accent glow that follows the cursor along the border ──
+   Position fed by SpotlightProvider via --mx/--my; masked to a 1px ring so only the
+   border lights up. Falls back to a static accent border under reduced motion. */
+.spotlight {
+  position: relative;
+}
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    180px circle at var(--mx, 50%) var(--my, 0),
+    var(--color-accent),
+    transparent 60%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+  z-index: 1;
+}
+.spotlight:hover::before {
+  opacity: 0.9;
+}
+
+/* Static fallback: no pointer-tracking glow under reduced motion — just an accent border. */
+@media (prefers-reduced-motion: reduce) {
+  .spotlight::before {
+    display: none;
+  }
+  .spotlight:hover {
+    border-color: var(--color-accent);
+  }
+}
+html[data-reduce-motion="true"] .spotlight::before {
+  display: none;
+}
+html[data-reduce-motion="true"] .spotlight:hover {
+  border-color: var(--color-accent);
+}
+
 /* ── Ornamental divider (thin gradient rule + center diamond) ── */
 .ornament {
   position: relative;

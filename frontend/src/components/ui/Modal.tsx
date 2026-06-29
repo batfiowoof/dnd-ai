@@ -81,8 +81,9 @@ export default function Modal({
       <div
         ref={panelRef}
         tabIndex={-1}
+        data-spotlight=""
         className={cn(
-          "animate-rise relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-xl border border-border-accent bg-surface/95 shadow-[0_0_48px_var(--color-accent-glow)] outline-none backdrop-blur-sm panel-corners",
+          "spotlight animate-rise relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-xl border border-border-accent bg-surface/95 shadow-[0_0_48px_var(--color-accent-glow)] outline-none backdrop-blur-sm panel-corners",
           sizeClasses[size],
           className
         )}

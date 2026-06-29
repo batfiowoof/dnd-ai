@@ -9,6 +9,8 @@ import BattleMap from "@/components/combat/BattleMap";
 import type { PlacingSpell } from "@/components/combat/BattleMap";
 
 interface CombatRegionProps {
+  /** Which slice to render: the top tracker, or the left-column battle map. */
+  part: "tracker" | "map";
   /** The local player's id (from session storage). */
   playerId: string;
   isCreator: boolean;
@@ -48,6 +50,7 @@ interface CombatRegionProps {
  * absorbs the large combat prop pass-through so the page stays thin.
  */
 export default function CombatRegion({
+  part,
   playerId,
   isCreator,
   castingSpell,
@@ -90,7 +93,8 @@ export default function CombatRegion({
     Number((myPlayer?.characterSheet?.speed as number | undefined) ?? 30) || 30;
 
   // Spell metadata for the in-combat cast menu (fetched once when a fight starts).
-  const combatSpellsQuery = useCombatSpells(!!inCombat);
+  // Only the tracker part needs it — don't double-fetch from the map instance.
+  const combatSpellsQuery = useCombatSpells(part === "tracker" && !!inCombat);
   const combatSpells = combatSpellsQuery.data ?? [];
   // Party HP bars — used as heal/buff targets during combat.
   const combatAllies = humanPlayers.map((p) => {
@@ -103,6 +107,34 @@ export default function CombatRegion({
     };
   });
 
+  /* ── Battle map: the left column (only when combat has a grid) ── */
+  if (part === "map") {
+    if (!inCombat || !combat?.grid) return null;
+    return (
+      <div className="min-h-0 overflow-y-auto border-b border-border-accent bg-accent-glow/20 p-3 lg:border-b-0 lg:border-r">
+        <BattleMap
+          combat={combat}
+          myPlayerId={playerId}
+          isMyTurn={!!combatIsMyTurn}
+          mySpeed={mySpeed}
+          runtimeByPlayerId={runtimeByPlayerId}
+          onMove={onMove}
+          onAttackEnemy={onCombatAttack}
+          connected={connected}
+          isHost={isCreator}
+          placingSpell={placingSpell}
+          onCastAoe={onCastAoe}
+          onCancelAoe={onCancelAoe}
+          castingSpell={castingSpell}
+          pickedTargets={pickedTargets}
+          onSelectTarget={onSelectTarget}
+          onUploadMap={onUploadMap}
+        />
+      </div>
+    );
+  }
+
+  /* ── Tracker: the full-width block across the top ── */
   return (
     <>
       {/* Combat initializing — the encounter is being set up (scene + initiative). */}
@@ -114,9 +146,8 @@ export default function CombatRegion({
           </span>
         </div>
       )}
-      {/* Combat overlay */}
       {inCombat && combat && (
-        <>
+        <div className="flex flex-none flex-col">
           <CombatTracker
             combat={combat}
             myPlayerId={playerId}
@@ -144,29 +175,7 @@ export default function CombatRegion({
             onDisengage={onDisengage}
             onDodge={onDodge}
           />
-          {combat.grid && (
-            <div className="border-b border-border-accent bg-accent-glow/20 p-3">
-              <BattleMap
-                combat={combat}
-                myPlayerId={playerId}
-                isMyTurn={!!combatIsMyTurn}
-                mySpeed={mySpeed}
-                runtimeByPlayerId={runtimeByPlayerId}
-                onMove={onMove}
-                onAttackEnemy={onCombatAttack}
-                connected={connected}
-                isHost={isCreator}
-                placingSpell={placingSpell}
-                onCastAoe={onCastAoe}
-                onCancelAoe={onCancelAoe}
-                castingSpell={castingSpell}
-                pickedTargets={pickedTargets}
-                onSelectTarget={onSelectTarget}
-                onUploadMap={onUploadMap}
-              />
-            </div>
-          )}
-        </>
+        </div>
       )}
     </>
   );

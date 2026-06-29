@@ -111,7 +111,8 @@ function CharactersList() {
             {characters.map((c) => (
               <div
                 key={c.id}
-                className="rounded-xl border border-border bg-surface p-5 transition hover:border-accent/50 hover:shadow-[0_0_24px_var(--color-accent-glow)]"
+                data-spotlight=""
+                className="spotlight rounded-xl border border-border bg-surface p-5 transition hover:border-accent/50 hover:shadow-[0_0_24px_var(--color-accent-glow)]"
               >
                 {/* Name & class */}
                 <div className="mb-4 flex items-start justify-between">

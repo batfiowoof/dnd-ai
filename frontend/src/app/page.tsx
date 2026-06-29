@@ -97,8 +97,9 @@ function MenuButton({ label, description, icon, onClick, primary }: MenuItem) {
     <button
       type="button"
       onClick={onClick}
+      data-spotlight=""
       className={cn(
-        "group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-left transition duration-200",
+        "spotlight group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-left transition duration-200",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
         primary
           ? "border-accent bg-accent/10 hover:bg-accent/20 hover:shadow-[0_0_20px_var(--color-accent-glow)]"

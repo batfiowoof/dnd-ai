@@ -4,6 +4,8 @@
  * CSS can react (e.g. forcing reduced motion).
  */
 
+import { setSoundEnabled } from "./sound";
+
 export interface Prefs {
   reduceMotion: boolean;
   sound: boolean;
@@ -42,4 +44,5 @@ export function applyPrefs(prefs: Prefs): void {
   const root = document.documentElement;
   root.dataset.reduceMotion = prefs.reduceMotion ? "true" : "false";
   root.style.fontSize = `${Math.round(prefs.textScale * 100)}%`;
+  setSoundEnabled(prefs.sound);
 }

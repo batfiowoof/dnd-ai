@@ -45,8 +45,9 @@ export default function AllyCard({
         type="button"
         disabled={!selectable}
         onClick={() => selectable && onSelect()}
+        data-spotlight=""
         className={cn(
-          "rounded-lg border p-2 text-left transition",
+          "spotlight rounded-lg border p-2 text-left transition",
           chosen
             ? "border-emerald-400 bg-emerald-400/10 shadow-[0_0_16px_rgba(52,211,153,0.25)]"
             : selectable

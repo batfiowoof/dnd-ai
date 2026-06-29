@@ -55,11 +55,12 @@ export default function PlayersSidebar({ onOpenSheet }: PlayersSidebarProps) {
         {humanPlayers.map((p) => (
           <div
             key={p.id}
+            data-spotlight=""
             className={cn(
-              "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition",
+              "spotlight flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition",
               p.id === highlightedPlayerId
                 ? "border border-gold/60 bg-gold-muted text-gold"
-                : "border border-transparent text-text-muted"
+                : "border border-transparent text-text-muted hover:border-accent/40"
             )}
           >
             <div className="relative flex-shrink-0">

@@ -1,4 +1,5 @@
 import { cn } from "./cn";
+import { playSound } from "@/lib/sound";
 
 interface SwitchProps {
   label: string;
@@ -21,7 +22,10 @@ export default function Switch({
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
+      onClick={() => {
+        playSound("toggle");
+        onChange(!checked);
+      }}
       className={cn(
         "flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-bg-elevated px-3 py-2.5 text-left transition hover:border-accent/50",
         className

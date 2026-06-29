@@ -3,6 +3,7 @@ import type { InventoryItem, SpellSummary, Token } from "@/types";
 import { Button, Tooltip, ConfirmDialog, cn } from "@/components/ui";
 import { targetCap, spellMechanics, type Castable } from "@/lib/combat";
 import { EconomyPip } from "@/components/combat/atoms";
+import SpellTooltip from "@/components/combat/SpellTooltip";
 
 interface CombatControlsProps {
   /** Queued animations / DM narration still playing — hold the controls. */
@@ -186,25 +187,25 @@ export default function CombatControls({
                   const bonus = s.castingTime === "Bonus Action";
                   const disabled = bonus ? bonusSpent : actionSpent;
                   return (
-                    <button
-                      key={s.name}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => beginCast(s)}
-                      title={s.summary || `${s.range} · ${s.castingTime}`}
-                      className="block w-full border-b border-border/50 px-3 py-2 text-left text-xs text-text transition last:border-b-0 hover:bg-accent-glow hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent"
-                    >
-                      <div className="flex items-center gap-1">
-                        <span className="font-semibold">{s.name}</span>
-                        {bonus && <span className="text-gold" title="Bonus action">⚡</span>}
-                        <span className="ml-auto text-[9px] uppercase tracking-wide text-text-muted">
-                          {s.level === 0 ? "Cantrip" : `L${s.level}`}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 text-[10px] text-gold/90">
-                        {spellMechanics(s)}
-                      </div>
-                    </button>
+                    <SpellTooltip key={s.name} spell={s} placement="left" className="w-full">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => beginCast(s)}
+                        className="block w-full border-b border-border/50 px-3 py-2 text-left text-xs text-text transition last:border-b-0 hover:bg-accent-glow hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold">{s.name}</span>
+                          {bonus && <span className="text-gold" title="Bonus action">⚡</span>}
+                          <span className="ml-auto text-[9px] uppercase tracking-wide text-text-muted">
+                            {s.level === 0 ? "Cantrip" : `L${s.level}`}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-gold/90">
+                          {spellMechanics(s)}
+                        </div>
+                      </button>
+                    </SpellTooltip>
                   );
                 })}
               </div>

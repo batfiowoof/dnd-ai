@@ -8,6 +8,7 @@ import {
   subscribeToErrors,
 } from "@/lib/websocket";
 import { useSessionStore } from "@/store/sessionStore";
+import { playSound } from "@/lib/sound";
 import type {
   DmResponseDto,
   GameStateDto,
@@ -126,6 +127,7 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       break;
     case "TURN_CHANGE":
       s.setTurnChange(data.nextPlayerId as string, Number(data.turnNumber));
+      playSound("turn");
       break;
     case "PLAYER_JOINED":
     case "PLAYER_LEFT": {
@@ -156,6 +158,9 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
     case "COMBAT_TURN":
     case "COMBAT_END":
       s.applyCombatLifecycle(data as unknown as CombatLifecycleEvent);
+      if (type === "COMBAT_START") playSound("combatStart");
+      else if (type === "COMBAT_TURN") playSound("turn");
+      else playSound(data.victory ? "victory" : "defeat");
       scrollToBottom();
       break;
     case "COMBAT_ACTION":

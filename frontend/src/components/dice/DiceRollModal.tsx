@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal, cn } from "@/components/ui";
 import { useSessionStore, type DiceRoll } from "@/store/sessionStore";
+import { playSound } from "@/lib/sound";
 import Die from "./Die";
 
 const ROLL_MS = 850; // tumble duration before the real faces are revealed
@@ -46,9 +47,15 @@ export default function DiceRollModal() {
     const shown = lastRoll.faces.slice(0, MAX_DICE);
     setActive(lastRoll);
 
+    // Settle cue: the landing thunk plus a crit/fumble accent when relevant.
+    const settleSound = () => {
+      playSound(lastRoll.crit ? "crit" : lastRoll.fumble ? "fumble" : "diceSettle");
+    };
+
     if (prefersReducedMotion()) {
       setRolling(false);
       setFaces(shown);
+      settleSound();
       timers.current.push(
         setTimeout(() => setActive(null), AUTOCLOSE_MS)
       );
@@ -57,6 +64,7 @@ export default function DiceRollModal() {
 
     setRolling(true);
     setFaces(shown.map(() => randomFace(lastRoll.sides)));
+    playSound("dice"); // dice clatter while tumbling
 
     const cycle = setInterval(() => {
       setFaces(shown.map(() => randomFace(lastRoll.sides)));
@@ -67,6 +75,7 @@ export default function DiceRollModal() {
         clearInterval(cycle);
         setRolling(false);
         setFaces(shown); // settle on the authoritative faces
+        settleSound();
       }, ROLL_MS)
     );
     timers.current.push(

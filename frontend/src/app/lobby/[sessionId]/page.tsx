@@ -23,6 +23,7 @@ import CombatActionModal from "@/components/combat/CombatActionModal";
 import { uploadCombatMap, leaveSession } from "@/lib/api";
 import { useLobbyData } from "@/components/game/hooks/useLobbyData";
 import { useCombatInteraction } from "@/components/game/hooks/useCombatInteraction";
+import { useCombatActionGate } from "@/components/game/hooks/useCombatActionGate";
 import LobbyWaitingView from "@/components/game/LobbyWaitingView";
 import GameRoomHeader from "@/components/game/GameRoomHeader";
 import PlayersSidebar from "@/components/game/PlayersSidebar";
@@ -172,7 +173,12 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     sendStartEncounter(clientRef.current, sessionId, enemyKeys);
   }
 
-  // Cast / AoE / target-selection sub-state-machine (its own hook).
+  // Hold combat actions back from the server until the player rolls/confirms (so DM narration
+  // begins after the roll). Every send site is routed through this gate.
+  const gate = useCombatActionGate({ actions, playerId });
+
+  // Cast / AoE / target-selection sub-state-machine (its own hook). Casts funnel through the
+  // gate's `gateCast` so single/multi-target/AoE/SELF spells all defer until the roll prompt.
   const {
     placingSpell,
     castingSpell,
@@ -187,7 +193,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     clientRef,
     connected,
     playerId,
-    combatCast: actions.combatCast,
+    combatCast: gate.gateCast,
   });
 
   /** Leave the session: best-effort backend leave, clear local keys, return to /play. */
@@ -230,6 +236,32 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     [players]
   );
 
+  /* Shared prop bundle for the two CombatRegion slots (tracker on top, map on the left).
+     Attack / use-item go through the gate so they defer until the roll prompt. */
+  const combatRegionProps = {
+    playerId,
+    isCreator,
+    castingSpell,
+    pickedTargets,
+    placingSpell,
+    onBeginCast: handleBeginCast,
+    onSelectTarget: handleSelectTarget,
+    onConfirmCast: handleConfirmCast,
+    onCancelCast: handleCancelCast,
+    onCancelAoe: handleCancelAoe,
+    onCastAoe: handleCastAoe,
+    onCombatAttack: gate.gateAttack,
+    onCombatUseItem: gate.gateUseItem,
+    onStabilize: actions.combatStabilize,
+    onEndTurn: actions.combatEndTurn,
+    onEndCombat: actions.endCombat,
+    onDash: actions.combatDash,
+    onDisengage: actions.combatDisengage,
+    onDodge: actions.combatDodge,
+    onMove: actions.combatMove,
+    onUploadMap: handleUploadMap,
+  };
+
   /* ════════════════════════════════════════════════════════════
      RENDER — WAITING (lobby)
      ════════════════════════════════════════════════════════════ */
@@ -256,7 +288,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     <div className="flex h-dvh flex-col">
       {/* Dice + combat-action animation overlays */}
       <DiceRollModal />
-      <CombatActionModal />
+      <CombatActionModal
+        pendingAction={gate.pendingAction}
+        onRoll={gate.rollPending}
+        onCancel={gate.cancelPending}
+      />
       <InventoryManager
         open={manageOpen}
         onClose={() => setManageOpen(false)}
@@ -299,69 +335,54 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         {/* Sidebar — players */}
         <PlayersSidebar onOpenSheet={setSheetPlayerId} />
 
-        {/* Main chat area */}
-        <div className="flex flex-1 flex-col">
-          <CombatRegion
-            playerId={playerId}
-            isCreator={isCreator}
-            castingSpell={castingSpell}
-            pickedTargets={pickedTargets}
-            placingSpell={placingSpell}
-            onBeginCast={handleBeginCast}
-            onSelectTarget={handleSelectTarget}
-            onConfirmCast={handleConfirmCast}
-            onCancelCast={handleCancelCast}
-            onCancelAoe={handleCancelAoe}
-            onCastAoe={handleCastAoe}
-            onCombatAttack={actions.combatAttack}
-            onCombatUseItem={actions.combatUseItem}
-            onStabilize={actions.combatStabilize}
-            onEndTurn={actions.combatEndTurn}
-            onEndCombat={actions.endCombat}
-            onDash={actions.combatDash}
-            onDisengage={actions.combatDisengage}
-            onDodge={actions.combatDodge}
-            onMove={actions.combatMove}
-            onUploadMap={handleUploadMap}
-          />
+        {/* Main game area — tracker spans the top; battlefield (left) + chat (right) below. */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <CombatRegion part="tracker" {...combatRegionProps} />
 
-          {/* Log */}
-          <GameLog playerByName={playerByName} scrollRef={scrollRef} />
+          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+            {/* Battlefield — left column (renders null when there's no grid). */}
+            <CombatRegion part="map" {...combatRegionProps} />
 
-          {/* Input — only when ACTIVE */}
-          {status === "ACTIVE" && (
-            <GameInputBar
-              playerId={playerId}
-              actionText={actionText}
-              setActionText={setActionText}
-              spendInspiration={spendInspiration}
-              setSpendInspiration={setSpendInspiration}
-              onSend={handleSendAction}
-              onPass={actions.pass}
-              onRoll={actions.roll}
-              onAttack={actions.attack}
-              onCast={actions.cast}
-              onUseItem={actions.useItem}
-              onLongRest={actions.longRest}
-              onManage={() => setManageOpen(true)}
-            />
-          )}
+            {/* Chat + input — right column (full width when there's no map). */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <GameLog playerByName={playerByName} scrollRef={scrollRef} />
 
-          {/* Finished banner */}
-          {status === "FINISHED" && (
-            <div className="border-t border-border bg-surface p-4 text-center">
-              <p className="text-sm text-text-muted">
-                This adventure has ended.
-              </p>
-              <Button
-                onClick={() => router.push("/play")}
-                variant="outline"
-                className="mt-2"
-              >
-                New Adventure
-              </Button>
+              {/* Input — only when ACTIVE */}
+              {status === "ACTIVE" && (
+                <GameInputBar
+                  playerId={playerId}
+                  actionText={actionText}
+                  setActionText={setActionText}
+                  spendInspiration={spendInspiration}
+                  setSpendInspiration={setSpendInspiration}
+                  onSend={handleSendAction}
+                  onPass={actions.pass}
+                  onRoll={actions.roll}
+                  onAttack={actions.attack}
+                  onCast={actions.cast}
+                  onUseItem={actions.useItem}
+                  onLongRest={actions.longRest}
+                  onManage={() => setManageOpen(true)}
+                />
+              )}
+
+              {/* Finished banner */}
+              {status === "FINISHED" && (
+                <div className="border-t border-border bg-surface p-4 text-center">
+                  <p className="text-sm text-text-muted">
+                    This adventure has ended.
+                  </p>
+                  <Button
+                    onClick={() => router.push("/play")}
+                    variant="outline"
+                    className="mt-2"
+                  >
+                    New Adventure
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
