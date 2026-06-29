@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -30,6 +31,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(CharacterNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleCharacterNotFound(CharacterNotFoundException ex,
+                                                                 HttpServletRequest request) {
+        log.warn("Character not found: {}", ex.getMessage());
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(SessionFullException.class)
     public ResponseEntity<ErrorResponse> handleSessionFull(SessionFullException ex,
                                                             HttpServletRequest request) {
@@ -49,6 +57,21 @@ public class GlobalExceptionHandler {
                                                              HttpServletRequest request) {
         log.warn("Illegal state: {}", ex.getMessage());
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex,
+                                                               HttpServletRequest request) {
+        log.warn("Illegal argument: {}", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex,
+                                                            HttpServletRequest request) {
+        log.warn("Access denied: {}", ex.getMessage());
+        return buildResponse(HttpStatus.FORBIDDEN,
+                "You do not have permission to perform this action.", request.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

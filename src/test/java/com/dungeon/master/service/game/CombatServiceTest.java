@@ -104,10 +104,29 @@ class CombatServiceTest {
             gs.placeTokens(g, prefs, erefs);
             return g;
         });
+        // CombatMapper + CombatBroadcaster are wired with REAL instances (not mocks): the
+        // assertions below verify the websocket sends that land on the mock SimpMessagingTemplate,
+        // so the broadcaster must actually route through it.
+        com.dungeon.master.service.game.combat.CombatMapper combatMapper =
+                new com.dungeon.master.service.game.combat.CombatMapper(enemyRepo);
+        com.dungeon.master.service.game.combat.CombatBroadcaster combatBroadcaster =
+                new com.dungeon.master.service.game.combat.CombatBroadcaster(messaging, combatMapper);
+        // Real terrain service: the terrain test exercises the actual AoE-cell stamping.
+        com.dungeon.master.service.game.combat.CombatTerrainService combatTerrainService =
+                new com.dungeon.master.service.game.combat.CombatTerrainService(new GridService());
+        // Real lookups + spell resolver: the spell tests exercise the actual resolution math and
+        // the broadcasts that land on the mock SimpMessagingTemplate.
+        com.dungeon.master.service.game.combat.CombatLookups combatLookups =
+                new com.dungeon.master.service.game.combat.CombatLookups(playerRepo, playerStateService);
+        com.dungeon.master.service.game.combat.CombatSpellResolver combatSpellResolver =
+                new com.dungeon.master.service.game.combat.CombatSpellResolver(
+                        playerStateService, enemyRepo, diceService, new GridService(),
+                        combatBroadcaster, combatLookups);
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
-                sessionRepo, playerStateService, diceService, turnService, eventProducer, messaging,
+                sessionRepo, playerStateService, diceService, turnService, eventProducer,
                 monsterCatalog, spellCatalog, new GridService(), checkModifierService,
-                sceneGenerator, enemyTacticsService);
+                sceneGenerator, enemyTacticsService, combatMapper, combatBroadcaster,
+                combatTerrainService, combatLookups, combatSpellResolver);
 
         // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
         when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))

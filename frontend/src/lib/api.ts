@@ -13,6 +13,7 @@ import type {
   CharacterDto,
   CharacterCreateUpdateRequest,
 } from "@/types";
+import { ApiError } from "./errors";
 
 const BASE_URL = "/api";
 
@@ -31,10 +32,20 @@ function getAuthHeaders(token: string): HeadersInit {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed: ${res.status}`);
+    await throwApiError(res);
   }
   return res.json();
+}
+
+/**
+ * Parse a non-2xx response and throw a typed {@link ApiError}. Reads both `message` (the standard
+ * `ErrorResponse` shape) and `error` (legacy `CombatMapController` shape) so callers never need to
+ * special-case body shapes. Use this for `void`-returning endpoints that don't go through
+ * {@link handleResponse}.
+ */
+async function throwApiError(res: Response): Promise<never> {
+  const body = await res.json().catch(() => null);
+  throw new ApiError(res.status, body?.message ?? body?.error);
 }
 
 /* ── Session endpoints ───────────────────────────────────────── */
@@ -133,8 +144,7 @@ export async function leaveSession(
     headers: getAuthHeaders(token),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed: ${res.status}`);
+    await throwApiError(res);
   }
 }
 
@@ -147,8 +157,7 @@ export async function deleteSession(
     headers: getAuthHeaders(token),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed: ${res.status}`);
+    await throwApiError(res);
   }
 }
 
@@ -165,8 +174,7 @@ export async function kickPlayer(
     }
   );
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed: ${res.status}`);
+    await throwApiError(res);
   }
 }
 
@@ -238,10 +246,7 @@ export async function uploadCombatMap(
     body: form,
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(
-      body?.error ?? body?.message ?? `Upload failed: ${res.status}`
-    );
+    await throwApiError(res);
   }
   return res.json();
 }
@@ -301,7 +306,6 @@ export async function deleteCharacter(
     headers: getAuthHeaders(token),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed: ${res.status}`);
+    await throwApiError(res);
   }
 }

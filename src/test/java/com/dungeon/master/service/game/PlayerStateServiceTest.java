@@ -29,7 +29,7 @@ class PlayerStateServiceTest {
     @BeforeEach
     void setup() {
         repository = mock(PlayerRuntimeStateRepository.class);
-        service = new PlayerStateService(repository, mock(DiceService.class));
+        service = new PlayerStateService(repository, mock(DiceService.class), mock(PlayerStateSeeder.class));
         when(repository.save(any(PlayerRuntimeState.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 

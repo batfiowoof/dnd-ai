@@ -5,9 +5,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback } from "react";
-import { useAuth } from "@/context/AuthContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useRequireToken } from "@/hooks/useRequireToken";
 import {
   createCharacter,
   deleteCharacter,
@@ -16,15 +15,6 @@ import {
   updateCharacter,
 } from "@/lib/api";
 import type { CharacterCreateUpdateRequest } from "@/types";
-
-function useRequireToken() {
-  const { getToken } = useAuth();
-  return useCallback(async () => {
-    const token = await getToken();
-    if (!token) throw new Error("Not authenticated");
-    return token;
-  }, [getToken]);
-}
 
 /* ── Queries ─────────────────────────────────────────────────── */
 

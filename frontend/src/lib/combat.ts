@@ -2,8 +2,51 @@
  * Small client-side combat helpers shared by the tracker and the battle map: which side a
  * spell targets, and how to read a spell's range into feet for grid range-gating.
  */
-import type { InventoryItem, RollSummary, SpellSummary } from "@/types";
+import type {
+  InventoryItem,
+  PlayerRuntimeState,
+  RollSummary,
+  SpellSummary,
+} from "@/types";
 import { conditionMeta } from "@/lib/conditions";
+
+/** A castable known spell: the player's chosen name resolved to its catalog metadata. */
+export interface Castable extends SpellSummary {
+  /** True when this spell heals/buffs allies (so it targets the party, not enemies). */
+  allyTargeting: boolean;
+}
+
+/**
+ * Resolve the player's known spells (cantrips + leveled) to catalog metadata, keeping
+ * only those they can pay for right now (cantrips are free; leveled need a matching slot).
+ */
+export function resolveCastable(
+  state: PlayerRuntimeState | null,
+  spells: SpellSummary[]
+): Castable[] {
+  if (!state) return [];
+  const byName = new Map(spells.map((s) => [s.name.toLowerCase(), s]));
+  const hasSlot = (level: number) =>
+    state.spellSlots.some((s) => s.level === level && s.used < s.max);
+  const known = [...(state.cantrips ?? []), ...(state.knownSpells ?? [])];
+  const seen = new Set<string>();
+  const out: Castable[] = [];
+  for (const name of known) {
+    const meta = byName.get(name.toLowerCase());
+    if (!meta || seen.has(meta.name)) continue;
+    seen.add(meta.name);
+    if (meta.level > 0 && !hasSlot(meta.level)) continue;
+    out.push({
+      ...meta,
+      allyTargeting:
+        meta.effectType === "HEAL" ||
+        meta.effectType === "BUFF" ||
+        meta.targetType === "ALLY" ||
+        meta.targetType === "SELF",
+    });
+  }
+  return out.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+}
 
 /**
  * Human-readable breakdown of a rolled damage expression: "[5]+3 = 8" — the individual die

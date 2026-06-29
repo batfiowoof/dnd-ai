@@ -1,18 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCallback } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { useRequireToken } from "@/hooks/useRequireToken";
 import { getCombatMonsters, getCombatSpells } from "@/lib/api";
-
-function useRequireToken() {
-  const { getToken } = useAuth();
-  return useCallback(async () => {
-    const token = await getToken();
-    if (!token) throw new Error("Not authenticated");
-    return token;
-  }, [getToken]);
-}
 
 /** Spell combat metadata (level / effect / target type) for the in-combat cast menu. */
 export function useCombatSpells(enabled: boolean) {

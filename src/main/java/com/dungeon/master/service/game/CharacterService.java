@@ -1,5 +1,6 @@
 package com.dungeon.master.service.game;
 
+import com.dungeon.master.exception.CharacterNotFoundException;
 import com.dungeon.master.model.dto.CharacterCreateUpdateRequest;
 import com.dungeon.master.model.dto.CharacterDto;
 import com.dungeon.master.model.entity.Character;
@@ -28,7 +29,7 @@ public class CharacterService {
 
     public CharacterDto getCharacter(UUID id, String username) {
         Character character = characterRepository.findByIdAndOwnerUsername(id, username)
-                .orElseThrow(() -> new IllegalArgumentException("Character not found"));
+                .orElseThrow(() -> new CharacterNotFoundException("Character not found"));
         return toDto(character);
     }
 
@@ -69,7 +70,7 @@ public class CharacterService {
     @Transactional
     public CharacterDto updateCharacter(UUID id, CharacterCreateUpdateRequest request, String username) {
         Character character = characterRepository.findByIdAndOwnerUsername(id, username)
-                .orElseThrow(() -> new IllegalArgumentException("Character not found"));
+                .orElseThrow(() -> new CharacterNotFoundException("Character not found"));
 
         character.setName(request.name());
         character.setRace(request.race());
@@ -104,7 +105,7 @@ public class CharacterService {
     @Transactional
     public void deleteCharacter(UUID id, String username) {
         Character character = characterRepository.findByIdAndOwnerUsername(id, username)
-                .orElseThrow(() -> new IllegalArgumentException("Character not found"));
+                .orElseThrow(() -> new CharacterNotFoundException("Character not found"));
         characterRepository.delete(character);
         log.info("Character deleted: id={}, owner={}", id, username);
     }

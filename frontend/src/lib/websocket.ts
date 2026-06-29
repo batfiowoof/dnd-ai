@@ -66,13 +66,18 @@ export function subscribeToErrors(
 ) {
   return client.subscribe("/user/queue/errors", (message: IMessage) => {
     try {
+      // Backend sends a sanitized `WsError` ({ code, message }); `error` is the legacy key.
       const data = JSON.parse(message.body);
-      onError(data.error ?? "Unknown error");
+      onError(data.message ?? data.error ?? GENERIC_WS_ERROR);
     } catch {
-      onError(message.body);
+      // Never surface a raw, non-JSON frame to the user.
+      console.error("Failed to parse WS error frame:", message.body);
+      onError(GENERIC_WS_ERROR);
     }
   });
 }
+
+const GENERIC_WS_ERROR = "Something went wrong. Please try again.";
 
 export function sendAction(
   client: Client,

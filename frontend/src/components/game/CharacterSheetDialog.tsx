@@ -5,7 +5,11 @@ import { Modal, cn } from "@/components/ui";
 import Portrait from "@/components/Portrait";
 import CharacterStatus from "@/components/game/CharacterStatus";
 import SrdEntryRow from "@/components/game/SrdEntryRow";
-import { getAbilityModifier, formatModifier } from "@/lib/dnd5e";
+import {
+  getAbilityModifier,
+  formatModifier,
+  ABILITY_ABBREVIATIONS,
+} from "@/lib/dnd5e";
 
 interface CharacterSheetDialogProps {
   open: boolean;
@@ -14,8 +18,6 @@ interface CharacterSheetDialogProps {
   characterName?: string;
   imageUrl?: string | null;
 }
-
-const ABILITY_ORDER = ["STR", "DEX", "CON", "INT", "WIS", "CHA"] as const;
 
 /**
  * Full character sheet for any player, opened by clicking their side-menu avatar.
@@ -58,7 +60,7 @@ export default function CharacterSheetDialog({
 
         {/* Ability scores */}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {ABILITY_ORDER.map((abbr) => {
+          {ABILITY_ABBREVIATIONS.map((abbr) => {
             const score = abilities[abbr];
             const mod = typeof score === "number" ? getAbilityModifier(score) : null;
             return (

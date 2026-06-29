@@ -1,19 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCallback } from "react";
-import { useAuth } from "@/context/AuthContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useRequireToken } from "@/hooks/useRequireToken";
 import { getActiveCombat, getSessionStates } from "@/lib/api";
-
-function useRequireToken() {
-  const { getToken } = useAuth();
-  return useCallback(async () => {
-    const token = await getToken();
-    if (!token) throw new Error("Not authenticated");
-    return token;
-  }, [getToken]);
-}
 
 /**
  * One-shot fetch of every player's runtime state to seed the store. Live updates

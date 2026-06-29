@@ -11,7 +11,7 @@ public final class Bestiary {
 
     private Bestiary() {}
 
-    record Template(String name, int hp, int armorClass, int attackBonus, String damageDice, int dexMod) {}
+    public record Template(String name, int hp, int armorClass, int attackBonus, String damageDice, int dexMod) {}
 
     private static final Map<String, Template> TEMPLATES = new LinkedHashMap<>();
 
@@ -24,7 +24,7 @@ public final class Bestiary {
         TEMPLATES.put("GIANT_RAT", new Template("Giant Rat", 7, 12, 4, "1d4+2", 2));
     }
 
-    static Template get(String key) {
+    public static Template get(String key) {
         Template t = TEMPLATES.get(key == null ? "" : key.toUpperCase(Locale.ROOT).trim());
         if (t == null) {
             throw new IllegalArgumentException("Unknown enemy: " + key);

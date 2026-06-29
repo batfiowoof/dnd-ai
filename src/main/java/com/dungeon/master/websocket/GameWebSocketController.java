@@ -2,7 +2,6 @@ package com.dungeon.master.websocket;
 
 import com.dungeon.master.model.dto.AddItemRequest;
 import com.dungeon.master.model.dto.CastRequest;
-import com.dungeon.master.model.dto.CombatActionRequest;
 import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.DropItemRequest;
@@ -11,22 +10,17 @@ import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.HpChangeRequest;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.JoinSessionRequest;
-import com.dungeon.master.model.dto.MoveRequest;
 import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
-import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.dto.RollRequest;
-import com.dungeon.master.model.dto.StabilizeRequest;
-import com.dungeon.master.model.dto.StartEncounterRequest;
 import com.dungeon.master.model.dto.UseItemRequest;
-import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.enums.RollMode;
-import com.dungeon.master.service.game.CombatService;
 import com.dungeon.master.service.game.DiceService;
 import com.dungeon.master.service.game.GameSessionService;
 import com.dungeon.master.service.game.PlayerService;
+import com.dungeon.master.service.game.SessionMembershipService;
 import com.dungeon.master.service.game.PlayerStateService;
 import com.dungeon.master.service.game.TurnService;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +28,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
@@ -45,15 +38,14 @@ import java.util.UUID;
 @Controller
 @RequiredArgsConstructor
 @Slf4j
-public class GameWebSocketController {
+public class GameWebSocketController extends AbstractGameWebSocketController {
 
     private final TurnService turnService;
     private final GameSessionService gameSessionService;
+    private final SessionMembershipService sessionMembershipService;
     private final PlayerService playerService;
     private final PlayerStateService playerStateService;
-    private final CombatService combatService;
     private final DiceService diceService;
-    private final SimpMessagingTemplate messagingTemplate;
 
     @MessageMapping("/game/{sessionId}/action")
     public void handlePlayerAction(@DestinationVariable UUID sessionId,
@@ -69,9 +61,7 @@ public class GameWebSocketController {
         } catch (Exception e) {
             log.error("Error processing player action: session={}, player={}",
                     sessionId, username, e);
-            messagingTemplate.convertAndSendToUser(
-                    username, "/queue/errors",
-                    (Object) Map.of("error", e.getMessage()));
+            sendError(username, e);
         }
     }
 
@@ -106,9 +96,7 @@ public class GameWebSocketController {
                     DiceRollEvent.of(sessionId, player.id(), player.characterName(), label, result));
         } catch (Exception e) {
             log.error("Error rolling dice: session={}, player={}", sessionId, username, e);
-            messagingTemplate.convertAndSendToUser(
-                    username, "/queue/errors",
-                    (Object) Map.of("error", e.getMessage()));
+            sendError(username, e);
         }
     }
 
@@ -259,160 +247,6 @@ public class GameWebSocketController {
         }
     }
 
-    @MessageMapping("/game/{sessionId}/combat/start")
-    public void handleCombatStart(@DestinationVariable UUID sessionId,
-                                  @Payload StartEncounterRequest request,
-                                  Principal principal) {
-        String username = principal.getName();
-        try {
-            GameSession session = gameSessionService.getSession(sessionId);
-            if (!username.equals(session.getCreatedBy())) {
-                throw new IllegalStateException("Only the host can start an encounter");
-            }
-            combatService.startEncounter(sessionId, request.enemies());
-        } catch (Exception e) {
-            log.error("Error starting combat: session={}, host={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/attack")
-    public void handleCombatAttack(@DestinationVariable UUID sessionId,
-                                   @Payload CombatActionRequest request,
-                                   Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerAttack(sessionId, username, request.targetEnemyId());
-        } catch (Exception e) {
-            log.error("Error in combat attack: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/cast")
-    public void handleCombatCast(@DestinationVariable UUID sessionId,
-                                 @Payload CombatActionRequest request,
-                                 Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerCastSpell(sessionId, username, request.spellName(),
-                    request.spellLevel() == null ? 0 : request.spellLevel(),
-                    request.targetIds(), request.originX(), request.originY());
-        } catch (Exception e) {
-            log.error("Error in combat cast: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/use-item")
-    public void handleCombatUseItem(@DestinationVariable UUID sessionId,
-                                    @Payload CombatActionRequest request,
-                                    Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerUseItem(sessionId, username, request.itemName());
-        } catch (Exception e) {
-            log.error("Error in combat use-item: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/end-turn")
-    public void handleCombatEndTurn(@DestinationVariable UUID sessionId, Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerEndTurn(sessionId, username);
-        } catch (Exception e) {
-            log.error("Error ending combat turn: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/move")
-    public void handleCombatMove(@DestinationVariable UUID sessionId,
-                                 @Payload MoveRequest request,
-                                 Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerMove(sessionId, username, request.x(), request.y());
-        } catch (Exception e) {
-            log.error("Error in combat move: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/dash")
-    public void handleCombatDash(@DestinationVariable UUID sessionId, Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerDash(sessionId, username);
-        } catch (Exception e) {
-            log.error("Error in combat dash: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/disengage")
-    public void handleCombatDisengage(@DestinationVariable UUID sessionId, Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerDisengage(sessionId, username);
-        } catch (Exception e) {
-            log.error("Error in combat disengage: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/dodge")
-    public void handleCombatDodge(@DestinationVariable UUID sessionId, Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerDodge(sessionId, username);
-        } catch (Exception e) {
-            log.error("Error in combat dodge: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/stabilize")
-    public void handleCombatStabilize(@DestinationVariable UUID sessionId,
-                                      @Payload StabilizeRequest request,
-                                      Principal principal) {
-        String username = principal.getName();
-        try {
-            combatService.playerStabilize(sessionId, username, request.targetPlayerId());
-        } catch (Exception e) {
-            log.error("Error in combat stabilize: session={}, player={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    @MessageMapping("/game/{sessionId}/combat/end")
-    public void handleCombatEnd(@DestinationVariable UUID sessionId, Principal principal) {
-        String username = principal.getName();
-        try {
-            GameSession session = gameSessionService.getSession(sessionId);
-            if (!username.equals(session.getCreatedBy())) {
-                throw new IllegalStateException("Only the host can end the encounter");
-            }
-            combatService.endEncounterByHost(sessionId);
-        } catch (Exception e) {
-            log.error("Error ending combat: session={}, host={}", sessionId, username, e);
-            sendError(username, e);
-        }
-    }
-
-    private void broadcastState(UUID sessionId, PlayerRuntimeStateDto state) {
-        messagingTemplate.convertAndSend("/topic/game/" + sessionId,
-                PlayerStateEvent.of(sessionId, state));
-    }
-
-    private void sendError(String username, Exception e) {
-        messagingTemplate.convertAndSendToUser(
-                username, "/queue/errors",
-                (Object) Map.of("error", e.getMessage() == null ? "Action failed" : e.getMessage()));
-    }
-
     @MessageMapping("/game/{sessionId}/join")
     @SendToUser("/queue/errors")
     public void handlePlayerJoin(@DestinationVariable UUID sessionId,
@@ -422,7 +256,7 @@ public class GameWebSocketController {
         log.info("WebSocket join received: session={}, player={}", sessionId, username);
 
         try {
-            PlayerDto player = gameSessionService.joinSession(sessionId, request, username);
+            PlayerDto player = sessionMembershipService.joinSession(sessionId, request, username);
             GameStateDto state = gameSessionService.getGameState(sessionId);
 
             messagingTemplate.convertAndSendToUser(
@@ -432,9 +266,7 @@ public class GameWebSocketController {
         } catch (Exception e) {
             log.error("Error joining session via WebSocket: session={}, player={}",
                     sessionId, username, e);
-            messagingTemplate.convertAndSendToUser(
-                    username, "/queue/errors",
-                    (Object) Map.of("error", e.getMessage()));
+            sendError(username, e);
         }
     }
 }

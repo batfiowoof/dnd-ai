@@ -17,10 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -38,6 +35,7 @@ public class PlayerStateService {
 
     private final PlayerRuntimeStateRepository repository;
     private final DiceService diceService;
+    private final PlayerStateSeeder seeder;
 
     /** Outcome of consuming an item, including any heal roll for narration/animation. */
     public record ItemUseResult(
@@ -54,100 +52,20 @@ public class PlayerStateService {
     /** Result of recording a death save: the updated state plus what it resolved to. */
     public record DeathSaveResult(PlayerRuntimeStateDto state, DeathSaveOutcome outcome) {}
 
-    /* ── seeding ─────────────────────────────────────────────────── */
+    /* ── seeding (delegated to PlayerStateSeeder) ─────────────────── */
 
     /**
-     * Ensure a runtime state row exists for the player, seeding it if missing. Combat reads
-     * runtime HP to decide who is up; a player whose state was never seeded (or whose seeding
-     * failed) would otherwise be treated as "down" and silently skipped — an instant TPK.
-     * Seeds from the {@code Character} template when available, else neutral defaults.
+     * Ensure a runtime state row exists for the player, seeding it if missing. Delegates to
+     * {@link PlayerStateSeeder#ensureSeeded(Player, Character)}; kept here so existing callers
+     * (combat) keep a single entry point for runtime state.
      */
-    @Transactional
     public void ensureSeeded(Player player, Character character) {
-        if (repository.existsById(player.getId())) {
-            return;
-        }
-        if (character != null) {
-            seedForPlayer(player, character);
-        } else {
-            seedDefaultsForPlayer(player);
-        }
+        seeder.ensureSeeded(player, character);
     }
 
-    /**
-     * Seed neutral default runtime state for a player with no linked character (HP 10/10,
-     * AC 10, all abilities 10, no spell slots, a single stack of healing potions). Keeps
-     * combat and checks functional rather than crashing on a null character template.
-     */
-    @Transactional
-    public void seedDefaultsForPlayer(Player player) {
-        Map<String, Integer> abilities = new LinkedHashMap<>();
-        for (String a : List.of("STR", "DEX", "CON", "INT", "WIS", "CHA")) {
-            abilities.put(a, 10);
-        }
-        List<InventoryItem> inventory = new ArrayList<>();
-        inventory.add(new InventoryItem("Potion of Healing", 2, ItemKind.POTION_HEALING));
-
-        PlayerRuntimeState state = PlayerRuntimeState.builder()
-                .playerId(player.getId())
-                .sessionId(player.getSessionId())
-                .currentHp(10)
-                .maxHp(10)
-                .tempHp(0)
-                .armorClass(10)
-                .abilities(abilities)
-                .spellSlots(new ArrayList<>())
-                .inventory(inventory)
-                .conditions(new ArrayList<>())
-                .cantrips(new ArrayList<>())
-                .knownSpells(new ArrayList<>())
-                .build();
-        repository.save(state);
-        log.info("Seeded default runtime state for player={} (no character)", player.getId());
-    }
-
-    @Transactional
+    /** Seed runtime state from a character template. Delegates to {@link PlayerStateSeeder#seedForPlayer(Player, Character)}. */
     public void seedForPlayer(Player player, Character character) {
-        int hp = character.getHitPoints();
-
-        List<InventoryItem> inventory = new ArrayList<>();
-        // Prefer the structured starting inventory (real quantities + kinds); fall back to
-        // the legacy equipment string list with best-effort classification.
-        if (character.getStartingInventory() != null && !character.getStartingInventory().isEmpty()) {
-            for (InventoryItem item : character.getStartingInventory()) {
-                inventory.add(new InventoryItem(item.name(), Math.max(1, item.qty()), item.kind(), item.equipped()));
-            }
-        } else if (character.getEquipment() != null) {
-            for (String name : character.getEquipment()) {
-                inventory.add(new InventoryItem(name, 1, classify(name)));
-            }
-        }
-        inventory.add(new InventoryItem("Potion of Healing", 2, ItemKind.POTION_HEALING));
-
-        Map<String, Integer> abilities = new LinkedHashMap<>();
-        abilities.put("STR", character.getStrength());
-        abilities.put("DEX", character.getDexterity());
-        abilities.put("CON", character.getConstitution());
-        abilities.put("INT", character.getIntelligence());
-        abilities.put("WIS", character.getWisdom());
-        abilities.put("CHA", character.getCharisma());
-
-        PlayerRuntimeState state = PlayerRuntimeState.builder()
-                .playerId(player.getId())
-                .sessionId(player.getSessionId())
-                .currentHp(hp)
-                .maxHp(hp)
-                .tempHp(0)
-                .armorClass(character.getArmorClass())
-                .abilities(abilities)
-                .spellSlots(SpellSlotTable.forClass(character.getCharacterClass(), character.getLevel()))
-                .inventory(inventory)
-                .conditions(new ArrayList<>())
-                .cantrips(character.getCantrips() != null ? new ArrayList<>(character.getCantrips()) : new ArrayList<>())
-                .knownSpells(character.getKnownSpells() != null ? new ArrayList<>(character.getKnownSpells()) : new ArrayList<>())
-                .build();
-        repository.save(state);
-        log.info("Seeded runtime state for player={} hp={}", player.getId(), hp);
+        seeder.seedForPlayer(player, character);
     }
 
     /* ── reads ───────────────────────────────────────────────────── */
@@ -177,9 +95,9 @@ public class PlayerStateService {
     public PlayerRuntimeStateDto applyHpDelta(UUID playerId, int amount, boolean critical) {
         PlayerRuntimeState s = require(playerId);
         if (amount >= 0) {
-            heal(s, amount);
+            DyingRules.heal(s, amount);
         } else {
-            damage(s, -amount, critical);
+            DyingRules.damage(s, -amount, critical);
         }
         return toDto(repository.save(s));
     }
@@ -193,36 +111,8 @@ public class PlayerStateService {
     @Transactional
     public DeathSaveResult recordDeathSave(UUID playerId, DiceRollResult roll) {
         PlayerRuntimeState s = require(playerId);
-        DeathSaveOutcome outcome;
-        if (roll.crit()) {                                   // natural 20 → back on your feet at 1 HP
-            s.setCurrentHp(Math.min(1, s.getMaxHp()));
-            s.setStable(false);
-            s.setDeathSaveSuccesses(0);
-            s.setDeathSaveFailures(0);
-            outcome = DeathSaveOutcome.REVIVED;
-        } else if (roll.fumble()) {                          // natural 1 → two failures
-            outcome = addFailures(s, 2);
-        } else if (roll.total() >= 10) {                     // 10+ → a success
-            s.setDeathSaveSuccesses(Math.min(3, s.getDeathSaveSuccesses() + 1));
-            if (s.getDeathSaveSuccesses() >= 3) {
-                s.setStable(true);                           // stable: still 0 HP, stops rolling
-                outcome = DeathSaveOutcome.STABILIZED;
-            } else {
-                outcome = DeathSaveOutcome.SUCCESS;
-            }
-        } else {                                             // 9 or less → a failure
-            outcome = addFailures(s, 1);
-        }
+        DeathSaveOutcome outcome = DyingRules.recordDeathSave(s, roll);
         return new DeathSaveResult(toDto(repository.save(s)), outcome);
-    }
-
-    private DeathSaveOutcome addFailures(PlayerRuntimeState s, int n) {
-        s.setDeathSaveFailures(Math.min(3, s.getDeathSaveFailures() + n));
-        if (s.getDeathSaveFailures() >= 3) {
-            s.setDead(true);
-            return DeathSaveOutcome.DIED;
-        }
-        return DeathSaveOutcome.FAILURE;
     }
 
     /**
@@ -233,16 +123,7 @@ public class PlayerStateService {
     @Transactional
     public PlayerRuntimeStateDto stabilize(UUID playerId) {
         PlayerRuntimeState s = require(playerId);
-        if (s.isDead()) {
-            throw new IllegalStateException("Cannot stabilize a dead creature");
-        }
-        if (s.getCurrentHp() > 0) {
-            throw new IllegalStateException("Target is conscious and does not need stabilizing");
-        }
-        if (!s.isStable()) {
-            s.setStable(true);
-            s.setDeathSaveSuccesses(0);
-            s.setDeathSaveFailures(0);
+        if (DyingRules.stabilize(s)) {
             s = repository.save(s);
         }
         return toDto(s);
@@ -294,7 +175,7 @@ public class PlayerStateService {
         int healed = 0;
         if (item.kind() == ItemKind.POTION_HEALING) {
             healRoll = diceService.roll(HEALING_POTION_DICE);
-            healed = heal(s, healRoll.total());
+            healed = DyingRules.heal(s, healRoll.total());
         }
 
         PlayerRuntimeStateDto dto = toDto(repository.save(s));
@@ -493,98 +374,10 @@ public class PlayerStateService {
 
     /* ── internals ───────────────────────────────────────────────── */
 
-    /**
-     * Heal up to max HP; returns HP actually restored. Any positive heal to a dying/stable creature
-     * (0 HP, not dead) revives it — clearing {@code stable} and resetting both death-save counters.
-     * You cannot heal the dead: a {@code dead} creature is a no-op.
-     */
-    private int heal(PlayerRuntimeState s, int amount) {
-        if (s.isDead()) {
-            return 0;                                        // cannot heal the dead
-        }
-        int amt = Math.max(0, amount);
-        int before = s.getCurrentHp();
-        if (before == 0 && amt > 0) {                        // revive a downed creature
-            s.setStable(false);
-            s.setDeathSaveSuccesses(0);
-            s.setDeathSaveFailures(0);
-        }
-        s.setCurrentHp(Math.min(s.getMaxHp(), before + amt));
-        return s.getCurrentHp() - before;
-    }
-
-    /**
-     * Apply damage, absorbing temp HP first; HP floors at 0. Implements 5e dying rules:
-     * <ul>
-     *   <li>A no-op once the creature is {@code dead}.</li>
-     *   <li>Dropping a conscious creature to 0 HP makes it <em>dying</em> (resets death saves,
-     *       clears stable); if the leftover damage past 0 is ≥ max HP it is <em>massive damage</em>
-     *       → instant death.</li>
-     *   <li>Damage to a creature already at 0 HP inflicts a death-save failure (two on a critical),
-     *       and a stable creature reverts to dying. Damage ≥ max HP is instant death (the crit only
-     *       affects the failure count, not the instant-death threshold). Three failures → dead.</li>
-     * </ul>
-     */
-    private void damage(PlayerRuntimeState s, int amount, boolean critical) {
-        if (s.isDead()) {
-            return;                                          // already dead — nothing to do
-        }
-        int dmg = Math.max(0, amount);
-        int absorbed = Math.min(s.getTempHp(), dmg);
-        s.setTempHp(s.getTempHp() - absorbed);
-        int remaining = dmg - absorbed;
-        if (remaining <= 0) {
-            return;                                          // fully soaked by temp HP
-        }
-
-        if (s.getCurrentHp() > 0) {
-            int hpBefore = s.getCurrentHp();
-            int leftover = remaining - hpBefore;             // damage past 0
-            s.setCurrentHp(Math.max(0, hpBefore - remaining));
-            if (s.getCurrentHp() == 0) {                     // dropped to 0 → dying
-                s.setDeathSaveSuccesses(0);
-                s.setDeathSaveFailures(0);
-                s.setStable(false);
-                if (leftover >= s.getMaxHp()) {              // massive damage → instant death
-                    s.setDead(true);
-                }
-            }
-        } else {                                             // already at 0 HP (dying or stable)
-            boolean wasStable = s.isStable();
-            s.setStable(false);                              // a stable creature reverts to dying
-            if (remaining >= s.getMaxHp()) {                 // any damage ≥ max HP → instant death
-                s.setDead(true);
-                return;
-            }
-            if (wasStable) {                                 // re-downed: start a fresh dying state
-                s.setDeathSaveSuccesses(0);
-                s.setDeathSaveFailures(0);
-            }
-            s.setDeathSaveFailures(Math.min(3, s.getDeathSaveFailures() + (critical ? 2 : 1)));
-            if (s.getDeathSaveFailures() >= 3) {
-                s.setDead(true);
-            }
-        }
-    }
-
     private PlayerRuntimeState require(UUID playerId) {
         return repository.findById(playerId)
                 .orElseThrow(() -> new PlayerNotFoundException(
                         "No runtime state for player: " + playerId));
-    }
-
-    private ItemKind classify(String name) {
-        String n = name.toLowerCase(Locale.ROOT);
-        if (n.contains("potion")) return ItemKind.POTION;
-        if (n.contains("scroll")) return ItemKind.SCROLL;
-        if (n.contains("armor") || n.contains("mail") || n.contains("leather")
-                || n.contains("shield") || n.contains("plate")) return ItemKind.ARMOR;
-        if (n.contains("sword") || n.contains("axe") || n.contains("bow")
-                || n.contains("dagger") || n.contains("mace") || n.contains("staff")
-                || n.contains("club") || n.contains("spear") || n.contains("hammer")
-                || n.contains("crossbow") || n.contains("rapier") || n.contains("javelin")
-                || n.contains("warhammer") || n.contains("quarterstaff")) return ItemKind.WEAPON;
-        return ItemKind.GEAR;
     }
 
     private PlayerRuntimeStateDto toDto(PlayerRuntimeState s) {

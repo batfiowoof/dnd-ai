@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ItemKind, PlayerRuntimeState } from "@/types";
 import { Modal, Button, cn } from "@/components/ui";
+import { ITEM_KINDS, KIND_LABELS } from "@/lib/itemKinds";
 
 interface InventoryManagerProps {
   open: boolean;
@@ -13,24 +14,6 @@ interface InventoryManagerProps {
   onEquip: (name: string, equipped: boolean) => void;
   onAdd: (item: { name: string; qty: number; kind: ItemKind }) => void;
 }
-
-const ITEM_KINDS: ItemKind[] = [
-  "WEAPON",
-  "ARMOR",
-  "POTION",
-  "POTION_HEALING",
-  "SCROLL",
-  "GEAR",
-];
-
-const KIND_LABELS: Record<ItemKind, string> = {
-  WEAPON: "Weapon",
-  ARMOR: "Armor",
-  POTION: "Potion",
-  POTION_HEALING: "Healing Potion",
-  SCROLL: "Scroll",
-  GEAR: "Gear",
-};
 
 /**
  * In-session inventory editor: drop or equip existing items and add new ones.

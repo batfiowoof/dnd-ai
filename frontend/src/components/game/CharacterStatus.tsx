@@ -1,7 +1,7 @@
 "use client";
 
 import type { PlayerRuntimeState } from "@/types";
-import { cn } from "@/components/ui";
+import { cn, HpBar } from "@/components/ui";
 import { conditionMeta, conditionChipClasses } from "@/lib/conditions";
 import DeathSaveTrack, {
   StatusBadge,
@@ -13,12 +13,6 @@ interface CharacterStatusProps {
   characterName?: string;
 }
 
-function hpColor(ratio: number): string {
-  if (ratio > 0.5) return "bg-success";
-  if (ratio > 0.25) return "bg-gold";
-  return "bg-danger";
-}
-
 /**
  * Compact runtime panel for a player: HP bar (with temp HP), spell-slot pips per
  * level, inventory quick-list, and active conditions. Read-only; mutations happen
@@ -28,7 +22,6 @@ export default function CharacterStatus({
   state,
   characterName,
 }: CharacterStatusProps) {
-  const ratio = state.maxHp > 0 ? state.currentHp / state.maxHp : 0;
   const death = deriveDeathStatus(state);
 
   return (
@@ -70,15 +63,7 @@ export default function CharacterStatus({
             <span className="tabular text-[10px] text-text-muted">0 HP</span>
           </div>
         ) : (
-          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-light">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                hpColor(ratio)
-              )}
-              style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }}
-            />
-          </div>
+          <HpBar current={state.currentHp} max={state.maxHp} />
         )}
       </div>
 

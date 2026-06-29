@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { loadPrefs, savePrefs, type Prefs } from "@/lib/prefs";
+import { ACCOUNT_URL } from "@/lib/config";
 import { Panel, Button, Brand, Divider, cn } from "@/components/ui";
 
 export default function SettingsPage() {
@@ -14,10 +15,6 @@ export default function SettingsPage() {
     </RequireAuth>
   );
 }
-
-const KEYCLOAK_URL =
-  process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8180";
-const ACCOUNT_URL = `${KEYCLOAK_URL}/realms/dnd-ai/account`;
 
 function SettingsContent() {
   const router = useRouter();

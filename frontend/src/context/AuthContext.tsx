@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import Keycloak from "keycloak-js";
+import { KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID } from "@/lib/config";
 
 interface AuthContextType {
   username: string | null;
@@ -25,9 +26,9 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const keycloakConfig = {
-  url: process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8180",
-  realm: "dnd-ai",
-  clientId: "dnd-ai-frontend",
+  url: KEYCLOAK_URL,
+  realm: KEYCLOAK_REALM,
+  clientId: KEYCLOAK_CLIENT_ID,
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {

@@ -10,20 +10,14 @@ import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.CombatStateDto;
 import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
-import com.dungeon.master.model.dto.EnemyDto;
 import com.dungeon.master.model.dto.GridState;
-import com.dungeon.master.model.dto.HealthBand;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.MonsterAttack;
-import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.dto.RollSummary;
 import com.dungeon.master.model.dto.SpellEffect;
-import com.dungeon.master.model.dto.TerrainCell;
-import com.dungeon.master.model.dto.TerrainZone;
 import com.dungeon.master.model.dto.Token;
-import com.dungeon.master.model.enums.TerrainType;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
 import com.dungeon.master.model.entity.Enemy;
@@ -33,12 +27,8 @@ import com.dungeon.master.model.entity.TurnEvent;
 import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.CombatantKind;
 import com.dungeon.master.model.enums.Difficulty;
-import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.model.enums.PlayerRole;
 import com.dungeon.master.model.enums.RollMode;
-import com.dungeon.master.model.enums.SpellEffectType;
-import com.dungeon.master.model.enums.SpellResolution;
-import com.dungeon.master.model.enums.SpellTargetType;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
@@ -50,24 +40,25 @@ import com.dungeon.master.service.ai.EnemyTacticsService.EnemyTactic;
 import com.dungeon.master.service.ai.EnemyTacticsService.TargetInfo;
 import com.dungeon.master.service.ai.SceneGenerator;
 import com.dungeon.master.service.ai.SpellCatalog;
+import com.dungeon.master.service.game.combat.CombatBroadcaster;
+import com.dungeon.master.service.game.combat.CombatLookups;
+import com.dungeon.master.service.game.combat.CombatMapper;
+import com.dungeon.master.service.game.combat.CombatMath;
+import com.dungeon.master.service.game.combat.CombatSpellResolver;
+import com.dungeon.master.service.game.combat.CombatNarrationFormatter;
+import com.dungeon.master.service.game.combat.CombatTerrainService;
+import com.dungeon.master.service.game.combat.EnemyFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Combat overlay state machine. While an encounter is ACTIVE the narrative turn
@@ -89,19 +80,20 @@ public class CombatService {
     private final DiceService diceService;
     private final TurnService turnService;
     private final GameEventProducer eventProducer;
-    private final SimpMessagingTemplate messagingTemplate;
     private final MonsterCatalog monsterCatalog;
     private final SpellCatalog spellCatalog;
     private final GridService gridService;
     private final CheckModifierService checkModifierService;
     private final SceneGenerator sceneGenerator;
     private final EnemyTacticsService enemyTacticsService;
+    private final CombatMapper combatMapper;
+    private final CombatBroadcaster combatBroadcaster;
+    private final CombatTerrainService combatTerrainService;
+    private final CombatLookups combatLookups;
+    private final CombatSpellResolver combatSpellResolver;
 
     /** DC of the Wisdom (Medicine) check to stabilize a dying creature. */
     private static final int STABILIZE_DC = 10;
-
-    /** Monotonic per-action ordering for {@link CombatActionEvent} (client playback queue). */
-    private final AtomicLong actionSeq = new AtomicLong();
 
     /* ── reads ───────────────────────────────────────────────────── */
 
@@ -132,7 +124,8 @@ public class CombatService {
         for (String key : enemyKeys) {
             long sameType = enemyKeys.stream().filter(k -> k.equalsIgnoreCase(key)).count();
             int n = counts.merge(key.toLowerCase(), 1, Integer::sum);
-            enemies.add(buildEnemy(sessionId, key, sameType > 1 ? n : 0, difficulty));
+            enemies.add(EnemyFactory.buildEnemy(monsterCatalog, diceService, sessionId, key,
+                    sameType > 1 ? n : 0, difficulty));
         }
         enemyRepository.saveAll(enemies);
 
@@ -189,7 +182,7 @@ public class CombatService {
                 sessionId, enemies.size(), order.size());
 
         List<String> beat = new ArrayList<>();
-        beat.add("Combat begins! The party faces " + roster(enemies)
+        beat.add("Combat begins! The party faces " + CombatNarrationFormatter.roster(enemies)
                 + ". Initiative is rolled.");
         resolveUntilPlayerOrEnd(enc, beat);
         flushBeat(sessionId, anyPlayerId(sessionId), beat);
@@ -235,7 +228,7 @@ public class CombatService {
         boolean defeated = false;
         if (hit) {
             String dmgDice = damageDice(player);
-            DiceRollResult dmg = diceService.roll(atk.crit() ? critDouble(dmgDice) : dmgDice);
+            DiceRollResult dmg = diceService.roll(atk.crit() ? CombatMath.critDouble(dmgDice) : dmgDice);
             enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
             if (enemy.getCurrentHp() == 0) {
                 enemy.setAlive(false);
@@ -252,7 +245,7 @@ public class CombatService {
                         enemy.getCurrentHp(), enemy.getMaxHp(), defeated)));
 
         List<String> beat = new ArrayList<>();
-        beat.add(describeAttack(player.getCharacterName(), enemy.getName(), atk,
+        beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(), atk,
                 targetAc, hit, damageSummary,
                 enemy.getCurrentHp(), enemy.getMaxHp(), defeated));
         maybeAutoEndTurn(enc, player, beat);
@@ -275,7 +268,7 @@ public class CombatService {
                         result.healed(), result.state().currentHp(), result.state().maxHp())));
 
         List<String> beat = new ArrayList<>();
-        beat.add(describeItemUse(player.getCharacterName(), result));
+        beat.add(CombatNarrationFormatter.describeItemUse(player.getCharacterName(), result));
         maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
@@ -324,7 +317,8 @@ public class CombatService {
         // For an offensive AoE with a cast point on the grid, the server resolves which enemies
         // are caught in the template — those replace any client-sent targetIds. Falls back to
         // targetIds for single-target spells, no origin, or a no-grid encounter.
-        List<UUID> aoeIds = isOffensive(effect) ? aoeEnemyIds(enc, effect, originX, originY) : null;
+        List<UUID> aoeIds = combatSpellResolver.isOffensive(effect)
+                ? combatSpellResolver.aoeEnemyIds(enc, effect, originX, originY) : null;
         List<UUID> effectiveTargets = aoeIds != null ? aoeIds : targetIds;
 
         Character caster = character(player);
@@ -338,15 +332,18 @@ public class CombatService {
 
         String actionKind = switch (effect.effectType()) {
             case HEAL -> {
-                resolveHeal(sessionId, player, caster, effect, spellLevel, targetIds, results, beat);
+                combatSpellResolver.resolveHeal(sessionId, player, caster, effect, spellLevel,
+                        targetIds, results, beat);
                 yield "SPELL_HEAL";
             }
             case DAMAGE -> {
-                resolveSpellDamage(enc, sessionId, player, caster, effect, spellLevel, effectiveTargets, results, beat);
+                combatSpellResolver.resolveSpellDamage(enc, sessionId, player, caster, effect,
+                        spellLevel, effectiveTargets, results, beat);
                 yield "SPELL_DAMAGE";
             }
             default -> {
-                resolveSpellEffect(enc, sessionId, player, caster, effect, effectiveTargets, results, beat);
+                combatSpellResolver.resolveSpellEffect(enc, sessionId, player, caster, effect,
+                        effectiveTargets, results, beat);
                 yield "SPELL_EFFECT";
             }
         };
@@ -365,8 +362,9 @@ public class CombatService {
         }
 
         // Terrain spells (Entangle, Web, …) stamp difficult terrain over their area for the duration.
-        if (effect.hasTerrain()) {
-            stampTerrainZone(enc, effect, player, originX, originY);
+        if (effect.hasTerrain()
+                && combatTerrainService.stampTerrainZone(enc, effect, player, originX, originY)) {
+            encounterRepository.save(enc);
         }
 
         broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(),
@@ -604,7 +602,7 @@ public class CombatService {
                 expireEnemyConditions(enc, e, beat);          // timer + "save ends" at turn start
                 resetTurnFlags(enc, e.getId().toString());
                 if (ConditionRules.incapacitated(e.getConditions())) {
-                    beat.add(e.getName() + " is " + incapacitatingLabel(e.getConditions()) + " and can't act.");
+                    beat.add(e.getName() + " is " + CombatNarrationFormatter.incapacitatingLabel(e.getConditions()) + " and can't act.");
                     broadcastAction(enc, CombatantKind.ENEMY, e.getName(), "HOLD", "is incapacitated", List.of());
                     advanceIndex(enc);
                     continue;
@@ -636,7 +634,7 @@ public class CombatService {
             }
             List<ActiveCondition> pConds = playerConds(active.refId());
             if (ConditionRules.incapacitated(pConds)) {
-                beat.add(playerName(active.refId()) + " is " + incapacitatingLabel(pConds) + " and can't act.");
+                beat.add(playerName(active.refId()) + " is " + CombatNarrationFormatter.incapacitatingLabel(pConds) + " and can't act.");
                 broadcastAction(enc, CombatantKind.PLAYER, playerName(active.refId()),
                         "HOLD", "is incapacitated", List.of());
                 advanceIndex(enc);
@@ -706,7 +704,7 @@ public class CombatService {
         GridState grid = enc.getGridState();
         String refId = enemy.getId().toString();
         int budget = Math.max(0, ConditionRules.effectiveSpeed(enemy.getSpeed(), enemy.getConditions()));
-        int meleeReach = enemyReachFeet(enemy);
+        int meleeReach = CombatMath.enemyReachFeet(enemy);
         int bestRange = enemyBestRange(enemy);
         int ox = enemyTok.getX();
         int oy = enemyTok.getY();
@@ -725,7 +723,7 @@ public class CombatService {
         if (moved) {
             enemyTok.setX(dest.x());
             enemyTok.setY(dest.y());
-            beat.add(enemyMoveLine(enemy, intent, target.player().getCharacterName()));
+            beat.add(CombatNarrationFormatter.enemyMoveLine(enemy, intent, target.player().getCharacterName()));
             // A standalone MOVE event so the client animates the reposition before any attack.
             broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "MOVE", "moves", List.of());
         }
@@ -786,7 +784,7 @@ public class CombatService {
             int targetMax = target.state().maxHp();
             boolean defeated = false;
             if (hit) {
-                DiceRollResult dmg = rollExpr(crit ? critDouble(damageDice) : damageDice);
+                DiceRollResult dmg = rollExpr(crit ? CombatMath.critDouble(damageDice) : damageDice);
                 PlayerRuntimeStateDto updated =
                         playerStateService.applyHpDelta(victim.getId(), -dmg.total(), crit);
                 broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
@@ -800,7 +798,7 @@ public class CombatService {
 
             results.add(CombatActionEvent.Target.attack(CombatantKind.PLAYER, victim.getCharacterName(),
                     RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated));
-            beat.add(describeAttack(enemy.getName(), victim.getCharacterName(), atk,
+            beat.add(CombatNarrationFormatter.describeAttack(enemy.getName(), victim.getCharacterName(), atk,
                     targetAc, hit, damageSummary, targetHp, targetMax, defeated));
         }
 
@@ -877,16 +875,6 @@ public class CombatService {
         return out;
     }
 
-    /** One narration line for an enemy's intent-driven reposition. */
-    private String enemyMoveLine(Enemy enemy, EnemyIntent intent, String targetName) {
-        return switch (intent) {
-            case FLEE -> enemy.getName() + " retreats from the party.";
-            case KITE_RANGED -> enemy.getName() + " repositions to keep " + targetName + " at range.";
-            case HOLD -> enemy.getName() + " holds its ground.";
-            default -> enemy.getName() + " advances toward " + targetName + ".";
-        };
-    }
-
     private void advanceIndex(CombatEncounter enc) {
         int size = enc.getInitiativeOrder().size();
         if (size == 0) return;
@@ -914,188 +902,6 @@ public class CombatService {
         log.info("Combat ended: session={}, victory={}", enc.getSessionId(), victory);
     }
 
-    /* ── spell resolution ────────────────────────────────────────── */
-
-    private void resolveHeal(UUID sessionId, Player caster, Character casterChar, SpellEffect effect,
-                             int spellLevel, List<UUID> targetIds,
-                             List<CombatActionEvent.Target> results, List<String> beat) {
-        String dice = scaledNotation(effect.healDice(), effect, spellLevel, casterChar);
-        for (UUID pid : playerTargets(sessionId, targetIds, effect, caster)) {
-            PlayerRuntimeStateDto before = playerStateService.getState(pid);
-            int amount = rollExpr(dice).total();
-            PlayerRuntimeStateDto updated = playerStateService.applyHpDelta(pid, amount);
-            broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
-            int healed = updated.currentHp() - before.currentHp();
-            String name = playerName(pid);
-            results.add(CombatActionEvent.Target.heal(CombatantKind.PLAYER, name, healed,
-                    updated.currentHp(), updated.maxHp()));
-            beat.add(caster.getCharacterName() + "'s " + effect.name() + " restores " + healed
-                    + " HP to " + name + " (now " + updated.currentHp() + "/" + updated.maxHp() + ").");
-        }
-    }
-
-    private void resolveSpellDamage(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
-                                    SpellEffect effect, int spellLevel, List<UUID> targetIds,
-                                    List<CombatActionEvent.Target> results, List<String> beat) {
-        List<Enemy> targets = enemyTargets(sessionId, targetIds, effect);
-        String dice = scaledNotation(effect.damageDice(), effect, spellLevel, casterChar);
-        int dc = SpellcastingRules.spellSaveDc(casterChar);
-        int atkBonus = SpellcastingRules.spellAttackBonus(casterChar)
-                + ConditionRules.attackModifier(playerConds(caster.getId()));
-        int[] darts = distribute(Math.max(1, effect.projectiles()), targets.size());
-        Token casterTok = tokenFor(enc, caster.getId().toString());
-        for (int i = 0; i < targets.size(); i++) {
-            Enemy e = targets.get(i);
-            String label = caster.getCharacterName() + "'s " + effect.name();
-            switch (effect.resolution()) {
-                case SPELL_ATTACK -> {
-                    Token targetTok = tokenFor(enc, e.getId().toString());
-                    // Touch spells are melee spell attacks (matters for advantage vs a prone target);
-                    // ranged spell attacks are not. Auto-crit still never applies to spell attacks.
-                    RollMode mode = RollMode.combine(
-                            ConditionRules.attackMode(playerConds(caster.getId()), e.getConditions(),
-                                    effect.isMeleeRange()),
-                            targetTok != null && targetTok.isDodging()
-                                    ? RollMode.DISADVANTAGE : RollMode.NORMAL);
-                    DiceRollResult atk = rollAttack(atkBonus, mode);
-                    int targetAc = effectiveAc(e.getArmorClass(), casterTok, targetTok, enc.getGridState());
-                    boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
-                    RollSummary dmg = null;
-                    if (hit) {
-                        DiceRollResult d = rollExpr(atk.crit() ? critDouble(dice) : dice);
-                        applyEnemyDamage(e, d.total());
-                        dmg = RollSummary.of(d);
-                    }
-                    results.add(CombatActionEvent.Target.attack(CombatantKind.ENEMY, e.getName(),
-                            RollSummary.of(atk), targetAc, hit, dmg,
-                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
-                    beat.add(describeAttack(label, e.getName(), atk, targetAc, hit, dmg,
-                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
-                }
-                case SAVE -> {
-                    boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
-                    int saveMod = enemySaveMod(e, effect.saveAbility())
-                            + ConditionRules.saveModifier(e.getConditions());
-                    DiceRollResult save = diceService.roll(notation(saveMod),
-                            ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
-                    boolean saved = !autoFail && save.total() >= dc;
-                    DiceRollResult d = rollExpr(dice);
-                    int dealt = saved ? (effect.halfOnSave() ? d.total() / 2 : 0) : d.total();
-                    applyEnemyDamage(e, dealt);
-                    // A damage spell can also impose a condition on a failed save (e.g. Web → restrained).
-                    if (!saved && effect.condition() != null && e.isAlive()) {
-                        applyEnemyCondition(enc, e, effect, caster, dc);
-                    }
-                    results.add(CombatActionEvent.Target.save(CombatantKind.ENEMY, e.getName(),
-                            RollSummary.of(save), dc, saved, RollSummary.of(d),
-                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
-                    beat.add(label + (saved ? " — " + e.getName() + " saves (DC " + dc + ") for "
-                            : " hits " + e.getName() + " (failed DC " + dc + ") for ") + dealt
-                            + " damage (" + e.getName() + " " + e.getCurrentHp() + "/" + e.getMaxHp() + ").");
-                }
-                default -> { // AUTO — auto-hit; projectiles (darts) distributed across targets
-                    int hits = darts[i];
-                    if (hits <= 0) continue;  // this target got no darts
-                    int total = 0;
-                    List<Integer> faces = new ArrayList<>();
-                    for (int h = 0; h < hits; h++) {
-                        DiceRollResult d = rollExpr(dice);
-                        total += d.total();
-                        faces.addAll(d.faces());
-                    }
-                    applyEnemyDamage(e, total);
-                    RollSummary dmg = new RollSummary(hits > 1 ? hits + "×" + dice : dice,
-                            faces, total, false, false);
-                    results.add(CombatActionEvent.Target.autoDamage(CombatantKind.ENEMY, e.getName(),
-                            dmg, e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
-                    beat.add(label + " strikes " + e.getName() + " for " + total + " damage ("
-                            + e.getName() + " " + e.getCurrentHp() + "/" + e.getMaxHp() + ").");
-                }
-            }
-        }
-    }
-
-    /** BUFF / DEBUFF / CONTROL / UTILITY — tag a structured condition (save-gated for enemies) and narrate. */
-    private void resolveSpellEffect(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
-                                    SpellEffect effect, List<UUID> targetIds,
-                                    List<CombatActionEvent.Target> results, List<String> beat) {
-        String cond = effect.condition();
-        boolean offensive = effect.targetType() == SpellTargetType.ENEMY
-                || (effect.targetType() == SpellTargetType.AREA
-                    && effect.effectType() != SpellEffectType.BUFF);
-        if (offensive) {
-            int dc = SpellcastingRules.spellSaveDc(casterChar);
-            for (Enemy e : enemyTargets(sessionId, targetIds, effect)) {
-                boolean applied = true;
-                RollSummary saveSummary = null;
-                if (effect.resolution() == SpellResolution.SAVE) {
-                    boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
-                    int saveMod = enemySaveMod(e, effect.saveAbility())
-                            + ConditionRules.saveModifier(e.getConditions());
-                    DiceRollResult save = diceService.roll(notation(saveMod),
-                            ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
-                    applied = autoFail || save.total() < dc;
-                    saveSummary = RollSummary.of(save);
-                }
-                if (applied && cond != null) {
-                    applyEnemyCondition(enc, e, effect, caster, dc);
-                }
-                results.add(CombatActionEvent.Target.of(CombatantKind.ENEMY, e.getName(),
-                        null, null, null, saveSummary, saveSummary == null ? null : dc,
-                        saveSummary == null ? null : !applied, null, null,
-                        applied ? cond : null, e.getCurrentHp(), e.getMaxHp(), false));
-                beat.add(caster.getCharacterName() + "'s " + effect.name()
-                        + (applied && cond != null ? " leaves " + e.getName() + " " + cond + "."
-                        : " has no effect on " + e.getName() + "."));
-            }
-        } else {
-            for (UUID pid : playerTargets(sessionId, targetIds, effect, caster)) {
-                if (cond != null) {
-                    ActiveCondition c = ActiveCondition.fromSpell(cond, caster.getId(), effect.name(),
-                            effect.concentration());
-                    c = effect.concentration() ? c : c.expiringAt(enc.getRound() + 10);
-                    broadcast(sessionId, PlayerStateEvent.of(sessionId,
-                            playerStateService.applyCondition(pid, c)));
-                }
-                // Temp-HP buffs (False Life, Heroism): roll and grant (doesn't stack — take higher).
-                if (effect.tempHpDice() != null) {
-                    int amount = rollExpr(effect.tempHpDice()).total();
-                    broadcast(sessionId, PlayerStateEvent.of(sessionId,
-                            playerStateService.applyTempHp(pid, amount)));
-                }
-                PlayerRuntimeStateDto s = playerStateService.getState(pid);
-                results.add(CombatActionEvent.Target.effect(CombatantKind.PLAYER, playerName(pid),
-                        cond, s.currentHp(), s.maxHp()));
-                beat.add(caster.getCharacterName() + "'s " + effect.name() + " bolsters "
-                        + playerName(pid) + ".");
-            }
-        }
-    }
-
-    /**
-     * Build and attach a structured condition to an enemy (replacing any same-named one).
-     * Concentration spells stay until the caster's concentration drops; those resolved by a
-     * save get a "save ends" clause re-rolled at the enemy's turn start. Non-concentration
-     * conditions lapse after ~1 minute (10 rounds).
-     */
-    private void applyEnemyCondition(CombatEncounter enc, Enemy e, SpellEffect effect, Player caster, int dc) {
-        String cond = effect.condition();
-        if (cond == null) {
-            return;
-        }
-        ActiveCondition c = ActiveCondition.fromSpell(cond, caster.getId(), effect.name(), effect.concentration());
-        if (effect.concentration()) {
-            if (effect.resolution() == SpellResolution.SAVE && effect.saveAbility() != null) {
-                c = c.savingEnds(effect.saveAbility(), dc);
-            }
-        } else {
-            c = c.expiringAt(enc.getRound() + 10);
-        }
-        e.getConditions().removeIf(x -> x.name() != null && x.name().equalsIgnoreCase(cond));
-        e.getConditions().add(c);
-        enemyRepository.save(e);
-    }
-
     /**
      * End a caster's concentration: clear their concentration flag and drop every
      * concentration-flagged condition they applied to enemies and players, broadcasting the
@@ -1115,7 +921,9 @@ public class CombatService {
             broadcast(sessionId, PlayerStateEvent.of(sessionId, dto));
         }
         // Clear the caster's concentration terrain (e.g. Entangle) and refresh the grid.
-        if (removeTerrainZones(enc, z -> z.concentration() && casterId.equals(z.sourceCasterId()))) {
+        if (combatTerrainService.removeTerrainZones(enc,
+                z -> z.concentration() && casterId.equals(z.sourceCasterId()))) {
+            encounterRepository.save(enc);
             broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
         }
         if ((any || !changed.isEmpty()) && beat != null) {
@@ -1138,7 +946,7 @@ public class CombatService {
             return;
         }
         int dc = Math.max(10, damage / 2);
-        int conMod = abilityMod(updated, "CON");
+        int conMod = CombatMath.abilityMod(updated, "CON");
         DiceRollResult save = diceService.roll(notation(conMod));
         broadcast(enc.getSessionId(), DiceRollEvent.of(enc.getSessionId(), victimId,
                 playerName(victimId), "Concentration save (DC " + dc + ")", save));
@@ -1149,12 +957,6 @@ public class CombatService {
             }
             breakConcentration(enc, victimId, beat);
         }
-    }
-
-    /** Ability modifier from a player's runtime ability scores (defaults to 0 if absent). */
-    private static int abilityMod(PlayerRuntimeStateDto state, String ability) {
-        Integer score = state.abilities() == null ? null : state.abilities().get(ability);
-        return score == null ? 0 : Math.floorDiv(score - 10, 2);
     }
 
     /**
@@ -1178,7 +980,7 @@ public class CombatService {
         List<ActiveCondition> shaken = new ArrayList<>();
         for (ActiveCondition c : conds) {
             if (c.saveAbility() != null && c.saveDc() != null) {
-                int mod = enemySaveMod(e, c.saveAbility()) + ConditionRules.saveModifier(conds);
+                int mod = CombatMath.enemySaveMod(e, c.saveAbility()) + ConditionRules.saveModifier(conds);
                 DiceRollResult save = diceService.roll(notation(mod),
                         ConditionRules.saveMode(conds, c.saveAbility()));
                 if (save.total() >= c.saveDc()) {
@@ -1196,244 +998,25 @@ public class CombatService {
         }
     }
 
-    /** First incapacitating condition name on the list, for the "X is <…> and can't act" beat. */
-    private static String incapacitatingLabel(List<ActiveCondition> conds) {
-        for (ActiveCondition c : conds) {
-            if (ConditionRules.incapacitated(List.of(c))) {
-                return c.name();
-            }
-        }
-        return "incapacitated";
-    }
-
-    /* ── spell terrain zones (Entangle/Web/Grease/… create difficult terrain) ────── */
-
-    /**
-     * Stamp a terrain spell's area onto the grid for its duration: add a terrain cell for each
-     * template square not already terrain, and record the zone so its cells can be cleared when
-     * the spell ends (concentration → null expiry; otherwise ~1 minute / 10 rounds).
-     */
-    private void stampTerrainZone(CombatEncounter enc, SpellEffect effect, Player caster,
-                                  Integer originX, Integer originY) {
-        GridState grid = enc.getGridState();
-        if (grid == null || originX == null || originY == null
-                || effect.aoeShape() == null || effect.aoeSize() <= 0) {
-            return;
-        }
-        TerrainType type;
-        try {
-            type = TerrainType.valueOf(effect.terrain().toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            return;
-        }
-        if (grid.getZones() == null) {
-            grid.setZones(new ArrayList<>());          // legacy encounter saved before the field existed
-        }
-        List<GridService.Square> cells =
-                gridService.aoeCells(originX, originY, effect.aoeShape(), effect.aoeSize());
-        List<TerrainCell> owned = new ArrayList<>();
-        for (GridService.Square sq : cells) {
-            if (sq.x() < 0 || sq.y() < 0 || sq.x() >= grid.getWidth() || sq.y() >= grid.getHeight()) {
-                continue;
-            }
-            boolean hasTerrain = grid.getTerrain().stream()
-                    .anyMatch(t -> t.x() == sq.x() && t.y() == sq.y());
-            boolean coveredByZone = zoneCovers(grid, sq.x(), sq.y());
-            if (hasTerrain && !coveredByZone) {
-                continue;                              // base map terrain — leave it, don't own it
-            }
-            if (!hasTerrain) {
-                grid.getTerrain().add(new TerrainCell(sq.x(), sq.y(), type));
-            }
-            // Own this cell (shared with another zone if it already covered it) so overlap is tracked.
-            owned.add(new TerrainCell(sq.x(), sq.y(), type));
-        }
-        if (owned.isEmpty()) {
-            return;
-        }
-        Integer expires = effect.concentration() ? null : enc.getRound() + 10;
-        grid.getZones().add(new TerrainZone(type, owned, caster.getId(), effect.name(),
-                effect.concentration(), expires));
-        encounterRepository.save(enc);
-    }
-
-    /** True when some active terrain zone covers (x,y). */
-    private static boolean zoneCovers(GridState grid, int x, int y) {
-        if (grid.getZones() == null) {
-            return false;
-        }
-        for (TerrainZone z : grid.getZones()) {
-            for (TerrainCell c : z.cells()) {
-                if (c.x() == x && c.y() == y) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /** Remove the matching terrain zones, clearing each owned cell unless another zone still covers it. */
-    private boolean removeTerrainZones(CombatEncounter enc, java.util.function.Predicate<TerrainZone> match) {
-        GridState grid = enc.getGridState();
-        if (grid == null || grid.getZones() == null || grid.getZones().isEmpty()) {
-            return false;
-        }
-        List<TerrainZone> removed = new ArrayList<>();
-        grid.getZones().removeIf(z -> {
-            if (match.test(z)) {
-                removed.add(z);
-                return true;
-            }
-            return false;
-        });
-        if (removed.isEmpty()) {
-            return false;
-        }
-        // grid.getZones() now holds only the survivors; only clear a cell no survivor still covers.
-        for (TerrainZone z : removed) {
-            for (TerrainCell cell : z.cells()) {
-                if (!zoneCovers(grid, cell.x(), cell.y())) {
-                    grid.getTerrain().removeIf(t -> t.x() == cell.x() && t.y() == cell.y()
-                            && t.type() == z.type());
-                }
-            }
-        }
-        encounterRepository.save(enc);
-        return true;
-    }
-
-    /** At turn start, clear timer-expired terrain zones and broadcast the refreshed grid. */
+    /** At turn start, clear timer-expired terrain zones (persist + broadcast the refreshed grid). */
     private void expireTerrainZones(CombatEncounter enc) {
         int round = enc.getRound();
-        if (removeTerrainZones(enc, z -> z.expiresAtRound() != null && round > z.expiresAtRound())) {
+        if (combatTerrainService.removeTerrainZones(enc,
+                z -> z.expiresAtRound() != null && round > z.expiresAtRound())) {
+            encounterRepository.save(enc);
             broadcast(enc.getSessionId(), CombatLifecycleEvent.turn(enc.getSessionId(), toStateDto(enc)));
         }
     }
 
     /* ── spell helpers ───────────────────────────────────────────── */
 
-    private static final Pattern DICE = Pattern.compile("(\\d*)d(\\d+)([+-]\\d+)?",
-            Pattern.CASE_INSENSITIVE);
-
-    /**
-     * Combine a base dice expression with the spell's slot/cantrip scaling and (when the
-     * spell adds it) the caster's spellcasting modifier into a single rollable notation.
-     * Scaling dice are folded into the count only when their faces match the base; an
-     * unparseable expression is returned unchanged.
-     */
-    private String scaledNotation(String baseDice, SpellEffect effect, int spellLevel, Character caster) {
-        if (baseDice == null || baseDice.isBlank()) return "0";
-        Matcher m = DICE.matcher(baseDice.trim());
-        if (!m.matches()) return baseDice;
-        int count = m.group(1).isEmpty() ? 1 : Integer.parseInt(m.group(1));
-        int sides = Integer.parseInt(m.group(2));
-        int mod = m.group(3) == null ? 0 : Integer.parseInt(m.group(3));
-
-        if (effect.perSlotAbove() != null && spellLevel > effect.level()) {
-            Matcher s = DICE.matcher(effect.perSlotAbove());
-            if (s.matches() && Integer.parseInt(s.group(2)) == sides) {
-                int per = s.group(1).isEmpty() ? 1 : Integer.parseInt(s.group(1));
-                count += per * (spellLevel - effect.level());
-            }
-        }
-        if (effect.cantripDie() != null && effect.level() == 0) {
-            int lvl = caster == null ? 1 : caster.getLevel();
-            int tier = (lvl >= 5 ? 1 : 0) + (lvl >= 11 ? 1 : 0) + (lvl >= 17 ? 1 : 0);
-            Matcher cnt = DICE.matcher(effect.cantripDie());
-            if (cnt.matches() && Integer.parseInt(cnt.group(2)) == sides) {
-                int per = cnt.group(1).isEmpty() ? 1 : Integer.parseInt(cnt.group(1));
-                count += per * tier;
-            }
-        }
-        if (effect.addCastingMod()) mod += SpellcastingRules.castingMod(caster);
-        return count + "d" + sides + (mod > 0 ? "+" + mod : mod < 0 ? String.valueOf(mod) : "");
-    }
-
     /** Roll a damage/heal expression that may be standard dice ("8d6+3") or a flat number ("1"). */
     private DiceRollResult rollExpr(String expr) {
-        if (expr == null || expr.isBlank()) return constant(0);
-        String e = expr.trim();
-        if (e.matches("\\d+")) return constant(Integer.parseInt(e));
-        if (DICE.matcher(e).matches()) return diceService.roll(e);
-        return constant(0);
-    }
-
-    private static DiceRollResult constant(int n) {
-        return new DiceRollResult(String.valueOf(n), 0, 0, n, RollMode.NORMAL,
-                List.of(n), null, n, false, false);
-    }
-
-    /** 5E crit: double the number of dice, keep the flat modifier ("1d8+3" -> "2d8+3"). */
-    private static String critDouble(String notation) {
-        if (notation == null) return null;
-        Matcher m = DICE.matcher(notation.trim());
-        if (!m.matches()) return notation;   // flat constants / unparseable left unchanged
-        int count = m.group(1).isEmpty() ? 1 : Integer.parseInt(m.group(1));
-        return (count * 2) + "d" + m.group(2) + (m.group(3) == null ? "" : m.group(3));
-    }
-
-    private void applyEnemyDamage(Enemy e, int dmg) {
-        if (dmg <= 0) return;
-        e.setCurrentHp(Math.max(0, e.getCurrentHp() - dmg));
-        if (e.getCurrentHp() == 0) e.setAlive(false);
-        enemyRepository.save(e);
-    }
-
-    /** An enemy's saving-throw modifier for an ability (ability mod; DEX falls back to dexMod). */
-    private int enemySaveMod(Enemy e, String ability) {
-        if (ability == null) return e.getDexMod();
-        Integer score = e.getAbilities() == null ? null : e.getAbilities().get(ability.toUpperCase());
-        if (score != null) return Math.floorDiv(score - 10, 2);
-        return "DEX".equalsIgnoreCase(ability) ? e.getDexMod() : 0;
-    }
-
-    /** Spread {@code n} darts/rays across {@code k} targets as evenly as possible. */
-    private static int[] distribute(int n, int k) {
-        if (k <= 0) return new int[0];
-        int[] out = new int[k];
-        for (int i = 0; i < k; i++) out[i] = n / k + (i < n % k ? 1 : 0);
-        return out;
-    }
-
-    private List<Enemy> enemyTargets(UUID sessionId, List<UUID> ids, SpellEffect effect) {
-        List<Enemy> alive = enemyRepository.findBySessionId(sessionId).stream()
-                .filter(Enemy::isAlive).toList();
-        List<Enemy> chosen = new ArrayList<>();
-        if (ids != null) {
-            for (UUID id : ids) {
-                alive.stream().filter(e -> e.getId().equals(id)).findFirst().ifPresent(chosen::add);
-            }
-        }
-        // Fall back to the first enemy ONLY when no target list was given (null = legacy
-        // "unspecified"). A non-null but EMPTY list is an authoritative result — e.g. an AoE that
-        // caught nobody — and must fizzle rather than snap onto an enemy outside the template.
-        if (ids == null && chosen.isEmpty() && !alive.isEmpty()) chosen.add(alive.get(0));
-        Integer max = effect.maxTargets();
-        int cap = max == null ? chosen.size() : Math.min(max, chosen.size());
-        return new ArrayList<>(chosen.subList(0, Math.max(0, cap)));
-    }
-
-    private List<UUID> playerTargets(UUID sessionId, List<UUID> ids, SpellEffect effect, Player caster) {
-        if (effect.targetType() == SpellTargetType.SELF) {
-            return List.of(caster.getId());
-        }
-        // Any player in the session is a valid heal/buff target — INCLUDING downed (0 HP)
-        // allies, since healing a creature at 0 HP is exactly how you revive it in 5e.
-        Set<UUID> valid = playerStateService.getSessionStates(sessionId).stream()
-                .map(PlayerRuntimeStateDto::playerId)
-                .collect(Collectors.toSet());
-        List<UUID> chosen = new ArrayList<>();
-        if (ids != null) {
-            for (UUID id : ids) if (valid.contains(id)) chosen.add(id);
-        }
-        if (chosen.isEmpty()) chosen.add(caster.getId());
-        Integer max = effect.maxTargets();
-        int cap = max == null ? chosen.size() : Math.min(max, chosen.size());
-        return new ArrayList<>(chosen.subList(0, Math.max(0, cap)));
+        return CombatMath.rollExpr(diceService, expr);
     }
 
     private String playerName(UUID playerId) {
-        return playerRepository.findById(playerId).map(Player::getCharacterName).orElse("an ally");
+        return combatLookups.playerName(playerId);
     }
 
     private static boolean containsIgnoreCase(List<String> list, String value) {
@@ -1443,9 +1026,7 @@ public class CombatService {
 
     private void broadcastAction(CombatEncounter enc, CombatantKind actorKind, String actorName,
                                  String actionKind, String label, List<CombatActionEvent.Target> targets) {
-        broadcast(enc.getSessionId(), new CombatActionEvent(
-                CombatActionEvent.TYPE, enc.getSessionId(), actionSeq.incrementAndGet(),
-                actorKind, actorName, actionKind, label, targets, toStateDto(enc)));
+        combatBroadcaster.broadcastAction(enc, actorKind, actorName, actionKind, label, targets);
     }
 
     /* ── target selection / predicates ───────────────────────────── */
@@ -1520,26 +1101,8 @@ public class CombatService {
         broadcast(sessionId, DiceRollEvent.of(sessionId, pid, active.name(), "Death Saving Throw", roll));
         PlayerStateService.DeathSaveResult result = playerStateService.recordDeathSave(pid, roll);
         broadcast(sessionId, PlayerStateEvent.of(sessionId, result.state()));
-        beat.add(describeDeathSave(active.name(), roll, result));
+        beat.add(CombatNarrationFormatter.describeDeathSave(active.name(), roll, result));
         return result.outcome();
-    }
-
-    /** One narration line for a death save, e.g. "Aria steadies — death save 14: success (2/3)." */
-    private String describeDeathSave(String name, DiceRollResult roll,
-                                     PlayerStateService.DeathSaveResult result) {
-        PlayerRuntimeStateDto s = result.state();
-        return switch (result.outcome()) {
-            case REVIVED -> name + " gasps back to life — death save " + roll.total()
-                    + " (a natural 20!), conscious again at 1 HP.";
-            case STABILIZED -> name + " stabilizes — death save " + roll.total()
-                    + ": success (" + s.deathSaveSuccesses() + "/3), now holding on at 0 HP.";
-            case DIED -> name + " slips away — death save " + roll.total()
-                    + ": failure (" + s.deathSaveFailures() + "/3).";
-            case SUCCESS -> name + " steadies — death save " + roll.total()
-                    + ": success (" + s.deathSaveSuccesses() + "/3).";
-            case FAILURE -> name + " falters — death save " + roll.total()
-                    + ": failure (" + s.deathSaveFailures() + "/3).";
-        };
     }
 
     /* ── validation ──────────────────────────────────────────────── */
@@ -1561,52 +1124,9 @@ public class CombatService {
 
     /* ── grid / spatial helpers ──────────────────────────────────── */
 
-    /** Whether a spell selects enemies (matches {@link #resolveSpellEffect}'s offensive test, plus DAMAGE). */
-    private boolean isOffensive(SpellEffect effect) {
-        return effect.effectType() == SpellEffectType.DAMAGE
-                || effect.targetType() == SpellTargetType.ENEMY
-                || (effect.targetType() == SpellTargetType.AREA
-                    && effect.effectType() != SpellEffectType.BUFF);
-    }
-
-    /**
-     * For an area-of-effect spell with a grid cast point, the ids of every alive enemy whose
-     * token falls inside the resolved template. Returns {@code null} when the spell is not an
-     * AoE, no origin was supplied, or the encounter has no grid — signalling the caller to keep
-     * the client-sent targetIds. A non-null (possibly empty) list overrides those targetIds.
-     */
-    private List<UUID> aoeEnemyIds(CombatEncounter enc, SpellEffect effect,
-                                   Integer originX, Integer originY) {
-        GridState grid = enc.getGridState();
-        if (effect.aoeShape() == null || originX == null || originY == null
-                || grid == null || grid.getTokens() == null) {
-            return null;
-        }
-        List<GridService.Square> cells =
-                gridService.aoeCells(originX, originY, effect.aoeShape(), effect.aoeSize());
-        List<UUID> ids = new ArrayList<>();
-        if (cells.isEmpty()) {
-            return ids;
-        }
-        for (Enemy e : enemyRepository.findBySessionId(enc.getSessionId())) {
-            if (!e.isAlive()) {
-                continue;
-            }
-            Token t = grid.getTokens().get(e.getId().toString());
-            if (t != null && cells.contains(new GridService.Square(t.getX(), t.getY()))) {
-                ids.add(e.getId());
-            }
-        }
-        return ids;
-    }
-
     /** A combatant's token by refId (player/enemy UUID string), or {@code null} on a legacy/no-grid encounter. */
     private Token tokenFor(CombatEncounter enc, String refId) {
-        GridState g = enc.getGridState();
-        if (g == null || g.getTokens() == null) {
-            return null;
-        }
-        return g.getTokens().get(refId);
+        return CombatMath.tokenFor(enc.getGridState(), refId);
     }
 
     /** Like {@link #tokenFor} but throws when the combatant has no grid position. */
@@ -1683,65 +1203,34 @@ public class CombatService {
      * base AC unchanged when either token or the grid is absent (legacy encounters).
      */
     private int effectiveAc(int baseAc, Token attacker, Token defender, GridState grid) {
-        if (attacker == null || defender == null || grid == null) {
-            return baseAc;
-        }
-        return baseAc + gridService.coverBonus(grid,
-                attacker.getX(), attacker.getY(), defender.getX(), defender.getY());
-    }
-
-    /**
-     * Roll a 1d20 attack with the given bonus, applying disadvantage (e.g. against a
-     * Dodging target). The NORMAL path uses the single-arg roll so existing callers and
-     * tests see the same notation.
-     */
-    private DiceRollResult rollAttack(int bonus, boolean disadvantage) {
-        return rollAttack(bonus, disadvantage ? RollMode.DISADVANTAGE : RollMode.NORMAL);
+        return CombatMath.effectiveAc(gridService, baseAc, attacker, defender, grid);
     }
 
     /** Roll a 1d20 attack with the given bonus and an explicit advantage/disadvantage mode. */
     private DiceRollResult rollAttack(int bonus, RollMode mode) {
-        return mode == RollMode.NORMAL
-                ? diceService.roll(notation(bonus))
-                : diceService.roll(notation(bonus), mode);
+        return CombatMath.rollAttack(diceService, bonus, mode);
     }
 
     /* ── condition-aware attack/melee helpers ────────────────────── */
 
     /** A player's structured conditions (empty when none). */
     private List<ActiveCondition> playerConds(UUID playerId) {
-        try {
-            return playerStateService.conditions(playerId);
-        } catch (RuntimeException ex) {
-            return List.of();
-        }
+        return combatLookups.playerConds(playerId);
     }
 
     /** True when two tokens are within 5 ft (one square); assumes melee when there is no grid. */
     private boolean isMelee(Token a, Token b, GridState grid) {
-        if (grid == null || a == null || b == null) {
-            return true;
-        }
-        return gridService.distanceFeet(a.getX(), a.getY(), b.getX(), b.getY())
-                <= GridService.FEET_PER_SQUARE;
+        return CombatMath.isMelee(gridService, a, b, grid);
     }
 
     /** Net attack roll mode for a player attacking an enemy (conditions + the target Dodging). */
     private RollMode playerVsEnemyMode(Player attacker, Enemy defender, Token defenderTok, boolean melee) {
-        RollMode cond = ConditionRules.attackMode(playerConds(attacker.getId()),
-                defender.getConditions(), melee);
-        RollMode dodge = defenderTok != null && defenderTok.isDodging()
-                ? RollMode.DISADVANTAGE : RollMode.NORMAL;
-        return RollMode.combine(cond, dodge);
+        return CombatMath.playerVsEnemyMode(playerConds(attacker.getId()), defender, defenderTok, melee);
     }
 
     /** Net attack roll mode for an enemy attacking a player (conditions + the target Dodging). */
     private RollMode enemyVsPlayerMode(Enemy attacker, UUID victimId, Token victimTok, boolean melee) {
-        RollMode cond = ConditionRules.attackMode(attacker.getConditions(),
-                playerConds(victimId), melee);
-        RollMode dodge = victimTok != null && victimTok.isDodging()
-                ? RollMode.DISADVANTAGE : RollMode.NORMAL;
-        return RollMode.combine(cond, dodge);
+        return CombatMath.enemyVsPlayerMode(attacker, playerConds(victimId), victimTok, melee);
     }
 
     /** Reset a combatant's per-turn action economy as their turn begins (Dodge from last round expires here). */
@@ -1777,23 +1266,12 @@ public class CombatService {
             if (et == null) {
                 continue;
             }
-            int reach = enemyReachFeet(e);
+            int reach = CombatMath.enemyReachFeet(e);
             if (withinReach(et.getX(), et.getY(), moverX, moverY, reach)) {
                 threats.add(new OaThreat(e.getId(), e.getId().toString(), et.getX(), et.getY(), reach));
             }
         }
         return threats;
-    }
-
-    /** Max melee reach (ft) across the enemy's attacks, default 5. */
-    private int enemyReachFeet(Enemy e) {
-        int reach = GridService.FEET_PER_SQUARE; // 5 ft default
-        for (MonsterAttack a : e.getAttacks()) {
-            if ("MELEE".equalsIgnoreCase(a.kind()) && a.reach() != null) {
-                reach = Math.max(reach, a.reach());
-            }
-        }
-        return reach;
     }
 
     private boolean withinReach(int ax, int ay, int bx, int by, int reachFeet) {
@@ -1845,56 +1323,8 @@ public class CombatService {
         broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "makes an opportunity attack",
                 List.of(CombatActionEvent.Target.attack(CombatantKind.PLAYER, victim.getCharacterName(),
                         RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated)));
-        beat.add(describeAttack(enemy.getName(), victim.getCharacterName(), atk, targetAc, hit,
+        beat.add(CombatNarrationFormatter.describeAttack(enemy.getName(), victim.getCharacterName(), atk, targetAc, hit,
                 damageSummary, targetHp, targetMax, defeated));
-    }
-
-    /* ── enemy construction ──────────────────────────────────────── */
-
-    /**
-     * Build one enemy from the {@link MonsterCatalog} stat block (preferred), falling
-     * back to the legacy hardcoded {@link Bestiary} when the key has no catalog entry.
-     * {@code index} numbers duplicates ("Goblin 2"); 0 means it is the only one of its type.
-     */
-    private Enemy buildEnemy(UUID sessionId, String key, int index, Difficulty difficulty) {
-        int atkDelta = attackBonusDelta(difficulty);
-        int d20 = diceService.roll("1d20").total();
-
-        Optional<MonsterTemplate> tmpl = monsterCatalog.get(key);
-        if (tmpl.isPresent()) {
-            MonsterTemplate t = tmpl.get();
-            String name = index > 0 ? t.name() + " " + index : t.name();
-            int hp = scaleHp(t.hp(), difficulty);
-            List<MonsterAttack> scaled = new ArrayList<>();
-            for (MonsterAttack a : t.attacks()) {
-                scaled.add(new MonsterAttack(a.name(), a.kind(), a.toHit() + atkDelta,
-                        a.reach(), a.range(), a.damageDice(), a.damageType()));
-            }
-            MonsterAttack primary = scaled.isEmpty() ? null : scaled.get(0);
-            int perTurn = t.multiattack() != null ? Math.max(1, t.multiattack().count()) : 1;
-            return Enemy.builder()
-                    .id(UUID.randomUUID()).sessionId(sessionId).name(name)
-                    .maxHp(hp).currentHp(hp).armorClass(t.ac())
-                    .attackBonus(primary != null ? primary.toHit() : 2 + atkDelta)
-                    .damageDice(primary != null ? primary.damageDice() : "1d6")
-                    .attacks(scaled).attacksPerTurn(perTurn)
-                    .abilities(t.abilities() != null ? new LinkedHashMap<>(t.abilities())
-                            : new LinkedHashMap<>())
-                    .speed(t.speed() != null ? t.speed() : 30)
-                    .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
-                    .build();
-        }
-
-        Bestiary.Template t = Bestiary.get(key);
-        String name = index > 0 ? t.name() + " " + index : t.name();
-        int hp = scaleHp(t.hp(), difficulty);
-        return Enemy.builder()
-                .id(UUID.randomUUID()).sessionId(sessionId).name(name)
-                .maxHp(hp).currentHp(hp).armorClass(t.armorClass())
-                .attackBonus(t.attackBonus() + atkDelta).damageDice(t.damageDice())
-                .attacksPerTurn(1)
-                .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
-                .build();
     }
 
     /* ── stat helpers (load from the Character template) ─────────── */
@@ -1905,163 +1335,50 @@ public class CombatService {
     }
 
     private int dexMod(Player player) {
-        Character c = character(player);
-        return c == null ? 0 : Math.floorDiv(c.getDexterity() - 10, 2);
-    }
-
-    /** Scale an enemy's base HP by difficulty (EASY 0.75×, NORMAL 1×, DEADLY 1.4×), min 1. */
-    private int scaleHp(int baseHp, Difficulty difficulty) {
-        double factor = switch (difficulty) {
-            case EASY -> 0.75;
-            case NORMAL -> 1.0;
-            case DEADLY -> 1.4;
-        };
-        return Math.max(1, (int) Math.round(baseHp * factor));
-    }
-
-    /** Difficulty adjustment to enemy attack bonus (EASY −1, NORMAL 0, DEADLY +2). */
-    private int attackBonusDelta(Difficulty difficulty) {
-        return switch (difficulty) {
-            case EASY -> -1;
-            case NORMAL -> 0;
-            case DEADLY -> 2;
-        };
+        return CombatMath.dexMod(character(player));
     }
 
     private int armorClass(Player player) {
-        Character c = character(player);
-        int base = c == null ? 10 : c.getArmorClass();
-        int dex = c == null ? 0 : Math.floorDiv(c.getDexterity() - 10, 2);
-        // Fold in AC-buff conditions (Mage Armor / Shield of Faith / Barkskin), derived live.
-        return ConditionRules.acAdjust(playerConds(player.getId()), base, dex);
+        return CombatMath.armorClass(character(player), playerConds(player.getId()));
     }
 
     /** Attack bonus = best of STR/DEX modifier + proficiency bonus. */
     private int attackBonus(Player player) {
-        Character c = character(player);
-        if (c == null) return 2;
-        int str = Math.floorDiv(c.getStrength() - 10, 2);
-        int dex = Math.floorDiv(c.getDexterity() - 10, 2);
-        return Math.max(str, dex) + c.getProficiencyBonus();
+        return CombatMath.attackBonus(character(player));
     }
 
-    /** Keyword → normal weapon range (ft); mirrors {@code lib/combat.ts WEAPON_RANGE}. */
-    private static final java.util.List<Map.Entry<String, Integer>> WEAPON_RANGE = java.util.List.of(
-            Map.entry("longbow", 150), Map.entry("crossbow", 80), Map.entry("shortbow", 80),
-            Map.entry("bow", 80), Map.entry("blowgun", 25), Map.entry("sling", 30),
-            Map.entry("javelin", 30), Map.entry("dart", 20), Map.entry("handaxe", 20),
-            Map.entry("spear", 20), Map.entry("trident", 20), Map.entry("halberd", 10),
-            Map.entry("glaive", 10), Map.entry("pike", 10), Map.entry("lance", 10),
-            Map.entry("whip", 10));
-
-    /**
-     * The player's basic-attack range in feet, inferred from their weapon items by name:
-     * ranged/thrown weapons get their normal range, reach weapons 10 ft, otherwise 5 ft melee
-     * (the floor, used for unarmed / no weapons). Uses the longest reach available so an archer
-     * carrying a sidearm can still shoot.
-     */
+    /** The player's basic-attack range in feet, inferred from their weapon items by name. */
     private int attackRangeFeet(Player player) {
-        int range = GridService.FEET_PER_SQUARE; // 5 ft melee floor
-        List<InventoryItem> inv;
         try {
-            inv = playerStateService.getState(player.getId()).inventory();
+            return CombatMath.attackRangeFeet(playerStateService.getState(player.getId()).inventory());
         } catch (RuntimeException ex) {
-            return range;
+            return GridService.FEET_PER_SQUARE;
         }
-        if (inv == null) return range;
-        for (InventoryItem item : inv) {
-            // Only weapons set the range — avoids gear false matches ("Iron Spike" → "pike").
-            if (item.name() == null || item.kind() != ItemKind.WEAPON) continue;
-            String name = item.name().toLowerCase(java.util.Locale.ROOT);
-            for (Map.Entry<String, Integer> e : WEAPON_RANGE) {
-                if (name.contains(e.getKey())) range = Math.max(range, e.getValue());
-            }
-        }
-        return range;
     }
 
-    /**
-     * Keyword → base weapon damage die (SRD). Mirrors {@link #WEAPON_RANGE}: ordered
-     * most-specific first so {@code contains} matching picks "greatsword" before "sword"
-     * and "greataxe" before "axe".
-     */
-    private static final java.util.List<Map.Entry<String, String>> WEAPON_DAMAGE = java.util.List.of(
-            Map.entry("greataxe", "1d12"), Map.entry("greatsword", "2d6"), Map.entry("maul", "2d6"),
-            Map.entry("halberd", "1d10"), Map.entry("glaive", "1d10"), Map.entry("heavy crossbow", "1d10"),
-            Map.entry("pike", "1d10"), Map.entry("lance", "1d12"),
-            Map.entry("longsword", "1d8"), Map.entry("battleaxe", "1d8"), Map.entry("warhammer", "1d8"),
-            Map.entry("rapier", "1d8"), Map.entry("longbow", "1d8"), Map.entry("light crossbow", "1d8"),
-            Map.entry("morningstar", "1d8"), Map.entry("flail", "1d8"), Map.entry("war pick", "1d8"),
-            Map.entry("trident", "1d6"), Map.entry("shortsword", "1d6"), Map.entry("scimitar", "1d6"),
-            Map.entry("shortbow", "1d6"), Map.entry("hand crossbow", "1d6"), Map.entry("mace", "1d6"),
-            Map.entry("spear", "1d6"), Map.entry("handaxe", "1d6"), Map.entry("quarterstaff", "1d6"),
-            Map.entry("javelin", "1d6"), Map.entry("blowgun", "1d1"),
-            Map.entry("dagger", "1d4"), Map.entry("dart", "1d4"), Map.entry("sling", "1d4"),
-            Map.entry("club", "1d4"), Map.entry("sickle", "1d4"), Map.entry("whip", "1d4"));
-
-    /**
-     * Weapon damage = the equipped weapon's die (by name) + best STR/DEX modifier. Prefers an
-     * {@code equipped} weapon, else the first weapon carried; falls back to 1d4 (improvised /
-     * unarmed) when no weapon is found. The ability modifier keeps the finesse simplification
-     * already used for the attack bonus (best of STR/DEX).
-     */
+    /** Weapon damage = the equipped weapon's die (by name) + best STR/DEX modifier; 1d4 unarmed. */
     private String damageDice(Player player) {
-        Character c = character(player);
-        int mod = 0;
-        if (c != null) {
-            mod = Math.max(
-                    Math.floorDiv(c.getStrength() - 10, 2),
-                    Math.floorDiv(c.getDexterity() - 10, 2));
-        }
-        return weaponDie(player) + (mod > 0 ? "+" + mod : mod < 0 ? String.valueOf(mod) : "");
-    }
-
-    /** Base damage die of the player's best/equipped weapon, or "1d4" when unarmed/unknown. */
-    private String weaponDie(Player player) {
         List<InventoryItem> inv;
         try {
             inv = playerStateService.getState(player.getId()).inventory();
         } catch (RuntimeException ex) {
-            return "1d4";
+            inv = null;
         }
-        if (inv == null) return "1d4";
-        InventoryItem chosen = null;
-        for (InventoryItem item : inv) {
-            if (item.name() == null || item.kind() != ItemKind.WEAPON) continue;
-            if (chosen == null) chosen = item;        // first weapon as the default
-            if (item.equipped()) { chosen = item; break; }  // an equipped weapon wins
-        }
-        if (chosen == null) return "1d4";
-        String name = chosen.name().toLowerCase(java.util.Locale.ROOT);
-        for (Map.Entry<String, String> e : WEAPON_DAMAGE) {
-            if (name.contains(e.getKey())) return e.getValue();
-        }
-        return "1d4";
+        return CombatMath.damageDice(character(player), inv);
     }
 
     private String notation(int bonus) {
-        return "1d20" + (bonus > 0 ? "+" + bonus : bonus < 0 ? String.valueOf(bonus) : "");
+        return CombatMath.notation(bonus);
     }
 
     /* ── DTO + broadcast ─────────────────────────────────────────── */
 
     private CombatStateDto toStateDto(CombatEncounter enc) {
-        List<EnemyDto> enemies = enemyRepository.findBySessionId(enc.getSessionId()).stream()
-                .map(e -> new EnemyDto(e.getId(), e.getName(), e.getArmorClass(), e.isAlive(),
-                        e.getConditions().stream().map(ActiveCondition::name).toList(),
-                        HealthBand.of(e.getCurrentHp(), e.getMaxHp()), enemyReachFeet(e)))
-                .toList();
-        List<Combatant> order = enc.getInitiativeOrder();
-        Combatant active = (enc.getStatus() == CombatStatus.ACTIVE
-                && enc.getActiveIndex() < order.size())
-                ? order.get(enc.getActiveIndex()) : null;
-        return new CombatStateDto(
-                enc.getId(), enc.getStatus(), enc.getRound(),
-                enc.getActiveIndex(), active, order, enemies, enc.getGridState());
+        return combatMapper.toStateDto(enc);
     }
 
     private void broadcast(UUID sessionId, Object event) {
-        messagingTemplate.convertAndSend("/topic/game/" + sessionId, event);
+        combatBroadcaster.broadcast(sessionId, event);
     }
 
     /* ── combat narration beats ──────────────────────────────────── */
@@ -2086,36 +1403,6 @@ public class CombatService {
         TurnEvent beat = turnService.createCombatBeat(sessionId, playerId, summary);
         eventProducer.sendCombatNarration(new CombatNarrationEvent(
                 sessionId, beat.getId(), beat.getTurnNumber(), summary));
-    }
-
-    /** One mechanical attack line: "X hits Y (attack 18 vs AC 15) for 7 damage (Y now 4/11 HP)." */
-    private String describeAttack(String attacker, String target, DiceRollResult atk,
-                                  int targetAc, boolean hit, RollSummary dmg,
-                                  int targetHp, int targetMax, boolean defeated) {
-        if (!hit) {
-            String why = atk.fumble() ? " (a fumble)" : "";
-            return attacker + " attacks " + target + " but misses" + why
-                    + " (attack " + atk.total() + " vs AC " + targetAc + ").";
-        }
-        String crit = atk.crit() ? "a critical hit — " : "";
-        String head = attacker + " hits " + target + " (" + crit + "attack " + atk.total()
-                + " vs AC " + targetAc + ") for " + dmg.total() + " damage";
-        if (defeated) {
-            return head + ", defeating " + target + ".";
-        }
-        return head + " (" + target + " now at " + targetHp + "/" + targetMax + " HP).";
-    }
-
-    private String describeItemUse(String actor, PlayerStateService.ItemUseResult r) {
-        if (r.kind() == ItemKind.POTION_HEALING && r.healed() > 0) {
-            return actor + " uses " + r.itemName() + ", recovering " + r.healed()
-                    + " HP (now " + r.state().currentHp() + "/" + r.state().maxHp() + " HP).";
-        }
-        return actor + " uses " + r.itemName() + ".";
-    }
-
-    private String roster(List<Enemy> enemies) {
-        return enemies.stream().map(Enemy::getName).collect(Collectors.joining(", "));
     }
 
     /** Any real player in the session — used to attribute start/end beats that have no actor. */

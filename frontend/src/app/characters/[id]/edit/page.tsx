@@ -13,23 +13,16 @@ import {
 } from "@/hooks/useDnd5eData";
 import {
   ABILITY_NAMES,
+  ABILITY_LABELS,
   getAbilityModifier,
   formatModifier,
   calculateHitPoints,
   calculateArmorClass,
   type AbilityName,
 } from "@/lib/dnd5e";
-import { Button, Alert, Spinner } from "@/components/ui";
+import { Button, Spinner, useToast } from "@/components/ui";
+import { getErrorMessage } from "@/lib/errors";
 import Portrait from "@/components/Portrait";
-
-const ABILITY_LABELS: Record<AbilityName, string> = {
-  strength: "STR",
-  dexterity: "DEX",
-  constitution: "CON",
-  intelligence: "INT",
-  wisdom: "WIS",
-  charisma: "CHA",
-};
 
 export default function CharacterEditPage({
   params,
@@ -56,7 +49,7 @@ function EditForm({ characterId }: { characterId: string }) {
 
   const loading = characterQuery.isLoading;
   const saving = updateMutation.isPending;
-  const [error, setError] = useState("");
+  const toast = useToast();
 
   const [name, setName] = useState("");
   const [race, setRace] = useState("");
@@ -98,8 +91,8 @@ function EditForm({ characterId }: { characterId: string }) {
   }, [characterQuery.data]);
 
   useEffect(() => {
-    if (characterQuery.isError) setError("Failed to load character");
-  }, [characterQuery.isError]);
+    if (characterQuery.isError) toast.error("Failed to load character");
+  }, [characterQuery.isError, toast]);
 
   const selectedClass = classesQuery.data?.find((c) => c.name === characterClass);
 
@@ -118,7 +111,6 @@ function EditForm({ characterId }: { characterId: string }) {
 
   async function handleSave() {
     if (!username || !name.trim() || !race || !characterClass) return;
-    setError("");
     try {
       await updateMutation.mutateAsync({
         id: characterId,
@@ -153,7 +145,7 @@ function EditForm({ characterId }: { characterId: string }) {
       });
       router.push("/characters");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save character");
+      toast.error(getErrorMessage(e, "Failed to save character"));
     }
   }
 
@@ -381,9 +373,7 @@ function EditForm({ characterId }: { characterId: string }) {
             />
           </div>
 
-          {/* Error & Actions */}
-          {error && <Alert>{error}</Alert>}
-
+          {/* Actions */}
           <div className="flex gap-3">
             <Button
               onClick={() => router.push("/characters")}

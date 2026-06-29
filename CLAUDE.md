@@ -3,6 +3,19 @@
 Operating guide for this repo. For the full architecture diagram, Kafka topics, data
 model, and API reference, see **`README.md`** — this file is the quick map.
 
+## ⚠️ Clean code & structure (read before building)
+
+**`CLEAN_CODE.md` is required reading before adding any feature.** It defines the layered
+architecture (frontend `app → components → hooks → lib/store/types`; backend
+`controller/websocket → service → repository`, with `model/{entity,dto,enums,mapper}`), the
+reuse rules, the type/enum conventions, and the **human-readable error contract**. Key
+non-negotiables: reuse existing helpers/hooks/primitives before writing new ones; no fetch/WS
+logic or raw `localStorage` in components; controllers never touch repositories or build DTOs;
+entities never cross the web boundary (map via `model/mapper`); and errors always reach users as
+friendly copy — REST via `ErrorResponse`/`GlobalExceptionHandler`, WebSocket via
+`WsErrors`/`WsError`, frontend via `lib/errors.ts:getErrorMessage` + the `useToast` surface
+(never raw stack traces, exception text, or bare status codes).
+
 ## Project
 
 **D&D AI** — a multiplayer Dungeons & Dragons web app where an LLM acts as the Dungeon

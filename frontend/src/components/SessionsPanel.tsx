@@ -8,45 +8,37 @@ import {
   useDeleteSession,
 } from "@/hooks/useSessionQueries";
 import type { SessionSummary } from "@/types";
-import { Panel, Button, Spinner, Alert, cn } from "@/components/ui";
-
-const STATUS_STYLES: Record<SessionSummary["status"], string> = {
-  WAITING: "bg-gold-muted text-gold",
-  ACTIVE: "bg-success/15 text-success",
-  FINISHED: "bg-surface-light text-text-muted",
-};
-
-const STATUS_LABEL: Record<SessionSummary["status"], string> = {
-  WAITING: "Lobby",
-  ACTIVE: "In Progress",
-  FINISHED: "Finished",
-};
+import { Panel, Button, Spinner, useToast, cn } from "@/components/ui";
+import { getErrorMessage } from "@/lib/errors";
+import { rememberSession } from "@/lib/sessionStorage";
+import { STATUS_STYLES, STATUS_LABEL } from "@/lib/sessionStatus";
 
 export default function SessionsPanel({ className }: { className?: string }) {
   const router = useRouter();
   const sessionsQuery = useUserSessions();
   const leaveMutation = useLeaveSession();
   const deleteMutation = useDeleteSession();
+  const toast = useToast();
 
   const [confirm, setConfirm] = useState<{
     id: string;
     action: "leave" | "delete";
   } | null>(null);
-  const [error, setError] = useState("");
 
   const sessions = sessionsQuery.data ?? [];
 
   function rejoin(s: SessionSummary) {
     // Restore the per-session keys the lobby/game pages read, so rejoin works
     // even on a fresh device where localStorage was never populated.
-    localStorage.setItem(`dnd-playerId-${s.sessionId}`, s.myPlayerId);
-    localStorage.setItem(`dnd-joinCode-${s.sessionId}`, s.joinCode);
+    rememberSession(s.sessionId, {
+      playerId: s.myPlayerId,
+      joinCode: s.joinCode,
+    });
     router.push(`/lobby/${s.sessionId}`);
   }
 
   async function runConfirmed() {
     if (!confirm) return;
-    setError("");
     try {
       if (confirm.action === "leave") {
         await leaveMutation.mutateAsync(confirm.id);
@@ -55,7 +47,7 @@ export default function SessionsPanel({ className }: { className?: string }) {
       }
       setConfirm(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Action failed");
+      toast.error(getErrorMessage(e, "Action failed"));
     }
   }
 
@@ -87,7 +79,6 @@ export default function SessionsPanel({ className }: { className?: string }) {
       <h2 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-gold">
         Your Adventures
       </h2>
-      {error && <Alert className="mb-3">{error}</Alert>}
       <ul className="space-y-2">
         {sessions.map((s) => {
           const pending =

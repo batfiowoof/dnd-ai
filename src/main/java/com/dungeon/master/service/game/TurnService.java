@@ -16,6 +16,7 @@ import com.dungeon.master.model.enums.TurnMode;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
+import com.dungeon.master.model.dto.TurnEventDto;
 import com.dungeon.master.repository.TurnEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +24,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -270,5 +274,36 @@ public class TurnService {
 
     public List<TurnEvent> getSessionHistory(UUID sessionId) {
         return turnEventRepository.findBySessionIdOrderByTurnNumberDesc(sessionId);
+    }
+
+    /**
+     * Session history as DTOs, resolving each turn's author name in one batched player lookup. Lives
+     * here (not in the controller) so the web layer never touches repositories or builds DTOs.
+     */
+    public List<TurnEventDto> getSessionHistoryDtos(UUID sessionId) {
+        List<TurnEvent> events = getSessionHistory(sessionId);
+        List<UUID> playerIds = events.stream()
+                .map(TurnEvent::getPlayerId)
+                .distinct()
+                .toList();
+
+        Map<UUID, Player> playersById = playerRepository.findAllById(playerIds).stream()
+                .collect(Collectors.toMap(Player::getId, Function.identity()));
+
+        return events.stream()
+                .map(event -> {
+                    Player player = playersById.get(event.getPlayerId());
+                    String playerName = player != null ? player.getCharacterName() : "Unknown";
+                    return new TurnEventDto(
+                            event.getId(),
+                            event.getPlayerId(),
+                            playerName,
+                            event.getAction(),
+                            event.getDmResponse(),
+                            event.getTimestamp(),
+                            event.getTurnNumber(),
+                            event.getSource().name());
+                })
+                .toList();
     }
 }

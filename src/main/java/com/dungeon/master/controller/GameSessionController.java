@@ -9,10 +9,8 @@ import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.dto.TurnEventDto;
 import com.dungeon.master.model.entity.GameSession;
-import com.dungeon.master.model.entity.Player;
-import com.dungeon.master.model.entity.TurnEvent;
-import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.service.game.GameSessionService;
+import com.dungeon.master.service.game.SessionMembershipService;
 import com.dungeon.master.service.game.TurnService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,10 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/sessions")
@@ -42,8 +37,8 @@ import java.util.stream.Collectors;
 public class GameSessionController {
 
     private final GameSessionService gameSessionService;
+    private final SessionMembershipService sessionMembershipService;
     private final TurnService turnService;
-    private final PlayerRepository playerRepository;
 
     @PostMapping
     public ResponseEntity<CreateSessionResponse> createSession(
@@ -74,7 +69,7 @@ public class GameSessionController {
             @Valid @RequestBody JoinSessionRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         String username = AuthUtils.username(jwt);
-        PlayerDto player = gameSessionService.joinSession(sessionId, request, username);
+        PlayerDto player = sessionMembershipService.joinSession(sessionId, request, username);
         return ResponseEntity.ok(player);
     }
 
@@ -95,32 +90,7 @@ public class GameSessionController {
 
     @GetMapping("/{sessionId}/history")
     public ResponseEntity<List<TurnEventDto>> getSessionHistory(@PathVariable UUID sessionId) {
-        List<TurnEvent> events = turnService.getSessionHistory(sessionId);
-        List<UUID> playerIds = events.stream()
-                .map(TurnEvent::getPlayerId)
-                .distinct()
-                .toList();
-
-        Map<UUID, Player> playersMap = playerRepository.findAllById(playerIds).stream()
-                .collect(Collectors.toMap(Player::getId, Function.identity()));
-
-        List<TurnEventDto> dtos = events.stream()
-                .map(event -> {
-                    Player player = playersMap.get(event.getPlayerId());
-                    String playerName = player != null ? player.getCharacterName() : "Unknown";
-                    return new TurnEventDto(
-                            event.getId(),
-                            event.getPlayerId(),
-                            playerName,
-                            event.getAction(),
-                            event.getDmResponse(),
-                            event.getTimestamp(),
-                            event.getTurnNumber(),
-                            event.getSource().name());
-                })
-                .toList();
-
-        return ResponseEntity.ok(dtos);
+        return ResponseEntity.ok(turnService.getSessionHistoryDtos(sessionId));
     }
 
     @GetMapping("/{sessionId}/players")
@@ -135,7 +105,7 @@ public class GameSessionController {
             @PathVariable UUID playerId,
             @AuthenticationPrincipal Jwt jwt) {
         String username = AuthUtils.username(jwt);
-        gameSessionService.removePlayer(sessionId, playerId, username);
+        sessionMembershipService.removePlayer(sessionId, playerId, username);
         return ResponseEntity.noContent().build();
     }
 
@@ -144,7 +114,7 @@ public class GameSessionController {
             @PathVariable UUID sessionId,
             @AuthenticationPrincipal Jwt jwt) {
         String username = AuthUtils.username(jwt);
-        gameSessionService.leaveSession(sessionId, username);
+        sessionMembershipService.leaveSession(sessionId, username);
         return ResponseEntity.noContent().build();
     }
 

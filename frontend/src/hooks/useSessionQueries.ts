@@ -5,9 +5,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback } from "react";
-import { useAuth } from "@/context/AuthContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useRequireToken } from "@/hooks/useRequireToken";
 import {
   createSession,
   deleteSession,
@@ -25,16 +24,6 @@ import type {
   CreateSessionRequest,
   JoinSessionRequest,
 } from "@/types";
-
-/** Returns a function that resolves a fresh JWT, throwing if unauthenticated. */
-function useRequireToken() {
-  const { getToken } = useAuth();
-  return useCallback(async () => {
-    const token = await getToken();
-    if (!token) throw new Error("Not authenticated");
-    return token;
-  }, [getToken]);
-}
 
 /* ── Queries ─────────────────────────────────────────────────── */
 

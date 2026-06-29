@@ -10,19 +10,11 @@ import {
   getAbilityModifier,
   formatModifier,
   ABILITY_NAMES,
-  type AbilityName,
+  ABILITY_LABELS,
 } from "@/lib/dnd5e";
-import { Button, Brand, Alert, Spinner } from "@/components/ui";
+import { Button, Brand, Spinner, useToast } from "@/components/ui";
+import { getErrorMessage } from "@/lib/errors";
 import Portrait from "@/components/Portrait";
-
-const ABILITY_LABELS: Record<AbilityName, string> = {
-  strength: "STR",
-  dexterity: "DEX",
-  constitution: "CON",
-  intelligence: "INT",
-  wisdom: "WIS",
-  charisma: "CHA",
-};
 
 export default function CharactersPage() {
   return (
@@ -39,12 +31,12 @@ function CharactersList() {
   const characters = charactersQuery.data ?? [];
   const loading = charactersQuery.isLoading;
   const deleteMutation = useDeleteCharacter();
-  const [error, setError] = useState("");
+  const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    if (charactersQuery.isError) setError("Failed to load characters");
-  }, [charactersQuery.isError]);
+    if (charactersQuery.isError) toast.error("Failed to load characters");
+  }, [charactersQuery.isError, toast]);
 
   async function handleDelete(id: string) {
     if (!username) return;
@@ -52,7 +44,7 @@ function CharactersList() {
       await deleteMutation.mutateAsync(id);
       setConfirmDelete(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to delete character");
+      toast.error(getErrorMessage(e, "Failed to delete character"));
     }
   }
 
@@ -94,8 +86,6 @@ function CharactersList() {
             + New Character
           </Button>
         </div>
-
-        {error && <Alert className="mb-4">{error}</Alert>}
 
         {loading ? (
           <div className="flex items-center justify-center gap-3 py-12 text-sm text-text-muted">
