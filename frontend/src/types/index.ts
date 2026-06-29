@@ -374,6 +374,15 @@ export interface SpellSummary {
   aoeSize: number;
   /** Casting time, e.g. "Action", "Bonus Action", "Reaction" — drives the bonus-action economy. */
   castingTime: string;
+  /** Mechanical fields for the "what does this spell do" description shown while casting. */
+  damageDice: string | null;
+  damageType: string | null;
+  healDice: string | null;
+  saveAbility: string | null;
+  halfOnSave: boolean;
+  condition: string | null;
+  /** Short flavour line (first sentence of the SRD prose). */
+  summary: string;
 }
 
 export interface MonsterSummary {

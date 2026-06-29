@@ -5,7 +5,9 @@ import com.dungeon.master.model.dto.CombatLifecycleEvent;
 import com.dungeon.master.model.dto.Combatant;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.GridState;
+import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.model.dto.SpellEffect;
 import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.kafka.producer.GameEventProducer;
@@ -717,6 +719,51 @@ class CombatServiceTest {
         return new SpellEffect(name, 1, SpellEffectType.BUFF, SpellTargetType.SELF,
                 SpellResolution.AUTO, null, null, null, null, false, false, null, null,
                 null, 0, null, 1, "blessed", false, true, "Bonus Action", "Self");
+    }
+
+    /** Runtime state carrying a single named weapon (drives attack-range inference). */
+    private PlayerRuntimeStateDto stateWithWeapon(UUID playerId, String weapon) {
+        return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
+                List.of(), List.of(new InventoryItem(weapon, 1, ItemKind.WEAPON)),
+                List.of(), List.of(), List.of(), false, 0, 0, false, false, null);
+    }
+
+    @Test
+    void meleeAttackOnOutOfRangeEnemyIsRejected() {
+        UUID pid = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        // Player token at (5,5); enemy A at (12,5) → 35 ft away, beyond a 5 ft melee reach.
+        CombatEncounter enc = aoeEncounter(pid, aId, 12, 5, bId, 0, 0);
+        Enemy goblin = enemyAt(aId, "Goblin A");
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findById(aId)).thenReturn(Optional.of(goblin));
+        when(playerStateService.getState(pid)).thenReturn(stateFor(pid, 20)); // no weapons → 5 ft melee
+
+        assertThrows(IllegalStateException.class, () -> combat.playerAttack(sessionId, "Aria", aId));
+        assertEquals(20, goblin.getCurrentHp(), "an out-of-reach melee attack deals no damage");
+    }
+
+    @Test
+    void rangedWeaponCanAttackAtRange() {
+        UUID pid = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        CombatEncounter enc = aoeEncounter(pid, aId, 12, 5, bId, 0, 0); // 35 ft away
+        Enemy goblin = enemyAt(aId, "Goblin A");
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findById(aId)).thenReturn(Optional.of(goblin));
+        when(playerStateService.getState(pid)).thenReturn(stateWithWeapon(pid, "Longbow")); // 150 ft
+        when(diceService.roll("1d20+2")).thenReturn(res(20)); // hits AC 12
+        when(diceService.roll("1d8")).thenReturn(res(5));
+
+        combat.playerAttack(sessionId, "Aria", aId);
+
+        assertEquals(15, goblin.getCurrentHp(), "a longbow reaches a 35 ft target");
     }
 
     @Test

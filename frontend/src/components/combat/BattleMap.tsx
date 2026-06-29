@@ -23,7 +23,12 @@ import DeathSaveTrack, {
 import CombatRollFeed from "@/components/combat/CombatRollFeed";
 import { conditionMeta, conditionBadgeColors } from "@/lib/conditions";
 import { bandMeta } from "@/lib/health";
-import { isAllyTargeting, parseRangeFeet, attackModePreview } from "@/lib/combat";
+import {
+  isAllyTargeting,
+  parseRangeFeet,
+  attackModePreview,
+  weaponRangeFeet,
+} from "@/lib/combat";
 import { useSessionStore } from "@/store/sessionStore";
 
 /** Logical cell size (px in the SVG user space). ≥44 keeps tap targets accessible. */
@@ -233,6 +238,8 @@ export default function BattleMap({
   const targetRangeFeet = castingSpell ? parseRangeFeet(castingSpell.range) : Infinity;
   // My conditions drive the advantage/disadvantage preview shown on enemy tokens.
   const myConds = runtimeByPlayerId[myPlayerId]?.conditions;
+  // My basic-attack range (ft) from my weapons — enemies beyond it can't be attacked.
+  const myAttackRange = weaponRangeFeet(runtimeByPlayerId[myPlayerId]?.inventory);
 
   const enemyById = Object.fromEntries(combat.enemies.map((e) => [e.id, e]));
 
@@ -334,23 +341,24 @@ export default function BattleMap({
           aria-label="Tactical battle grid"
         >
           <defs>
-            {/* Difficult-terrain diagonal hatch (pattern, not colour-only). */}
+            {/* Difficult terrain — teal hatch (distinct from the gold AoE template and red
+                hazards), denser + tinted so it reads over a busy map background. */}
             <pattern
               id="bm-difficult"
-              width="8"
-              height="8"
+              width="6"
+              height="6"
               patternTransform="rotate(45)"
               patternUnits="userSpaceOnUse"
             >
-              <rect width="8" height="8" fill="var(--color-gold-muted)" />
+              <rect width="6" height="6" fill="#2dd4bf" fillOpacity="0.22" />
               <line
                 x1="0"
                 y1="0"
                 x2="0"
-                y2="8"
-                stroke="var(--color-gold)"
-                strokeWidth="1.5"
-                strokeOpacity="0.5"
+                y2="6"
+                stroke="#5eead4"
+                strokeWidth="2"
+                strokeOpacity="0.8"
               />
             </pattern>
 
@@ -439,22 +447,38 @@ export default function BattleMap({
                       stroke="var(--color-border)"
                       strokeWidth={2}
                     />
+                    {/* full outline so the wall reads even over a map image */}
+                    <rect
+                      x={tx + 0.5}
+                      y={ty + 0.5}
+                      width={CELL - 1}
+                      height={CELL - 1}
+                      fill="none"
+                      stroke="#6b7280"
+                      strokeOpacity={0.7}
+                      strokeWidth={1.5}
+                    />
                   </g>
                 );
               }
               if (t.type === "DIFFICULT") {
                 return (
-                  <rect
-                    key={`t${t.x}-${t.y}`}
-                    x={tx}
-                    y={ty}
-                    width={CELL}
-                    height={CELL}
-                    fill="url(#bm-difficult)"
-                  />
+                  <g key={`t${t.x}-${t.y}`}>
+                    <rect x={tx} y={ty} width={CELL} height={CELL} fill="url(#bm-difficult)" />
+                    <rect
+                      x={tx + 0.5}
+                      y={ty + 0.5}
+                      width={CELL - 1}
+                      height={CELL - 1}
+                      fill="none"
+                      stroke="#2dd4bf"
+                      strokeOpacity={0.6}
+                      strokeWidth={1.5}
+                    />
+                  </g>
                 );
               }
-              // HAZARD — red-tinted fill + spike glyph.
+              // HAZARD — strong red tint + outline + spike glyph.
               return (
                 <g key={`t${t.x}-${t.y}`}>
                   <rect
@@ -462,14 +486,25 @@ export default function BattleMap({
                     y={ty}
                     width={CELL}
                     height={CELL}
-                    fill="var(--color-accent-glow)"
+                    fill="var(--color-danger)"
+                    fillOpacity={0.2}
+                  />
+                  <rect
+                    x={tx + 0.5}
+                    y={ty + 0.5}
+                    width={CELL - 1}
+                    height={CELL - 1}
+                    fill="none"
+                    stroke="var(--color-danger)"
+                    strokeOpacity={0.7}
+                    strokeWidth={1.5}
                   />
                   <path
                     d={`M${tx + CELL / 2} ${ty + 10} L${tx + CELL - 12} ${
                       ty + CELL - 12
                     } L${tx + 12} ${ty + CELL - 12} Z`}
-                    fill="var(--color-accent)"
-                    opacity={0.85}
+                    fill="var(--color-danger)"
+                    opacity={0.9}
                   />
                 </g>
               );
@@ -641,9 +676,17 @@ export default function BattleMap({
               const downed = !isEnemy && runtime ? runtime.currentHp <= 0 : false;
               const name = c?.name ?? enemy?.name ?? "Combatant";
 
-              // Plain attack is available only when NOT in spell-targeting mode.
-              const canAttack =
+              // Plain attack is available only when NOT in spell-targeting mode and the enemy
+              // is within the player's weapon range.
+              const distToTok = casterTok
+                ? gridDistanceFeet(casterTok.x, casterTok.y, tk.x, tk.y)
+                : 0;
+              const inAttackRange = !casterTok || distToTok <= myAttackRange;
+              const enemyOnMyTurn =
                 interactive && !targeting && isEnemy && (enemy?.alive ?? true);
+              const canAttack = enemyOnMyTurn && inAttackRange;
+              // Out-of-range attackable enemy → dim it so the player sees it's unreachable.
+              const dimOutOfRange = enemyOnMyTurn && !inAttackRange;
 
               // Spell targeting: in range + the right side (allies for heal/buff, enemies else).
               const inRange =
@@ -715,8 +758,11 @@ export default function BattleMap({
                         }
                       : undefined
                   }
-                  opacity={downed ? 0.45 : dimForTargeting ? 0.4 : 1}
+                  opacity={
+                    downed ? 0.45 : dimForTargeting || dimOutOfRange ? 0.45 : 1
+                  }
                 >
+                  {dimOutOfRange && <title>{`${name} — out of range`}</title>}
                   {/* Contact shadow lifting the token off the board */}
                   <ellipse
                     cx={0}
@@ -1062,19 +1108,37 @@ function LegendSwatch({ type }: { type: TerrainType }) {
         )}
         {type === "DIFFICULT" && (
           <>
-            <rect width={14} height={14} fill="var(--color-gold-muted)" />
+            <rect width={14} height={14} fill="#2dd4bf" fillOpacity={0.22} />
             <path
               d="M-2 4 L4 -2 M-2 12 L12 -2 M2 16 L16 2"
-              stroke="var(--color-gold)"
-              strokeWidth={1.5}
+              stroke="#5eead4"
+              strokeWidth={2}
+              strokeOpacity={0.8}
+            />
+            <rect
+              x={0.5}
+              y={0.5}
+              width={13}
+              height={13}
+              fill="none"
+              stroke="#2dd4bf"
               strokeOpacity={0.6}
             />
           </>
         )}
         {type === "HAZARD" && (
           <>
-            <rect width={14} height={14} fill="var(--color-accent-glow)" />
-            <path d="M7 2 L12 12 L2 12 Z" fill="var(--color-accent)" />
+            <rect width={14} height={14} fill="var(--color-danger)" fillOpacity={0.2} />
+            <rect
+              x={0.5}
+              y={0.5}
+              width={13}
+              height={13}
+              fill="none"
+              stroke="var(--color-danger)"
+              strokeOpacity={0.7}
+            />
+            <path d="M7 2 L12 12 L2 12 Z" fill="var(--color-danger)" />
           </>
         )}
       </svg>

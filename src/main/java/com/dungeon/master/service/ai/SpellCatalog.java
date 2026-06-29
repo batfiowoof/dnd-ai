@@ -40,7 +40,9 @@ public class SpellCatalog {
             String name, int level, String school,
             SpellEffectType effectType, SpellTargetType targetType,
             Integer maxTargets, boolean concentration, String range, boolean parsed,
-            String aoeShape, int aoeSize, String castingTime) {}
+            String aoeShape, int aoeSize, String castingTime,
+            String damageDice, String damageType, String healDice,
+            String saveAbility, boolean halfOnSave, String condition, String summary) {}
 
     private static final String RESOURCE = "dnd5e/srd-5.2.1-structured.json";
 
@@ -67,6 +69,7 @@ public class SpellCatalog {
                 String school = text(sp, "school");
                 String range = text(sp, "range");
                 String castingTime = text(sp, "castingTime");
+                String summary = shortDesc(text(sp, "desc"));
                 JsonNode c = sp.get("combat");
                 if (c == null || c.isNull()) continue;
 
@@ -100,7 +103,9 @@ public class SpellCatalog {
                 summaries.add(new SpellSummary(name, level, school, effect.effectType(),
                         effect.targetType(), effect.maxTargets(), effect.concentration(),
                         range, effect.parsed(), effect.aoeShape(), effect.aoeSize(),
-                        effect.castingTime()));
+                        effect.castingTime(), effect.damageDice(), effect.damageType(),
+                        effect.healDice(), effect.saveAbility(), effect.halfOnSave(),
+                        effect.condition(), summary));
             }
             log.info("Loaded {} SRD 5.2.1 spell effects from {}", byName.size(), RESOURCE);
         } catch (Exception e) {
@@ -127,6 +132,17 @@ public class SpellCatalog {
     }
 
     /* ── helpers ─────────────────────────────────────────────────── */
+
+    /** First sentence of a spell's prose, trimmed to a short flavour line (~140 chars). */
+    private static String shortDesc(String desc) {
+        if (desc == null || desc.isBlank()) return "";
+        String s = desc.strip().replaceAll("\\s+", " ");
+        int dot = s.indexOf(". ");
+        if (dot > 0 && dot < 160) {
+            s = s.substring(0, dot + 1);
+        }
+        return s.length() > 160 ? s.substring(0, 157).strip() + "…" : s;
+    }
 
     private static String text(JsonNode node, String field) {
         JsonNode v = node == null ? null : node.get(field);

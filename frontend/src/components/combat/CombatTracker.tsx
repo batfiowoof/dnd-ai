@@ -6,7 +6,13 @@ import { Button, Tooltip, cn } from "@/components/ui";
 import { useSessionStore } from "@/store/sessionStore";
 import { conditionMeta, conditionChipClasses } from "@/lib/conditions";
 import { bandMeta } from "@/lib/health";
-import { isAllyTargeting, targetCap } from "@/lib/combat";
+import {
+  isAllyTargeting,
+  targetCap,
+  weaponRangeFeet,
+  spellMechanics,
+} from "@/lib/combat";
+import { gridDistanceFeet } from "@/lib/dnd5e";
 import DeathSaveTrack, {
   StatusBadge,
   deriveDeathStatus,
@@ -165,6 +171,7 @@ export default function CombatTracker({
   const reactionSpent = myToken ? !myToken.reactionAvailable : false;
   const moveUsed = myToken?.movementUsedFeet ?? 0;
   const moveBudget = mySpeed + (myToken?.dashed ? mySpeed : 0);
+  const myAttackRange = weaponRangeFeet(myState?.inventory);
 
   // Safety net: if the final DM_NARRATION is ever lost, don't strand the controls behind the
   // narration gate forever — release it after a generous timeout.
@@ -267,8 +274,20 @@ export default function CombatTracker({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {combat.enemies.map((e) => {
           const band = bandMeta(e.healthBand);
+          // Gate the card-attack fallback on weapon range, matching the battle map.
+          const myTok = combat.grid?.tokens[myPlayerId];
+          const eTok = combat.grid?.tokens[e.id];
+          const inAttackRange =
+            !myTok || !eTok
+              ? true
+              : gridDistanceFeet(myTok.x, myTok.y, eTok.x, eTok.y) <= myAttackRange;
           const attackable =
-            isMyTurn && e.alive && connected && !casting && !actionSpent;
+            isMyTurn &&
+            e.alive &&
+            connected &&
+            !casting &&
+            !actionSpent &&
+            inAttackRange;
           const selectable = targetingEnemies && e.alive && connected;
           const chosen = picked.includes(e.id);
           return (
@@ -464,8 +483,16 @@ export default function CombatTracker({
         ) : placingSpellName ? (
           <>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
-              {placingSpellName}
+              ✨ {placingSpellName}
             </span>
+            {(() => {
+              const ps = spells.find((s) => s.name === placingSpellName);
+              return ps ? (
+                <span className="text-[10px] text-gold/90" title={ps.summary}>
+                  {spellMechanics(ps)}
+                </span>
+              ) : null;
+            })()}
             <span className="text-[10px] text-text-muted">
               — click a square on the battle map to aim
             </span>
@@ -481,6 +508,9 @@ export default function CombatTracker({
           <>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
               ✨ {casting.name}
+            </span>
+            <span className="text-[10px] text-gold/90" title={casting.summary}>
+              {spellMechanics(casting)}
             </span>
             <span className="text-[10px] text-text-muted">
               {castingAlly
@@ -533,7 +563,7 @@ export default function CombatTracker({
                 ✨ Cast Spell ▾
               </button>
               {spellMenu && (
-                <div className="absolute bottom-full left-0 z-20 mb-1 max-h-64 min-w-52 overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
+                <div className="absolute bottom-full left-0 z-20 mb-1 max-h-72 min-w-64 overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
                   {castable.map((s) => {
                     const bonus = s.castingTime === "Bonus Action";
                     const disabled = bonus ? bonusSpent : actionSpent;
@@ -543,21 +573,19 @@ export default function CombatTracker({
                         type="button"
                         disabled={disabled}
                         onClick={() => beginCast(s)}
-                        title={
-                          disabled
-                            ? bonus
-                              ? "Bonus action already used"
-                              : "Action already used"
-                            : `${s.range} · ${s.castingTime}`
-                        }
-                        className="block w-full px-3 py-2 text-left text-xs text-text transition hover:bg-accent-glow hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent"
+                        title={s.summary || `${s.range} · ${s.castingTime}`}
+                        className="block w-full border-b border-border/50 px-3 py-2 text-left text-xs text-text transition last:border-b-0 hover:bg-accent-glow hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent"
                       >
-                        <span className="font-semibold">{s.name}</span>
-                        {bonus && <span className="ml-1 text-gold" title="Bonus action">⚡</span>}
-                        <span className="ml-1 text-[10px] text-text-muted">
-                          {s.level === 0 ? "Cantrip" : `L${s.level}`} ·{" "}
-                          {s.effectType.toLowerCase()}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold">{s.name}</span>
+                          {bonus && <span className="text-gold" title="Bonus action">⚡</span>}
+                          <span className="ml-auto text-[9px] uppercase tracking-wide text-text-muted">
+                            {s.level === 0 ? "Cantrip" : `L${s.level}`}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-gold/90">
+                          {spellMechanics(s)}
+                        </div>
                       </button>
                     );
                   })}

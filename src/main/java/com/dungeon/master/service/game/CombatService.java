@@ -13,6 +13,7 @@ import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.EnemyDto;
 import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.HealthBand;
+import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
@@ -208,6 +209,16 @@ public class CombatService {
 
         Token attackerTok = tokenFor(enc, player.getId().toString());
         Token defenderTok = tokenFor(enc, enemy.getId().toString());
+        // Enforce weapon range on a tactical grid: a melee weapon can't reach across the map.
+        if (enc.getGridState() != null && attackerTok != null && defenderTok != null) {
+            int dist = gridService.distanceFeet(attackerTok.getX(), attackerTok.getY(),
+                    defenderTok.getX(), defenderTok.getY());
+            int range = attackRangeFeet(player);
+            if (dist > range) {
+                throw new IllegalStateException(enemy.getName() + " is out of range ("
+                        + dist + " ft away, your weapon reaches " + range + " ft)");
+            }
+        }
         boolean melee = isMelee(attackerTok, defenderTok, enc.getGridState());
         int attackBonus = attackBonus(player) + ConditionRules.attackModifier(playerConds(player.getId()));
         RollMode mode = playerVsEnemyMode(player, enemy, defenderTok, melee);
@@ -1796,6 +1807,41 @@ public class CombatService {
         int str = Math.floorDiv(c.getStrength() - 10, 2);
         int dex = Math.floorDiv(c.getDexterity() - 10, 2);
         return Math.max(str, dex) + c.getProficiencyBonus();
+    }
+
+    /** Keyword → normal weapon range (ft); mirrors {@code lib/combat.ts WEAPON_RANGE}. */
+    private static final java.util.List<Map.Entry<String, Integer>> WEAPON_RANGE = java.util.List.of(
+            Map.entry("longbow", 150), Map.entry("crossbow", 80), Map.entry("shortbow", 80),
+            Map.entry("bow", 80), Map.entry("blowgun", 25), Map.entry("sling", 30),
+            Map.entry("javelin", 30), Map.entry("dart", 20), Map.entry("handaxe", 20),
+            Map.entry("spear", 20), Map.entry("trident", 20), Map.entry("halberd", 10),
+            Map.entry("glaive", 10), Map.entry("pike", 10), Map.entry("lance", 10),
+            Map.entry("whip", 10));
+
+    /**
+     * The player's basic-attack range in feet, inferred from their weapon items by name:
+     * ranged/thrown weapons get their normal range, reach weapons 10 ft, otherwise 5 ft melee
+     * (the floor, used for unarmed / no weapons). Uses the longest reach available so an archer
+     * carrying a sidearm can still shoot.
+     */
+    private int attackRangeFeet(Player player) {
+        int range = GridService.FEET_PER_SQUARE; // 5 ft melee floor
+        List<InventoryItem> inv;
+        try {
+            inv = playerStateService.getState(player.getId()).inventory();
+        } catch (RuntimeException ex) {
+            return range;
+        }
+        if (inv == null) return range;
+        for (InventoryItem item : inv) {
+            // Only weapons set the range — avoids gear false matches ("Iron Spike" → "pike").
+            if (item.name() == null || item.kind() != ItemKind.WEAPON) continue;
+            String name = item.name().toLowerCase(java.util.Locale.ROOT);
+            for (Map.Entry<String, Integer> e : WEAPON_RANGE) {
+                if (name.contains(e.getKey())) range = Math.max(range, e.getValue());
+            }
+        }
+        return range;
     }
 
     /** Simplified weapon damage: 1d8 + best STR/DEX modifier. */
