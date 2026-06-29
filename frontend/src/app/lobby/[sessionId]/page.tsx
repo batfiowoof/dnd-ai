@@ -50,7 +50,9 @@ import type {
   ItemKind,
   PlayerRuntimeState,
   PlayerDto,
+  SpellSummary,
 } from "@/types";
+import { targetCap } from "@/lib/combat";
 import { Button, Panel, Brand, Alert, D20Mark, Tooltip, cn } from "@/components/ui";
 import { stripDmTags } from "@/lib/strip";
 import Portrait from "@/components/Portrait";
@@ -122,6 +124,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
   /** AoE spell awaiting an origin click on the battle map (null = not placing). */
   const [placingSpell, setPlacingSpell] = useState<PlacingSpell | null>(null);
+  // Single/multi-target spell awaiting target selection on the grid (AoE uses placingSpell).
+  const [castingSpell, setCastingSpell] = useState<SpellSummary | null>(null);
+  const [pickedTargets, setPickedTargets] = useState<string[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Client | null>(null);
@@ -515,6 +520,57 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     });
     setPlacingSpell(null);
   }
+  /**
+   * Pick a spell to cast: SELF casts immediately, AoE enters on-map placement, and a
+   * single/multi-target spell enters grid targeting (click tokens on the BattleMap).
+   */
+  function handleBeginCast(spell: SpellSummary) {
+    if (!clientRef.current || !connected) return;
+    if (spell.targetType === "SELF") {
+      if (playerId) handleCombatCast(spell.name, spell.level, [playerId]);
+      return;
+    }
+    if (spell.aoeShape && spell.aoeSize > 0) {
+      setPlacingSpell({
+        name: spell.name,
+        level: spell.level,
+        aoeShape: spell.aoeShape,
+        aoeSize: spell.aoeSize,
+      });
+      return;
+    }
+    setCastingSpell(spell);
+    setPickedTargets([]);
+  }
+  /** A target token was clicked on the grid (or a card): cast now if single-target, else toggle. */
+  function handleSelectTarget(refId: string) {
+    if (!castingSpell) return;
+    const cap = targetCap(castingSpell);
+    if (cap <= 1) {
+      handleCombatCast(castingSpell.name, castingSpell.level, [refId]);
+      setCastingSpell(null);
+      setPickedTargets([]);
+      return;
+    }
+    setPickedTargets((prev) =>
+      prev.includes(refId)
+        ? prev.filter((x) => x !== refId)
+        : prev.length >= cap
+          ? prev
+          : [...prev, refId]
+    );
+  }
+  /** Commit a multi-target cast once the player has picked their targets. */
+  function handleConfirmCast() {
+    if (!castingSpell || pickedTargets.length === 0) return;
+    handleCombatCast(castingSpell.name, castingSpell.level, pickedTargets);
+    setCastingSpell(null);
+    setPickedTargets([]);
+  }
+  function handleCancelCast() {
+    setCastingSpell(null);
+    setPickedTargets([]);
+  }
   /** Host-only battle-map background upload (server broadcasts the refreshed grid). */
   async function handleUploadMap(file: File) {
     const token = await getToken();
@@ -562,10 +618,28 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     combat?.active?.kind === "PLAYER" &&
     combat.active.refId === playerId;
 
-  // Abandon any in-flight AoE placement when the turn passes or combat ends.
+  // Abandon any in-flight AoE placement / target selection when the turn passes or combat ends.
   useEffect(() => {
-    if (!combatIsMyTurn) setPlacingSpell(null);
+    if (!combatIsMyTurn) {
+      setPlacingSpell(null);
+      setCastingSpell(null);
+      setPickedTargets([]);
+    }
   }, [combatIsMyTurn]);
+
+  // Escape cancels an in-flight spell cast / AoE placement.
+  useEffect(() => {
+    if (!castingSpell && !placingSpell) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setCastingSpell(null);
+        setPickedTargets([]);
+        setPlacingSpell(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [castingSpell, placingSpell]);
   // Walk speed for the move preview — from the character sheet, else 30.
   const mySpeed =
     Number(
@@ -1003,14 +1077,19 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                 combat={combat}
                 myPlayerId={playerId}
                 myState={myState}
+                mySpeed={mySpeed}
                 isHost={isCreator}
                 connected={connected}
                 spells={combatSpells}
                 allies={combatAllies}
                 runtimeByPlayerId={runtimeByPlayerId}
                 onAttack={handleCombatAttack}
-                onCast={handleCombatCast}
-                onBeginAoePlacement={handleBeginAoePlacement}
+                onBeginCast={handleBeginCast}
+                castingSpell={castingSpell}
+                pickedTargets={pickedTargets}
+                onSelectTarget={handleSelectTarget}
+                onConfirmCast={handleConfirmCast}
+                onCancelCast={handleCancelCast}
                 placingSpellName={placingSpell?.name ?? null}
                 onCancelAoe={handleCancelAoe}
                 onUseItem={handleCombatUseItem}
@@ -1036,6 +1115,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     placingSpell={placingSpell}
                     onCastAoe={handleCastAoe}
                     onCancelAoe={handleCancelAoe}
+                    castingSpell={castingSpell}
+                    pickedTargets={pickedTargets}
+                    onSelectTarget={handleSelectTarget}
                     onUploadMap={handleUploadMap}
                   />
                 </div>

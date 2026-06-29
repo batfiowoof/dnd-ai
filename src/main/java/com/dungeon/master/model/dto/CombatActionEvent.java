@@ -52,39 +52,55 @@ public record CombatActionEvent(
             String condition,
             int currentHp,
             int maxHp,
-            boolean defeated
+            boolean defeated,
+            String healthBand
     ) {
+        /**
+         * Canonical builder that hides exact HP for ENEMY targets: enemies carry only a
+         * {@link HealthBand} (numbers zeroed), while player/ally targets keep exact HP. All the
+         * named factories below route through this so the rule lives in one place.
+         */
+        public static Target of(CombatantKind kind, String name, RollSummary atk, Integer vsAc,
+                                Boolean hit, RollSummary save, Integer saveDc, Boolean saved,
+                                RollSummary dmg, Integer heal, String condition,
+                                int curHp, int maxHp, boolean defeated) {
+            boolean enemy = kind == CombatantKind.ENEMY;
+            return new Target(kind, name, atk, vsAc, hit, save, saveDc, saved, dmg, heal, condition,
+                    enemy ? 0 : curHp, enemy ? 0 : maxHp, defeated,
+                    enemy ? HealthBand.of(curHp, maxHp) : null);
+        }
+
         /** A weapon/spell attack-roll result. */
         public static Target attack(CombatantKind kind, String name, RollSummary atk, int vsAc,
                                     boolean hit, RollSummary dmg, int curHp, int maxHp, boolean defeated) {
-            return new Target(kind, name, atk, vsAc, hit, null, null, null, dmg, null, null,
+            return of(kind, name, atk, vsAc, hit, null, null, null, dmg, null, null,
                     curHp, maxHp, defeated);
         }
 
         /** A saving-throw spell result (full/half/zero damage by save). */
         public static Target save(CombatantKind kind, String name, RollSummary save, int dc,
                                   boolean saved, RollSummary dmg, int curHp, int maxHp, boolean defeated) {
-            return new Target(kind, name, null, null, null, save, dc, saved, dmg, null, null,
+            return of(kind, name, null, null, null, save, dc, saved, dmg, null, null,
                     curHp, maxHp, defeated);
         }
 
         /** An auto-hit damage result (e.g. Magic Missile). */
         public static Target autoDamage(CombatantKind kind, String name, RollSummary dmg,
                                         int curHp, int maxHp, boolean defeated) {
-            return new Target(kind, name, null, null, true, null, null, null, dmg, null, null,
+            return of(kind, name, null, null, true, null, null, null, dmg, null, null,
                     curHp, maxHp, defeated);
         }
 
         /** A heal result. */
         public static Target heal(CombatantKind kind, String name, int healed, int curHp, int maxHp) {
-            return new Target(kind, name, null, null, null, null, null, null, null, healed, null,
+            return of(kind, name, null, null, null, null, null, null, null, healed, null,
                     curHp, maxHp, false);
         }
 
         /** A condition / buff applied (mostly narrative). */
         public static Target effect(CombatantKind kind, String name, String condition,
                                     int curHp, int maxHp) {
-            return new Target(kind, name, null, null, null, null, null, null, null, null, condition,
+            return of(kind, name, null, null, null, null, null, null, null, null, condition,
                     curHp, maxHp, false);
         }
     }

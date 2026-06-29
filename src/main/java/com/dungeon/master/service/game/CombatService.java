@@ -2,6 +2,7 @@ package com.dungeon.master.service.game;
 
 import com.dungeon.master.exception.PlayerNotFoundException;
 import com.dungeon.master.kafka.event.CombatNarrationEvent;
+import com.dungeon.master.model.dto.ActiveCondition;
 import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.dto.CombatActionEvent;
 import com.dungeon.master.model.dto.Combatant;
@@ -11,6 +12,7 @@ import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.EnemyDto;
 import com.dungeon.master.model.dto.GridState;
+import com.dungeon.master.model.dto.HealthBand;
 import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
@@ -204,12 +206,15 @@ public class CombatService {
             throw new IllegalStateException(enemy.getName() + " is already defeated");
         }
 
-        int attackBonus = attackBonus(player);
         Token attackerTok = tokenFor(enc, player.getId().toString());
         Token defenderTok = tokenFor(enc, enemy.getId().toString());
-        boolean disadvantage = defenderTok != null && defenderTok.isDodging();
-        DiceRollResult atk = rollAttack(attackBonus, disadvantage);
+        boolean melee = isMelee(attackerTok, defenderTok, enc.getGridState());
+        int attackBonus = attackBonus(player) + ConditionRules.attackModifier(playerConds(player.getId()));
+        RollMode mode = playerVsEnemyMode(player, enemy, defenderTok, melee);
+        DiceRollResult atk = rollAttack(attackBonus, mode);
         int targetAc = effectiveAc(enemy.getArmorClass(), attackerTok, defenderTok, enc.getGridState());
+        // A natural 1 always misses; auto-crit (vs a paralyzed/unconscious enemy) only upgrades a
+        // landed hit, and crit carries no extra weight against an enemy here, so it doesn't gate the hit.
         boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
 
         RollSummary damageSummary = null;
@@ -225,6 +230,7 @@ public class CombatService {
             damageSummary = RollSummary.of(dmg);
         }
 
+        markAction(enc, player);                 // spend the action (turn doesn't end yet)
         broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK", "attacks",
                 List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
                         RollSummary.of(atk), targetAc, hit, damageSummary,
@@ -234,7 +240,7 @@ public class CombatService {
         beat.add(describeAttack(player.getCharacterName(), enemy.getName(), atk,
                 targetAc, hit, damageSummary,
                 enemy.getCurrentHp(), enemy.getMaxHp(), defeated));
-        advanceTurn(enc, beat);
+        maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
 
@@ -247,6 +253,7 @@ public class CombatService {
         PlayerStateService.ItemUseResult result = playerStateService.useItem(player.getId(), itemName);
         broadcast(sessionId, PlayerStateEvent.of(sessionId, result.state()));
 
+        markAction(enc, player);
         broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ITEM",
                 "uses " + result.itemName(),
                 List.of(CombatActionEvent.Target.heal(CombatantKind.PLAYER, player.getCharacterName(),
@@ -254,7 +261,7 @@ public class CombatService {
 
         List<String> beat = new ArrayList<>();
         beat.add(describeItemUse(player.getCharacterName(), result));
-        advanceTurn(enc, beat);
+        maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
 
@@ -276,7 +283,6 @@ public class CombatService {
                                 Integer originX, Integer originY) {
         CombatEncounter enc = activeEncounter(sessionId);
         Player player = requireCombatTurn(enc, sessionId, username);
-        requireActionAvailable(enc, player);
 
         PlayerRuntimeStateDto state = playerStateService.getState(player.getId());
         if (!containsIgnoreCase(state.cantrips(), spellName)
@@ -286,6 +292,13 @@ public class CombatService {
 
         SpellEffect effect = spellCatalog.effect(spellName)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown spell: " + spellName));
+
+        // A Bonus-Action spell spends the bonus action; everything else spends the action.
+        if (effect.isBonusAction()) {
+            requireBonusActionAvailable(enc, player);
+        } else {
+            requireActionAvailable(enc, player);
+        }
 
         // Spend a slot for leveled spells (cantrips are free). Throws if none remain.
         if (spellLevel >= 1) {
@@ -302,6 +315,12 @@ public class CombatService {
         Character caster = character(player);
         List<CombatActionEvent.Target> results = new ArrayList<>();
         List<String> beat = new ArrayList<>();
+
+        // Casting a new concentration spell ends the caster's previous one (clearing its conditions).
+        if (effect.concentration()) {
+            breakConcentration(enc, player.getId(), beat);
+        }
+
         String actionKind = switch (effect.effectType()) {
             case HEAL -> {
                 resolveHeal(sessionId, player, caster, effect, spellLevel, targetIds, results, beat);
@@ -312,14 +331,27 @@ public class CombatService {
                 yield "SPELL_DAMAGE";
             }
             default -> {
-                resolveSpellEffect(sessionId, player, caster, effect, effectiveTargets, results, beat);
+                resolveSpellEffect(enc, sessionId, player, caster, effect, effectiveTargets, results, beat);
                 yield "SPELL_EFFECT";
             }
         };
 
+        // Now that the spell resolved (and may have applied conditions), record the new concentration.
+        if (effect.concentration()) {
+            broadcast(sessionId, PlayerStateEvent.of(sessionId,
+                    playerStateService.setConcentratingSpell(player.getId(), effect.name())));
+        }
+
+        // Spend the matching economy slot before broadcasting so the event carries the update.
+        if (effect.isBonusAction()) {
+            markBonusAction(enc, player);
+        } else {
+            markAction(enc, player);
+        }
+
         broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(),
                 actionKind, "casts " + effect.name(), results);
-        advanceTurn(enc, beat);
+        maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
 
@@ -358,7 +390,7 @@ public class CombatService {
         }
 
         Character c = character(player);
-        int speed = c != null ? c.getSpeed() : 30;
+        int speed = ConditionRules.effectiveSpeed(c != null ? c.getSpeed() : 30, playerConds(player.getId()));
         int budget = speed + (token.isDashed() ? speed : 0) - token.getMovementUsedFeet();
 
         Integer cost = gridService.pathCostFeet(grid, token.getX(), token.getY(), x, y, refId);
@@ -401,6 +433,7 @@ public class CombatService {
 
         encounterRepository.save(enc);
         broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+        maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
 
@@ -441,6 +474,7 @@ public class CombatService {
         broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
         List<String> beat = new ArrayList<>();
         beat.add(player.getCharacterName() + narration);
+        maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
 
@@ -479,11 +513,8 @@ public class CombatService {
         }
 
         // The attempt is the actor's action (grid-gated where a token exists).
-        Token token = tokenFor(enc, actor.getId().toString());
-        if (token != null) {
-            token.setActionUsed(true);
-        }
-        advanceTurn(enc, beat);
+        markAction(enc, actor);
+        maybeAutoEndTurn(enc, actor, beat);
         flushBeat(sessionId, actor.getId(), beat);
     }
 
@@ -549,7 +580,14 @@ public class CombatService {
                     advanceIndex(enc);
                     continue;
                 }
+                expireEnemyConditions(enc, e, beat);          // timer + "save ends" at turn start
                 resetTurnFlags(enc, e.getId().toString());
+                if (ConditionRules.incapacitated(e.getConditions())) {
+                    beat.add(e.getName() + " is " + incapacitatingLabel(e.getConditions()) + " and can't act.");
+                    broadcastAction(enc, CombatantKind.ENEMY, e.getName(), "HOLD", "is incapacitated", List.of());
+                    advanceIndex(enc);
+                    continue;
+                }
                 enemyAct(enc, e, beat);
                 advanceIndex(enc);
                 continue;
@@ -569,6 +607,19 @@ public class CombatService {
                     advanceIndex(enc);
                     continue;
                 }
+            }
+            // Expire timer-based conditions at this player's turn start, then skip if incapacitated.
+            PlayerRuntimeStateDto expired = playerStateService.expireConditions(active.refId(), enc.getRound());
+            if (expired != null) {
+                broadcast(sessionId, PlayerStateEvent.of(sessionId, expired));
+            }
+            List<ActiveCondition> pConds = playerConds(active.refId());
+            if (ConditionRules.incapacitated(pConds)) {
+                beat.add(playerName(active.refId()) + " is " + incapacitatingLabel(pConds) + " and can't act.");
+                broadcastAction(enc, CombatantKind.PLAYER, playerName(active.refId()),
+                        "HOLD", "is incapacitated", List.of());
+                advanceIndex(enc);
+                continue;
             }
             resetTurnFlags(enc, active.refId().toString());
             encounterRepository.save(enc);
@@ -633,7 +684,7 @@ public class CombatService {
         Token targetTok = tokenFor(enc, target.player().getId().toString());
         GridState grid = enc.getGridState();
         String refId = enemy.getId().toString();
-        int budget = Math.max(0, enemy.getSpeed());
+        int budget = Math.max(0, ConditionRules.effectiveSpeed(enemy.getSpeed(), enemy.getConditions()));
         int meleeReach = enemyReachFeet(enemy);
         int bestRange = enemyBestRange(enemy);
         int ox = enemyTok.getX();
@@ -687,7 +738,8 @@ public class CombatService {
     private void resolveMultiattack(CombatEncounter enc, Enemy enemy, TargetPlayer target, List<String> beat) {
         UUID sessionId = enc.getSessionId();
         List<MonsterAttack> atks = enemy.getAttacks();
-        int attackBonus = atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit();
+        int attackBonus = (atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit())
+                + ConditionRules.attackModifier(enemy.getConditions());
         String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
         int swings = Math.max(1, enemy.getAttacksPerTurn());
 
@@ -700,10 +752,13 @@ public class CombatService {
             Player victim = target.player();
             Token enemyTok = tokenFor(enc, enemy.getId().toString());
             Token victimTok = tokenFor(enc, victim.getId().toString());
-            boolean disadvantage = victimTok != null && victimTok.isDodging();
-            DiceRollResult atk = rollAttack(attackBonus, disadvantage);
+            boolean melee = isMelee(enemyTok, victimTok, enc.getGridState());
+            RollMode mode = enemyVsPlayerMode(enemy, victim.getId(), victimTok, melee);
+            DiceRollResult atk = rollAttack(attackBonus, mode);
             int targetAc = effectiveAc(armorClass(victim), enemyTok, victimTok, enc.getGridState());
             boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+            // A melee hit on a paralyzed/unconscious victim is an automatic critical (two death-save failures).
+            boolean crit = atk.crit() || (hit && ConditionRules.autoCritMelee(playerConds(victim.getId()), melee));
 
             RollSummary damageSummary = null;
             int targetHp = target.state().currentHp();
@@ -712,12 +767,13 @@ public class CombatService {
             if (hit) {
                 DiceRollResult dmg = rollExpr(damageDice);
                 PlayerRuntimeStateDto updated =
-                        playerStateService.applyHpDelta(victim.getId(), -dmg.total(), atk.crit());
+                        playerStateService.applyHpDelta(victim.getId(), -dmg.total(), crit);
                 broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
                 targetHp = updated.currentHp();
                 targetMax = updated.maxHp();
                 defeated = updated.currentHp() <= 0;
                 damageSummary = RollSummary.of(dmg);
+                concentrationCheckOnDamage(enc, victim.getId(), dmg.total(), updated, beat);
                 target = new TargetPlayer(victim, updated);  // refresh for the next swing
             }
 
@@ -824,6 +880,10 @@ public class CombatService {
     private void endEncounter(CombatEncounter enc, boolean victory, List<String> beat) {
         enc.setStatus(CombatStatus.ENDED);
         encounterRepository.save(enc);
+        // Combat over: drop every lingering condition + concentration so nothing leaks past the fight.
+        for (PlayerRuntimeStateDto dto : playerStateService.clearConditionsAndConcentration(enc.getSessionId())) {
+            broadcast(enc.getSessionId(), PlayerStateEvent.of(enc.getSessionId(), dto));
+        }
         if (beat != null) {
             beat.add(victory
                     ? "The last foe falls — the party stands victorious."
@@ -859,7 +919,8 @@ public class CombatService {
         List<Enemy> targets = enemyTargets(sessionId, targetIds, effect);
         String dice = scaledNotation(effect.damageDice(), effect, spellLevel, casterChar);
         int dc = SpellcastingRules.spellSaveDc(casterChar);
-        int atkBonus = SpellcastingRules.spellAttackBonus(casterChar);
+        int atkBonus = SpellcastingRules.spellAttackBonus(casterChar)
+                + ConditionRules.attackModifier(playerConds(caster.getId()));
         int[] darts = distribute(Math.max(1, effect.projectiles()), targets.size());
         Token casterTok = tokenFor(enc, caster.getId().toString());
         for (int i = 0; i < targets.size(); i++) {
@@ -868,8 +929,14 @@ public class CombatService {
             switch (effect.resolution()) {
                 case SPELL_ATTACK -> {
                     Token targetTok = tokenFor(enc, e.getId().toString());
-                    boolean disadvantage = targetTok != null && targetTok.isDodging();
-                    DiceRollResult atk = rollAttack(atkBonus, disadvantage);
+                    // Touch spells are melee spell attacks (matters for advantage vs a prone target);
+                    // ranged spell attacks are not. Auto-crit still never applies to spell attacks.
+                    RollMode mode = RollMode.combine(
+                            ConditionRules.attackMode(playerConds(caster.getId()), e.getConditions(),
+                                    effect.isMeleeRange()),
+                            targetTok != null && targetTok.isDodging()
+                                    ? RollMode.DISADVANTAGE : RollMode.NORMAL);
+                    DiceRollResult atk = rollAttack(atkBonus, mode);
                     int targetAc = effectiveAc(e.getArmorClass(), casterTok, targetTok, enc.getGridState());
                     boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
                     RollSummary dmg = null;
@@ -885,12 +952,19 @@ public class CombatService {
                             e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
                 }
                 case SAVE -> {
-                    int saveMod = enemySaveMod(e, effect.saveAbility());
-                    DiceRollResult save = diceService.roll(notation(saveMod));
-                    boolean saved = save.total() >= dc;
+                    boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
+                    int saveMod = enemySaveMod(e, effect.saveAbility())
+                            + ConditionRules.saveModifier(e.getConditions());
+                    DiceRollResult save = diceService.roll(notation(saveMod),
+                            ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
+                    boolean saved = !autoFail && save.total() >= dc;
                     DiceRollResult d = rollExpr(dice);
                     int dealt = saved ? (effect.halfOnSave() ? d.total() / 2 : 0) : d.total();
                     applyEnemyDamage(e, dealt);
+                    // A damage spell can also impose a condition on a failed save (e.g. Web → restrained).
+                    if (!saved && effect.condition() != null && e.isAlive()) {
+                        applyEnemyCondition(enc, e, effect, caster, dc);
+                    }
                     results.add(CombatActionEvent.Target.save(CombatantKind.ENEMY, e.getName(),
                             RollSummary.of(save), dc, saved, RollSummary.of(d),
                             e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
@@ -920,9 +994,9 @@ public class CombatService {
         }
     }
 
-    /** BUFF / DEBUFF / CONTROL / UTILITY — tag a condition (save-gated for enemies) and narrate. */
-    private void resolveSpellEffect(UUID sessionId, Player caster, Character casterChar, SpellEffect effect,
-                                    List<UUID> targetIds,
+    /** BUFF / DEBUFF / CONTROL / UTILITY — tag a structured condition (save-gated for enemies) and narrate. */
+    private void resolveSpellEffect(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
+                                    SpellEffect effect, List<UUID> targetIds,
                                     List<CombatActionEvent.Target> results, List<String> beat) {
         String cond = effect.condition();
         boolean offensive = effect.targetType() == SpellTargetType.ENEMY
@@ -934,15 +1008,18 @@ public class CombatService {
                 boolean applied = true;
                 RollSummary saveSummary = null;
                 if (effect.resolution() == SpellResolution.SAVE) {
-                    DiceRollResult save = diceService.roll(notation(enemySaveMod(e, effect.saveAbility())));
-                    applied = save.total() < dc;
+                    boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
+                    int saveMod = enemySaveMod(e, effect.saveAbility())
+                            + ConditionRules.saveModifier(e.getConditions());
+                    DiceRollResult save = diceService.roll(notation(saveMod),
+                            ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
+                    applied = autoFail || save.total() < dc;
                     saveSummary = RollSummary.of(save);
                 }
                 if (applied && cond != null) {
-                    if (!e.getConditions().contains(cond)) e.getConditions().add(cond);
-                    enemyRepository.save(e);
+                    applyEnemyCondition(enc, e, effect, caster, dc);
                 }
-                results.add(new CombatActionEvent.Target(CombatantKind.ENEMY, e.getName(),
+                results.add(CombatActionEvent.Target.of(CombatantKind.ENEMY, e.getName(),
                         null, null, null, saveSummary, saveSummary == null ? null : dc,
                         saveSummary == null ? null : !applied, null, null,
                         applied ? cond : null, e.getCurrentHp(), e.getMaxHp(), false));
@@ -952,6 +1029,13 @@ public class CombatService {
             }
         } else {
             for (UUID pid : playerTargets(sessionId, targetIds, effect, caster)) {
+                if (cond != null) {
+                    ActiveCondition c = ActiveCondition.fromSpell(cond, caster.getId(), effect.name(),
+                            effect.concentration());
+                    c = effect.concentration() ? c : c.expiringAt(enc.getRound() + 10);
+                    broadcast(sessionId, PlayerStateEvent.of(sessionId,
+                            playerStateService.applyCondition(pid, c)));
+                }
                 PlayerRuntimeStateDto s = playerStateService.getState(pid);
                 results.add(CombatActionEvent.Target.effect(CombatantKind.PLAYER, playerName(pid),
                         cond, s.currentHp(), s.maxHp()));
@@ -959,6 +1043,136 @@ public class CombatService {
                         + playerName(pid) + ".");
             }
         }
+    }
+
+    /**
+     * Build and attach a structured condition to an enemy (replacing any same-named one).
+     * Concentration spells stay until the caster's concentration drops; those resolved by a
+     * save get a "save ends" clause re-rolled at the enemy's turn start. Non-concentration
+     * conditions lapse after ~1 minute (10 rounds).
+     */
+    private void applyEnemyCondition(CombatEncounter enc, Enemy e, SpellEffect effect, Player caster, int dc) {
+        String cond = effect.condition();
+        if (cond == null) {
+            return;
+        }
+        ActiveCondition c = ActiveCondition.fromSpell(cond, caster.getId(), effect.name(), effect.concentration());
+        if (effect.concentration()) {
+            if (effect.resolution() == SpellResolution.SAVE && effect.saveAbility() != null) {
+                c = c.savingEnds(effect.saveAbility(), dc);
+            }
+        } else {
+            c = c.expiringAt(enc.getRound() + 10);
+        }
+        e.getConditions().removeIf(x -> x.name() != null && x.name().equalsIgnoreCase(cond));
+        e.getConditions().add(c);
+        enemyRepository.save(e);
+    }
+
+    /**
+     * End a caster's concentration: clear their concentration flag and drop every
+     * concentration-flagged condition they applied to enemies and players, broadcasting the
+     * refreshed state for each affected player.
+     */
+    private void breakConcentration(CombatEncounter enc, UUID casterId, List<String> beat) {
+        UUID sessionId = enc.getSessionId();
+        boolean any = false;
+        for (Enemy e : enemyRepository.findBySessionId(sessionId)) {
+            if (e.getConditions().removeIf(c -> c.concentration() && casterId.equals(c.sourceCasterId()))) {
+                enemyRepository.save(e);
+                any = true;
+            }
+        }
+        List<PlayerRuntimeStateDto> changed = playerStateService.breakConcentration(sessionId, casterId);
+        for (PlayerRuntimeStateDto dto : changed) {
+            broadcast(sessionId, PlayerStateEvent.of(sessionId, dto));
+        }
+        if ((any || !changed.isEmpty()) && beat != null) {
+            beat.add(playerName(casterId) + "'s concentration ends.");
+        }
+    }
+
+    /**
+     * 5E concentration check after a concentrating player takes damage: dropping to 0 HP ends it
+     * outright; otherwise roll a Constitution save (DC = max(10, ⌊damage/2⌋)) and break it on a
+     * failure. No-op when the player wasn't concentrating or took no damage.
+     */
+    private void concentrationCheckOnDamage(CombatEncounter enc, UUID victimId, int damage,
+                                            PlayerRuntimeStateDto updated, List<String> beat) {
+        if (damage <= 0 || updated.concentratingSpell() == null) {
+            return;
+        }
+        if (updated.currentHp() <= 0) {
+            breakConcentration(enc, victimId, beat);             // unconscious → concentration ends
+            return;
+        }
+        int dc = Math.max(10, damage / 2);
+        int conMod = abilityMod(updated, "CON");
+        DiceRollResult save = diceService.roll(notation(conMod));
+        broadcast(enc.getSessionId(), DiceRollEvent.of(enc.getSessionId(), victimId,
+                playerName(victimId), "Concentration save (DC " + dc + ")", save));
+        if (save.total() < dc) {
+            if (beat != null) {
+                beat.add(playerName(victimId) + " loses concentration on " + updated.concentratingSpell()
+                        + " (CON save " + save.total() + " vs DC " + dc + ").");
+            }
+            breakConcentration(enc, victimId, beat);
+        }
+    }
+
+    /** Ability modifier from a player's runtime ability scores (defaults to 0 if absent). */
+    private static int abilityMod(PlayerRuntimeStateDto state, String ability) {
+        Integer score = state.abilities() == null ? null : state.abilities().get(ability);
+        return score == null ? 0 : Math.floorDiv(score - 10, 2);
+    }
+
+    /**
+     * At an enemy's turn start, drop its timer-expired conditions and re-roll any "save ends"
+     * conditions (success removes them). Persists when anything changed; the following enemy
+     * action (or skip) broadcasts the refreshed state.
+     */
+    private void expireEnemyConditions(CombatEncounter enc, Enemy e, List<String> beat) {
+        List<ActiveCondition> conds = e.getConditions();
+        if (conds == null || conds.isEmpty()) {
+            return;
+        }
+        int round = enc.getRound();
+        boolean changed = conds.removeIf(c -> {
+            if (c.expiresAtRound() != null && round > c.expiresAtRound()) {
+                if (beat != null) beat.add(e.getName() + " is no longer " + c.name() + ".");
+                return true;
+            }
+            return false;
+        });
+        List<ActiveCondition> shaken = new ArrayList<>();
+        for (ActiveCondition c : conds) {
+            if (c.saveAbility() != null && c.saveDc() != null) {
+                int mod = enemySaveMod(e, c.saveAbility()) + ConditionRules.saveModifier(conds);
+                DiceRollResult save = diceService.roll(notation(mod),
+                        ConditionRules.saveMode(conds, c.saveAbility()));
+                if (save.total() >= c.saveDc()) {
+                    shaken.add(c);
+                    if (beat != null) beat.add(e.getName() + " shakes off " + c.name() + ".");
+                }
+            }
+        }
+        if (!shaken.isEmpty()) {
+            conds.removeAll(shaken);
+            changed = true;
+        }
+        if (changed) {
+            enemyRepository.save(e);
+        }
+    }
+
+    /** First incapacitating condition name on the list, for the "X is <…> and can't act" beat. */
+    private static String incapacitatingLabel(List<ActiveCondition> conds) {
+        for (ActiveCondition c : conds) {
+            if (ConditionRules.incapacitated(List.of(c))) {
+                return c.name();
+            }
+        }
+        return "incapacitated";
     }
 
     /* ── spell helpers ───────────────────────────────────────────── */
@@ -1272,6 +1486,54 @@ public class CombatService {
         }
     }
 
+    /** Guard the bonus action (e.g. a Bonus-Action spell). No-op on legacy/no-token encounters. */
+    private void requireBonusActionAvailable(CombatEncounter enc, Player player) {
+        Token t = tokenFor(enc, player.getId().toString());
+        if (t != null && t.isBonusActionUsed()) {
+            throw new IllegalStateException("You have already used your bonus action this turn");
+        }
+    }
+
+    /** Spend the player's action for the turn (persists). */
+    private void markAction(CombatEncounter enc, Player player) {
+        Token t = tokenFor(enc, player.getId().toString());
+        if (t != null) {
+            t.setActionUsed(true);
+            encounterRepository.save(enc);
+        }
+    }
+
+    /** Spend the player's bonus action for the turn (persists). */
+    private void markBonusAction(CombatEncounter enc, Player player) {
+        Token t = tokenFor(enc, player.getId().toString());
+        if (t != null) {
+            t.setBonusActionUsed(true);
+            encounterRepository.save(enc);
+        }
+    }
+
+    /**
+     * After a non-turn-ending action, auto-advance ONLY when the player has nothing left to do —
+     * action AND bonus action spent AND no movement remaining. Otherwise the turn stays theirs
+     * (they end it explicitly with End Turn). On legacy/no-token encounters there is no economy to
+     * track, so an action ends the turn as before.
+     */
+    private void maybeAutoEndTurn(CombatEncounter enc, Player player, List<String> beat) {
+        Token t = tokenFor(enc, player.getId().toString());
+        if (t == null) {
+            advanceTurn(enc, beat);                       // legacy encounter — preserve old behaviour
+            return;
+        }
+        Character c = character(player);
+        int speed = ConditionRules.effectiveSpeed(c != null ? c.getSpeed() : 30,
+                playerConds(player.getId()));
+        int budget = speed + (t.isDashed() ? speed : 0);
+        boolean movementLeft = t.getMovementUsedFeet() < budget;
+        if (t.isActionUsed() && t.isBonusActionUsed() && !movementLeft) {
+            advanceTurn(enc, beat);
+        }
+    }
+
     /**
      * Defender AC including cover from intervening walls (base + 0/+2/+5). Returns the
      * base AC unchanged when either token or the grid is absent (legacy encounters).
@@ -1290,9 +1552,52 @@ public class CombatService {
      * tests see the same notation.
      */
     private DiceRollResult rollAttack(int bonus, boolean disadvantage) {
-        return disadvantage
-                ? diceService.roll(notation(bonus), RollMode.DISADVANTAGE)
-                : diceService.roll(notation(bonus));
+        return rollAttack(bonus, disadvantage ? RollMode.DISADVANTAGE : RollMode.NORMAL);
+    }
+
+    /** Roll a 1d20 attack with the given bonus and an explicit advantage/disadvantage mode. */
+    private DiceRollResult rollAttack(int bonus, RollMode mode) {
+        return mode == RollMode.NORMAL
+                ? diceService.roll(notation(bonus))
+                : diceService.roll(notation(bonus), mode);
+    }
+
+    /* ── condition-aware attack/melee helpers ────────────────────── */
+
+    /** A player's structured conditions (empty when none). */
+    private List<ActiveCondition> playerConds(UUID playerId) {
+        try {
+            return playerStateService.conditions(playerId);
+        } catch (RuntimeException ex) {
+            return List.of();
+        }
+    }
+
+    /** True when two tokens are within 5 ft (one square); assumes melee when there is no grid. */
+    private boolean isMelee(Token a, Token b, GridState grid) {
+        if (grid == null || a == null || b == null) {
+            return true;
+        }
+        return gridService.distanceFeet(a.getX(), a.getY(), b.getX(), b.getY())
+                <= GridService.FEET_PER_SQUARE;
+    }
+
+    /** Net attack roll mode for a player attacking an enemy (conditions + the target Dodging). */
+    private RollMode playerVsEnemyMode(Player attacker, Enemy defender, Token defenderTok, boolean melee) {
+        RollMode cond = ConditionRules.attackMode(playerConds(attacker.getId()),
+                defender.getConditions(), melee);
+        RollMode dodge = defenderTok != null && defenderTok.isDodging()
+                ? RollMode.DISADVANTAGE : RollMode.NORMAL;
+        return RollMode.combine(cond, dodge);
+    }
+
+    /** Net attack roll mode for an enemy attacking a player (conditions + the target Dodging). */
+    private RollMode enemyVsPlayerMode(Enemy attacker, UUID victimId, Token victimTok, boolean melee) {
+        RollMode cond = ConditionRules.attackMode(attacker.getConditions(),
+                playerConds(victimId), melee);
+        RollMode dodge = victimTok != null && victimTok.isDodging()
+                ? RollMode.DISADVANTAGE : RollMode.NORMAL;
+        return RollMode.combine(cond, dodge);
     }
 
     /** Reset a combatant's per-turn action economy as their turn begins (Dodge from last round expires here). */
@@ -1307,6 +1612,7 @@ public class CombatService {
         t.setReactionAvailable(true);
         t.setDodging(false);
         t.setActionUsed(false);
+        t.setBonusActionUsed(false);
     }
 
     /** A hostile that currently threatens the mover, captured before a move resolves opportunity attacks. */
@@ -1363,15 +1669,18 @@ public class CombatService {
         }
 
         List<MonsterAttack> atks = enemy.getAttacks();
-        int attackBonus = atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit();
+        int attackBonus = (atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit())
+                + ConditionRules.attackModifier(enemy.getConditions());
         String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
 
         Token enemyTok = tokenFor(enc, enemy.getId().toString());
         Token victimTok = tokenFor(enc, victim.getId().toString());
-        boolean disadvantage = victimTok != null && victimTok.isDodging();
-        DiceRollResult atk = rollAttack(attackBonus, disadvantage);
+        // An opportunity attack is by definition a melee swing at an adjacent creature.
+        RollMode mode = enemyVsPlayerMode(enemy, victim.getId(), victimTok, true);
+        DiceRollResult atk = rollAttack(attackBonus, mode);
         int targetAc = effectiveAc(armorClass(victim), enemyTok, victimTok, enc.getGridState());
         boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+        boolean crit = atk.crit() || (hit && ConditionRules.autoCritMelee(playerConds(victim.getId()), true));
 
         RollSummary damageSummary = null;
         int targetHp = state.currentHp();
@@ -1380,12 +1689,13 @@ public class CombatService {
         if (hit) {
             DiceRollResult dmg = rollExpr(damageDice);
             PlayerRuntimeStateDto updated =
-                    playerStateService.applyHpDelta(victim.getId(), -dmg.total(), atk.crit());
+                    playerStateService.applyHpDelta(victim.getId(), -dmg.total(), crit);
             broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
             targetHp = updated.currentHp();
             targetMax = updated.maxHp();
             defeated = updated.currentHp() <= 0;
             damageSummary = RollSummary.of(dmg);
+            concentrationCheckOnDamage(enc, victim.getId(), dmg.total(), updated, beat);
         }
 
         broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "makes an opportunity attack",
@@ -1508,8 +1818,9 @@ public class CombatService {
 
     private CombatStateDto toStateDto(CombatEncounter enc) {
         List<EnemyDto> enemies = enemyRepository.findBySessionId(enc.getSessionId()).stream()
-                .map(e -> new EnemyDto(e.getId(), e.getName(), e.getMaxHp(),
-                        e.getCurrentHp(), e.getArmorClass(), e.isAlive()))
+                .map(e -> new EnemyDto(e.getId(), e.getName(), e.getArmorClass(), e.isAlive(),
+                        e.getConditions().stream().map(ActiveCondition::name).toList(),
+                        HealthBand.of(e.getCurrentHp(), e.getMaxHp()), enemyReachFeet(e)))
                 .toList();
         List<Combatant> order = enc.getInitiativeOrder();
         Combatant active = (enc.getStatus() == CombatStatus.ACTIVE

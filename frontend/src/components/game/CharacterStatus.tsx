@@ -2,6 +2,7 @@
 
 import type { PlayerRuntimeState } from "@/types";
 import { cn } from "@/components/ui";
+import { conditionMeta, conditionChipClasses } from "@/lib/conditions";
 import DeathSaveTrack, {
   StatusBadge,
   deriveDeathStatus,
@@ -113,17 +114,32 @@ export default function CharacterStatus({
         </div>
       )}
 
-      {/* Conditions */}
-      {state.conditions.length > 0 && (
+      {/* Conditions + concentration */}
+      {(state.conditions.length > 0 || state.concentratingSpell) && (
         <div className="flex flex-wrap gap-1">
-          {state.conditions.map((c) => (
+          {state.concentratingSpell && (
             <span
-              key={c}
-              className="rounded bg-accent-dark/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-accent-light"
+              title={`Concentrating on ${state.concentratingSpell}`}
+              className="rounded border border-gold/40 bg-gold-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-gold"
             >
-              {c}
+              ◈ {state.concentratingSpell}
             </span>
-          ))}
+          )}
+          {state.conditions.map((c) => {
+            const meta = conditionMeta(c);
+            return (
+              <span
+                key={c}
+                title={`${meta.label} — ${meta.hint}`}
+                className={cn(
+                  "rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider",
+                  conditionChipClasses(meta.tone)
+                )}
+              >
+                {meta.label}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>

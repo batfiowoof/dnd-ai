@@ -5,6 +5,7 @@ import type {
   CombatStateDto,
   Combatant,
   PlayerRuntimeState,
+  SpellSummary,
   TerrainType,
 } from "@/types";
 import {
@@ -20,6 +21,10 @@ import DeathSaveTrack, {
   deriveDeathStatus,
 } from "@/components/combat/DeathSaveTrack";
 import CombatRollFeed from "@/components/combat/CombatRollFeed";
+import { conditionMeta, conditionBadgeColors } from "@/lib/conditions";
+import { bandMeta } from "@/lib/health";
+import { isAllyTargeting, parseRangeFeet, attackModePreview } from "@/lib/combat";
+import { useSessionStore } from "@/store/sessionStore";
 
 /** Logical cell size (px in the SVG user space). ≥44 keeps tap targets accessible. */
 const CELL = 48;
@@ -52,6 +57,12 @@ interface BattleMapProps {
   onCastAoe: (spellName: string, spellLevel: number, x: number, y: number) => void;
   /** Abandon AoE placement mode. */
   onCancelAoe: () => void;
+  /** Single/multi-target spell awaiting target selection (click tokens), or null. */
+  castingSpell: SpellSummary | null;
+  /** Targets picked so far (multi-target spells). */
+  pickedTargets: string[];
+  /** Select/toggle a target token. */
+  onSelectTarget: (refId: string) => void;
   /** Upload a battle-map background (host only). Rejects with a message on 400/403/409. */
   onUploadMap: (file: File) => Promise<void>;
 }
@@ -116,6 +127,9 @@ export default function BattleMap({
   placingSpell,
   onCastAoe,
   onCancelAoe,
+  castingSpell,
+  pickedTargets,
+  onSelectTarget,
   onUploadMap,
 }: BattleMapProps) {
   const reduced = usePrefersReducedMotion();
@@ -178,14 +192,47 @@ export default function BattleMap({
     return s;
   }, [grid]);
 
+  // Squares within a living enemy's melee reach — tinted so the player can avoid provoking
+  // opportunity attacks when moving out of them.
+  const threatened = useMemo(() => {
+    const set = new Set<string>();
+    if (!grid) return set;
+    for (const e of combat.enemies) {
+      if (!e.alive) continue;
+      const et = grid.tokens[e.id];
+      if (!et) continue;
+      const reach = e.reachFeet > 0 ? e.reachFeet : 5;
+      for (let gy = 0; gy < grid.height; gy++) {
+        for (let gx = 0; gx < grid.width; gx++) {
+          if (gridDistanceFeet(et.x, et.y, gx, gy) <= reach) set.add(cellKey(gx, gy));
+        }
+      }
+    }
+    return set;
+  }, [grid, combat.enemies]);
+
+  // Combat is "busy" while queued action animations play or the DM narrates the beat.
+  // (Subscribed before the early return below to keep hook order stable.)
+  const queueLength = useSessionStore((s) => s.combatActionQueue.length);
+  const combatNarrating = useSessionStore((s) => s.combatNarrating);
+  const busy = queueLength > 0 || combatNarrating;
+
   // Resume from a pre-grid encounter → nothing to draw.
   if (!grid) return null;
 
   const W = grid.width * CELL;
   const H = grid.height * CELL;
   const placing = !!placingSpell;
-  // Reachable-move interactions are suspended while aiming an AoE template.
-  const interactive = isMyTurn && connected && !placing;
+  const targeting = !!castingSpell;
+  // Suspend interactions while aiming an AoE template, or while the previous beat's action
+  // animations / DM narration are still resolving (so the player can follow what happened).
+  const interactive = isMyTurn && connected && !placing && !busy;
+  // Active spell-targeting context (which side is valid + the spell's range in feet).
+  const casterTok = grid.tokens[myPlayerId];
+  const targetAlly = castingSpell ? isAllyTargeting(castingSpell) : false;
+  const targetRangeFeet = castingSpell ? parseRangeFeet(castingSpell.range) : Infinity;
+  // My conditions drive the advantage/disadvantage preview shown on enemy tokens.
+  const myConds = runtimeByPlayerId[myPlayerId]?.conditions;
 
   const enemyById = Object.fromEntries(combat.enemies.map((e) => [e.id, e]));
 
@@ -460,8 +507,33 @@ export default function BattleMap({
             })}
           </g>
 
-          {/* 6 — Reachable-move highlight (active player's turn only) */}
-          {interactive && (
+          {/* 5.5 — Opportunity-attack threat zones (enemy melee reach) on the player's turn */}
+          {isMyTurn && !placing && (
+            <g aria-hidden="true" pointerEvents="none">
+              {[...threatened].map((k) => {
+                const [tx, ty] = k.split(",").map(Number);
+                return (
+                  <rect
+                    key={`threat${k}`}
+                    x={tx * CELL + 1}
+                    y={ty * CELL + 1}
+                    width={CELL - 2}
+                    height={CELL - 2}
+                    rx={3}
+                    fill="var(--color-danger)"
+                    fillOpacity={0.06}
+                    stroke="var(--color-danger)"
+                    strokeOpacity={0.25}
+                    strokeDasharray="2 4"
+                    strokeWidth={1}
+                  />
+                );
+              })}
+            </g>
+          )}
+
+          {/* 6 — Reachable-move highlight (active player's turn only; hidden while targeting) */}
+          {interactive && !targeting && (
             <g>
               {[...reachable].map((k) => {
                 if (occupied.has(k)) return null;
@@ -557,19 +629,54 @@ export default function BattleMap({
 
               const enemy = isEnemy ? enemyById[refId] : undefined;
               const runtime = !isEnemy ? runtimeByPlayerId[refId] : undefined;
-              const cur = enemy?.currentHp ?? runtime?.currentHp ?? 0;
-              const max = enemy?.maxHp ?? runtime?.maxHp ?? 1;
+              // Enemies expose only a health band (exact HP hidden); players use real HP.
+              const band = isEnemy ? bandMeta(enemy?.healthBand) : null;
+              const cur = runtime?.currentHp ?? 0;
+              const max = runtime?.maxHp ?? 1;
               const ratio = max > 0 ? cur / max : 0;
+              const ringColor = isEnemy
+                ? band?.color ?? "#6b7280"
+                : hpColor(ratio);
               const status = !isEnemy ? deriveDeathStatus(runtime) : null;
               const downed = !isEnemy && runtime ? runtime.currentHp <= 0 : false;
               const name = c?.name ?? enemy?.name ?? "Combatant";
 
+              // Plain attack is available only when NOT in spell-targeting mode.
               const canAttack =
-                interactive && isEnemy && (enemy?.alive ?? true);
+                interactive && !targeting && isEnemy && (enemy?.alive ?? true);
 
-              const label = `${name}, ${Math.max(0, cur)}/${max} HP, ${colLetter(
-                tk.x
-              )}${tk.y + 1}${isEnemy ? " (enemy)" : ""}${
+              // Spell targeting: in range + the right side (allies for heal/buff, enemies else).
+              const inRange =
+                !casterTok ||
+                gridDistanceFeet(casterTok.x, casterTok.y, tk.x, tk.y) <=
+                  targetRangeFeet;
+              const validTarget =
+                targeting &&
+                interactive &&
+                inRange &&
+                (targetAlly ? !isEnemy : isEnemy && (enemy?.alive ?? true));
+              const isPicked = pickedTargets.includes(refId);
+              // Dim out-of-range / wrong-side tokens while targeting so legal picks stand out.
+              const dimForTargeting = targeting && !validTarget && !isPicked;
+
+              // Advantage/disadvantage preview for a WEAPON attack against this enemy (before the
+              // roll). Limited to weapon attacks: spell attacks vs prone depend on the spell's
+              // range and save spells have no attack roll, so a preview there would mislead.
+              const meleeReachToTok = casterTok
+                ? gridDistanceFeet(casterTok.x, casterTok.y, tk.x, tk.y) <= 5
+                : true;
+              const atkMode = canAttack
+                ? attackModePreview(myConds, enemy?.conditions, meleeReachToTok)
+                : "normal";
+              const clickable = canAttack || validTarget;
+              const activate = () => {
+                if (validTarget) onSelectTarget(refId);
+                else if (canAttack) onAttackEnemy(refId);
+              };
+
+              const label = `${name}, ${
+                isEnemy ? band?.label ?? "" : `${Math.max(0, cur)}/${max} HP`
+              }, ${colLetter(tk.x)}${tk.y + 1}${isEnemy ? " (enemy)" : ""}${
                 isActive ? " — active" : ""
               }`;
 
@@ -584,25 +691,31 @@ export default function BattleMap({
                       ? undefined
                       : "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
                   }}
-                  role={canAttack ? "button" : "img"}
-                  tabIndex={canAttack ? 0 : undefined}
-                  aria-label={canAttack ? `Attack ${label}` : label}
+                  role={clickable ? "button" : "img"}
+                  tabIndex={clickable ? 0 : undefined}
+                  aria-label={
+                    validTarget
+                      ? `Target ${label}`
+                      : canAttack
+                        ? `Attack ${label}`
+                        : label
+                  }
                   className={cn(
                     "focus:outline-none",
-                    canAttack && "cursor-pointer"
+                    clickable && "cursor-pointer"
                   )}
-                  onClick={canAttack ? () => onAttackEnemy(refId) : undefined}
+                  onClick={clickable ? activate : undefined}
                   onKeyDown={
-                    canAttack
+                    clickable
                       ? (e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            onAttackEnemy(refId);
+                            activate();
                           }
                         }
                       : undefined
                   }
-                  opacity={downed ? 0.45 : 1}
+                  opacity={downed ? 0.45 : dimForTargeting ? 0.4 : 1}
                 >
                   {/* Contact shadow lifting the token off the board */}
                   <ellipse
@@ -627,13 +740,26 @@ export default function BattleMap({
                     />
                   )}
 
-                  {/* HP ring */}
+                  {/* HP ring — band colour for enemies (HP hidden), real HP colour for players */}
                   <circle
                     r={PORTRAIT / 2 + 2}
                     fill="none"
-                    stroke={hpColor(ratio)}
+                    stroke={ringColor}
                     strokeWidth={3}
                   />
+
+                  {/* Spell-targeting highlight: a valid target pulses, a picked target is solid. */}
+                  {(validTarget || isPicked) && (
+                    <circle
+                      r={PORTRAIT / 2 + 6}
+                      fill="none"
+                      stroke={targetAlly ? "var(--color-success)" : "var(--color-accent)"}
+                      strokeWidth={isPicked ? 3 : 2}
+                      strokeDasharray={isPicked ? undefined : "4 3"}
+                      opacity={isPicked ? 0.95 : 0.7}
+                      className={!isPicked && !reduced ? "animate-pulse" : undefined}
+                    />
+                  )}
 
                   {/* Enemy distinguishing ring (kind not conveyed by colour alone) */}
                   {isEnemy && (
@@ -678,6 +804,37 @@ export default function BattleMap({
                     </g>
                   )}
 
+                  {/* Advantage/disadvantage preview badge (top-left) for an attack on this enemy */}
+                  {atkMode !== "normal" && (
+                    <g transform={`translate(${-(PORTRAIT / 2) + 2} ${-PORTRAIT / 2 - 2})`}>
+                      <title>
+                        {atkMode === "advantage"
+                          ? "You attack this enemy with advantage"
+                          : "You attack this enemy with disadvantage"}
+                      </title>
+                      <rect
+                        x={-12}
+                        y={-7}
+                        width={24}
+                        height={13}
+                        rx={3}
+                        fill={atkMode === "advantage" ? "#16341f" : "#3b1414"}
+                        stroke={atkMode === "advantage" ? "var(--color-success)" : "var(--color-danger)"}
+                        strokeWidth={1}
+                      />
+                      <text
+                        textAnchor="middle"
+                        y={3}
+                        fontSize={8}
+                        fontWeight={700}
+                        fill={atkMode === "advantage" ? "#22c55e" : "#f87171"}
+                        aria-hidden="true"
+                      >
+                        {atkMode === "advantage" ? "ADV" : "DIS"}
+                      </text>
+                    </g>
+                  )}
+
                   {/* Dead marker — a fallen, beyond-saving combatant (death-save
                       pips / stable badge for the dying are drawn in layer 9). */}
                   {status === "DEAD" && (
@@ -703,6 +860,75 @@ export default function BattleMap({
                     >
                       {Math.max(0, mySpeed - tk.movementUsedFeet)}/{mySpeed} ft
                     </text>
+                  )}
+                </g>
+              );
+            })}
+          </g>
+
+          {/* 8.5 — Condition badges: a vertical stack of small glyph chips on each token's
+                 left edge (kept clear of the kind glyph, dead marker, movement label and
+                 death-save overlay). Glyph + code + native <title> tooltip — never colour alone. */}
+          <g>
+            {Object.entries(grid.tokens).map(([refId, tk]) => {
+              const c = combatantByRef[refId];
+              const isEnemy = c?.kind === "ENEMY";
+              const conds = (isEnemy
+                ? enemyById[refId]?.conditions
+                : runtimeByPlayerId[refId]?.conditions) ?? [];
+              if (conds.length === 0) return null;
+              const cx = tk.x * CELL + CELL / 2;
+              const cy = tk.y * CELL + CELL / 2;
+              const shown = conds.slice(0, 4);
+              const extra = conds.length - shown.length;
+              const bx = -(PORTRAIT / 2 + 7);
+              const startY = -(PORTRAIT / 2) + 7;
+              return (
+                <g
+                  key={`cond${refId}`}
+                  style={{
+                    transform: `translate(${cx}px, ${cy}px)`,
+                    transition: reduced
+                      ? undefined
+                      : "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  }}
+                  pointerEvents="none"
+                >
+                  {shown.map((name, i) => {
+                    const meta = conditionMeta(name);
+                    const colors = conditionBadgeColors(meta.tone);
+                    return (
+                      <g key={name} transform={`translate(${bx} ${startY + i * 14})`}>
+                        <title>{`${meta.label} — ${meta.hint}`}</title>
+                        <circle r={6.5} fill={colors.fill} stroke={colors.text} strokeWidth={1} />
+                        <text
+                          textAnchor="middle"
+                          y={2.5}
+                          fontSize={7}
+                          fontWeight={700}
+                          fill={colors.text}
+                          aria-hidden="true"
+                        >
+                          {meta.code}
+                        </text>
+                      </g>
+                    );
+                  })}
+                  {extra > 0 && (
+                    <g transform={`translate(${bx} ${startY + shown.length * 14})`}>
+                      <title>{`${extra} more condition${extra > 1 ? "s" : ""}`}</title>
+                      <circle r={6.5} fill="#1a1414" stroke="#a39a93" strokeWidth={1} />
+                      <text
+                        textAnchor="middle"
+                        y={2.5}
+                        fontSize={7}
+                        fontWeight={700}
+                        fill="#a39a93"
+                        aria-hidden="true"
+                      >
+                        {`+${extra}`}
+                      </text>
+                    </g>
                   )}
                 </g>
               );

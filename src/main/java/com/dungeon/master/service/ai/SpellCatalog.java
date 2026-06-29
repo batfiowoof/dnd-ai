@@ -40,7 +40,7 @@ public class SpellCatalog {
             String name, int level, String school,
             SpellEffectType effectType, SpellTargetType targetType,
             Integer maxTargets, boolean concentration, String range, boolean parsed,
-            String aoeShape, int aoeSize) {}
+            String aoeShape, int aoeSize, String castingTime) {}
 
     private static final String RESOURCE = "dnd5e/srd-5.2.1-structured.json";
 
@@ -66,6 +66,7 @@ public class SpellCatalog {
                 int level = sp.path("level").asInt(-1);
                 String school = text(sp, "school");
                 String range = text(sp, "range");
+                String castingTime = text(sp, "castingTime");
                 JsonNode c = sp.get("combat");
                 if (c == null || c.isNull()) continue;
 
@@ -91,12 +92,15 @@ public class SpellCatalog {
                         c.path("projectiles").asInt(1),
                         nullable(c, "condition"),
                         sp.path("concentration").asBoolean(false),
-                        c.path("parsed").asBoolean(false));
+                        c.path("parsed").asBoolean(false),
+                        castingTime,
+                        range);
 
                 byName.put(name.toLowerCase(Locale.ROOT), effect);
                 summaries.add(new SpellSummary(name, level, school, effect.effectType(),
                         effect.targetType(), effect.maxTargets(), effect.concentration(),
-                        range, effect.parsed(), effect.aoeShape(), effect.aoeSize()));
+                        range, effect.parsed(), effect.aoeShape(), effect.aoeSize(),
+                        effect.castingTime()));
             }
             log.info("Loaded {} SRD 5.2.1 spell effects from {}", byName.size(), RESOURCE);
         } catch (Exception e) {

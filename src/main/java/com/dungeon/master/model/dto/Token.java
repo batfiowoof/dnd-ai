@@ -40,4 +40,7 @@ public class Token {
 
     /** Whether the combatant has spent its action this turn (Dash/Disengage/Dodge/Attack/Cast/Item are mutually exclusive). */
     private boolean actionUsed;
+
+    /** Whether the combatant has spent its bonus action this turn (e.g. a Bonus-Action spell). */
+    private boolean bonusActionUsed;
 }

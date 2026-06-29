@@ -21,6 +21,7 @@ public record PlayerRuntimeStateDto(
         int deathSaveSuccesses,
         int deathSaveFailures,
         boolean stable,
-        boolean dead
+        boolean dead,
+        String concentratingSpell
 ) {
 }

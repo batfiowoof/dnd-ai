@@ -1,6 +1,7 @@
 package com.dungeon.master.service.game;
 
 import com.dungeon.master.exception.PlayerNotFoundException;
+import com.dungeon.master.model.dto.ActiveCondition;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
@@ -397,6 +398,7 @@ public class PlayerStateService {
         }
         s.setSpellSlots(refreshed);
         s.getConditions().clear();
+        s.setConcentratingSpell(null);
         if (!s.isDead()) {
             s.setCurrentHp(s.getMaxHp());
             s.setTempHp(0);
@@ -405,6 +407,80 @@ public class PlayerStateService {
             s.setDeathSaveFailures(0);
         }
         return toDto(repository.save(s));
+    }
+
+    /* ── conditions / concentration ──────────────────────────────── */
+
+    /** A player's structured conditions (defensive copy; empty when none). */
+    public List<ActiveCondition> conditions(UUID playerId) {
+        return new ArrayList<>(require(playerId).getConditions());
+    }
+
+    /** Apply (or replace by name) a condition on a player. Returns the updated state. */
+    @Transactional
+    public PlayerRuntimeStateDto applyCondition(UUID playerId, ActiveCondition c) {
+        PlayerRuntimeState s = require(playerId);
+        s.getConditions().removeIf(x -> x.name() != null && x.name().equalsIgnoreCase(c.name()));
+        s.getConditions().add(c);
+        return toDto(repository.save(s));
+    }
+
+    /** Record the concentration spell a player is now sustaining (null clears it). */
+    @Transactional
+    public PlayerRuntimeStateDto setConcentratingSpell(UUID playerId, String spell) {
+        PlayerRuntimeState s = require(playerId);
+        s.setConcentratingSpell(spell);
+        return toDto(repository.save(s));
+    }
+
+    /**
+     * Break a caster's concentration across every player in the session: clear the caster's
+     * own concentration flag and drop every concentration-flagged condition they applied.
+     * Returns the players whose state changed (so the caller can broadcast each).
+     */
+    @Transactional
+    public List<PlayerRuntimeStateDto> breakConcentration(UUID sessionId, UUID casterId) {
+        List<PlayerRuntimeStateDto> changed = new ArrayList<>();
+        for (PlayerRuntimeState s : repository.findBySessionId(sessionId)) {
+            boolean mutated = false;
+            if (s.getPlayerId().equals(casterId) && s.getConcentratingSpell() != null) {
+                s.setConcentratingSpell(null);
+                mutated = true;
+            }
+            if (s.getConditions().removeIf(c -> c.concentration() && casterId.equals(c.sourceCasterId()))) {
+                mutated = true;
+            }
+            if (mutated) {
+                changed.add(toDto(repository.save(s)));
+            }
+        }
+        return changed;
+    }
+
+    /**
+     * Drop a player's timer-expired conditions (those whose {@code expiresAtRound} is strictly
+     * before {@code round}). Returns the updated state when anything changed, else {@code null}.
+     */
+    @Transactional
+    public PlayerRuntimeStateDto expireConditions(UUID playerId, int round) {
+        PlayerRuntimeState s = require(playerId);
+        boolean changed = s.getConditions().removeIf(
+                c -> c.expiresAtRound() != null && round > c.expiresAtRound());
+        return changed ? toDto(repository.save(s)) : null;
+    }
+
+    /** Clear all conditions and concentration for every player in a session (e.g. combat ends). */
+    @Transactional
+    public List<PlayerRuntimeStateDto> clearConditionsAndConcentration(UUID sessionId) {
+        List<PlayerRuntimeStateDto> changed = new ArrayList<>();
+        for (PlayerRuntimeState s : repository.findBySessionId(sessionId)) {
+            if (!s.getConditions().isEmpty() || s.getConcentratingSpell() != null) {
+                s.getConditions().clear();
+                s.setConcentratingSpell(null);
+                changed.add(toDto(repository.save(s)));
+            }
+        }
+        return changed;
     }
 
     /* ── internals ───────────────────────────────────────────────── */
@@ -513,13 +589,14 @@ public class PlayerStateService {
                 s.getAbilities(),
                 s.getSpellSlots(),
                 s.getInventory(),
-                s.getConditions(),
+                s.getConditions().stream().map(ActiveCondition::name).toList(),
                 s.getCantrips(),
                 s.getKnownSpells(),
                 s.isInspiration(),
                 s.getDeathSaveSuccesses(),
                 s.getDeathSaveFailures(),
                 s.isStable(),
-                s.isDead());
+                s.isDead(),
+                s.getConcentratingSpell());
     }
 }

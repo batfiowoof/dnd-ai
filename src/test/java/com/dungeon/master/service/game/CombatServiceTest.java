@@ -153,17 +153,17 @@ class CombatServiceTest {
     }
 
     private PlayerRuntimeStateDto stateFor(UUID playerId, int hp) {
-        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false);
+        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null);
     }
 
     /** 0 HP, not dead, not stable — actively dying (rolling death saves). */
     private PlayerRuntimeStateDto dyingState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false);
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null);
     }
 
     /** 0 HP, dead (three failures). */
     private PlayerRuntimeStateDto deadState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 3, false, true);
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 3, false, true, null);
     }
 
     @Test
@@ -326,8 +326,8 @@ class CombatServiceTest {
     /** Build a single-player + single-enemy ACTIVE encounter with a grid, the player active. */
     private CombatEncounter gridEncounter(UUID pid, int px, int py, UUID enemyId, int ex, int ey) {
         GridState grid = GridState.builder().width(14).height(10).build();
-        grid.getTokens().put(pid.toString(), new Token(px, py, 0, true, false, false, false, false));
-        grid.getTokens().put(enemyId.toString(), new Token(ex, ey, 0, true, false, false, false, false));
+        grid.getTokens().put(pid.toString(), new Token(px, py, 0, true, false, false, false, false, false));
+        grid.getTokens().put(enemyId.toString(), new Token(ex, ey, 0, true, false, false, false, false, false));
         return CombatEncounter.builder()
                 .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
                 .initiativeOrder(List.of(
@@ -538,7 +538,7 @@ class CombatServiceTest {
     /** Runtime state granting the player a cantrip (for the cast guard); conscious at 20 HP. */
     private PlayerRuntimeStateDto stateWithCantrip(UUID playerId, String spell) {
         return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
-                List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, false, false);
+                List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, false, false, null);
     }
 
     /** An AUTO-resolution DAMAGE spell — optionally an AoE template (shape != null). */
@@ -546,7 +546,7 @@ class CombatServiceTest {
         SpellTargetType target = aoeShape != null ? SpellTargetType.AREA : SpellTargetType.ENEMY;
         return new SpellEffect(name, 0, SpellEffectType.DAMAGE, target, SpellResolution.AUTO,
                 null, "2d6", "Fire", null, false, false, null, null,
-                aoeShape, aoeSize, null, 1, null, false, true);
+                aoeShape, aoeSize, null, 1, null, false, true, "Action", "120 feet");
     }
 
     private Enemy enemyAt(UUID id, String name) {
@@ -561,9 +561,9 @@ class CombatServiceTest {
      */
     private CombatEncounter aoeEncounter(UUID pid, UUID aId, int ax, int ay, UUID bId, int bx, int by) {
         GridState grid = GridState.builder().width(16).height(12).build();
-        grid.getTokens().put(pid.toString(), new Token(5, 5, 0, true, false, false, false, false));
-        grid.getTokens().put(aId.toString(), new Token(ax, ay, 0, true, false, false, false, false));
-        grid.getTokens().put(bId.toString(), new Token(bx, by, 0, true, false, false, false, false));
+        grid.getTokens().put(pid.toString(), new Token(5, 5, 0, true, false, false, false, false, false));
+        grid.getTokens().put(aId.toString(), new Token(ax, ay, 0, true, false, false, false, false, false));
+        grid.getTokens().put(bId.toString(), new Token(bx, by, 0, true, false, false, false, false, false));
         return CombatEncounter.builder()
                 .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
                 .initiativeOrder(List.of(new Combatant(CombatantKind.PLAYER, pid, "Aria", 18, 0)))
@@ -642,5 +642,101 @@ class CombatServiceTest {
 
         assertEquals(20, enemyA.getCurrentHp(), "an AoE that catches no one deals no damage");
         assertEquals(20, enemyB.getCurrentHp(), "client targetIds must not revive a fizzled AoE");
+    }
+
+    /** A save-gated CONTROL spell (concentration). */
+    private SpellEffect controlSpell(String name, String saveAbility, String condition) {
+        return new SpellEffect(name, 1, SpellEffectType.CONTROL, SpellTargetType.ENEMY,
+                SpellResolution.SAVE, saveAbility, null, null, null, false, false, null, null,
+                null, 0, null, 1, condition, true, true, "Action", "60 feet");
+    }
+
+    @Test
+    void controlSpellTagsEnemyWithStructuredConditionOnFailedSave() {
+        UUID pid = UUID.randomUUID();
+        UUID charId = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        CombatEncounter enc = aoeEncounter(pid, aId, 10, 5, bId, 0, 0);
+        Enemy target = enemyAt(aId, "Goblin A");
+        Enemy bystander = enemyAt(bId, "Goblin B");
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria"))
+                .thenReturn(Optional.of(playerWithChar(pid, "Aria", charId)));
+        when(characterRepo.findById(charId)).thenReturn(Optional.of(charWithDex(10)));
+        when(playerStateService.getState(pid)).thenReturn(stateWithCantrip(pid, "Entangle"));
+        when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
+        when(playerStateService.breakConcentration(eq(sessionId), any())).thenReturn(List.of());
+        when(playerStateService.setConcentratingSpell(eq(pid), anyString())).thenReturn(stateFor(pid, 20));
+        when(spellCatalog.effect("Entangle")).thenReturn(Optional.of(controlSpell("Entangle", "STR", "restrained")));
+        when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(target, bystander));
+        // Failed save (low roll) → the condition lands.
+        when(diceService.roll("1d20", RollMode.NORMAL)).thenReturn(res(2));
+
+        // Cast as a cantrip-level invocation (spellLevel 0) to avoid the slot-spend mock.
+        combat.playerCastSpell(sessionId, "Aria", "Entangle", 0, List.of(aId), null, null);
+
+        assertTrue(target.getConditions().stream().anyMatch(c -> "restrained".equals(c.name())),
+                "the failed-save target is restrained");
+        assertEquals(pid, target.getConditions().get(0).sourceCasterId(),
+                "the condition records its caster (player id) for concentration tracking");
+        assertTrue(target.getConditions().get(0).concentration(),
+                "Entangle is a concentration effect");
+        assertTrue(bystander.getConditions().isEmpty(), "the untargeted enemy is unaffected");
+    }
+
+    /* ── Action economy: attack/cast spend the economy but no longer auto-end the turn ── */
+
+    @Test
+    void gridAttackSpendsActionKeepsTurnAndBlocksSecondAction() {
+        UUID pid = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        CombatEncounter enc = aoeEncounter(pid, aId, 6, 5, bId, 0, 0);
+        Enemy goblin = enemyAt(aId, "Goblin A");
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(enemyRepo.findById(aId)).thenReturn(Optional.of(goblin));
+        when(diceService.roll("1d20+2")).thenReturn(res(3)); // 3+2=5 misses AC 12 → enemy survives
+
+        combat.playerAttack(sessionId, "Aria", aId);
+
+        Token tok = enc.getGridState().getTokens().get(pid.toString());
+        assertTrue(tok.isActionUsed(), "attacking spends the action");
+        assertFalse(tok.isBonusActionUsed(), "attacking leaves the bonus action available");
+        assertEquals(0, enc.getActiveIndex(), "the turn stays with the player (no auto-advance)");
+
+        // A second action this turn is rejected.
+        assertThrows(IllegalStateException.class, () -> combat.playerAttack(sessionId, "Aria", aId));
+    }
+
+    /** A SELF BUFF cast as a Bonus Action — spends the bonus action, not the action. */
+    private SpellEffect bonusSelfBuff(String name) {
+        return new SpellEffect(name, 1, SpellEffectType.BUFF, SpellTargetType.SELF,
+                SpellResolution.AUTO, null, null, null, null, false, false, null, null,
+                null, 0, null, 1, "blessed", false, true, "Bonus Action", "Self");
+    }
+
+    @Test
+    void bonusActionSpellSpendsBonusAndLeavesActionAvailable() {
+        UUID pid = UUID.randomUUID();
+        UUID aId = UUID.randomUUID();
+        UUID bId = UUID.randomUUID();
+        CombatEncounter enc = aoeEncounter(pid, aId, 10, 5, bId, 0, 0);
+
+        when(encounterRepo.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE)).thenReturn(Optional.of(enc));
+        when(playerRepo.findBySessionIdAndUsername(sessionId, "Aria")).thenReturn(Optional.of(player(pid, "Aria")));
+        when(playerStateService.getState(pid)).thenReturn(stateWithCantrip(pid, "Inner Light"));
+        when(playerStateService.applyCondition(eq(pid), any())).thenReturn(stateFor(pid, 20));
+        when(spellCatalog.effect("Inner Light")).thenReturn(Optional.of(bonusSelfBuff("Inner Light")));
+
+        combat.playerCastSpell(sessionId, "Aria", "Inner Light", 0, List.of(), null, null);
+
+        Token tok = enc.getGridState().getTokens().get(pid.toString());
+        assertTrue(tok.isBonusActionUsed(), "a Bonus-Action spell spends the bonus action");
+        assertFalse(tok.isActionUsed(), "the action is still available after a bonus-action spell");
+        assertEquals(0, enc.getActiveIndex(), "the turn stays with the player");
     }
 }

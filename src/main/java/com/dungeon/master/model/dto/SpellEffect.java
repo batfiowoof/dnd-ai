@@ -29,6 +29,8 @@ import com.dungeon.master.model.enums.SpellTargetType;
  * @param condition     condition imposed by a CONTROL/DEBUFF spell (e.g. "frightened"), else null
  * @param concentration whether the spell requires concentration
  * @param parsed        true when the engine can resolve it mechanically (else narrate only)
+ * @param castingTime   the spell's casting time, e.g. "Action", "Bonus Action", "Reaction"
+ * @param range         the spell's range, e.g. "Touch", "60 feet", "Self" (drives melee spell attacks)
  */
 public record SpellEffect(
         String name,
@@ -50,6 +52,18 @@ public record SpellEffect(
         int projectiles,
         String condition,
         boolean concentration,
-        boolean parsed
+        boolean parsed,
+        String castingTime,
+        String range
 ) {
+
+    /** True when this spell is cast as a Bonus Action (so it doesn't consume the action). */
+    public boolean isBonusAction() {
+        return "Bonus Action".equalsIgnoreCase(castingTime);
+    }
+
+    /** True for a touch-range spell attack (melee for advantage-vs-prone purposes). */
+    public boolean isMeleeRange() {
+        return range != null && range.toLowerCase(java.util.Locale.ROOT).startsWith("touch");
+    }
 }

@@ -1,5 +1,6 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.dto.ActiveCondition;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.SpellSlot;
 import jakarta.persistence.Column;
@@ -80,7 +81,15 @@ public class PlayerRuntimeState {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     @Builder.Default
-    private List<String> conditions = new ArrayList<>();
+    private List<ActiveCondition> conditions = new ArrayList<>();
+
+    /**
+     * Name of the concentration spell this player is currently sustaining, or {@code null}.
+     * Casting a new concentration spell, or dropping to 0 HP, breaks it — clearing every
+     * condition this player applied with concentration.
+     */
+    @Column(name = "concentrating_spell")
+    private String concentratingSpell;
 
     /** Cantrips known, copied from the Character template. Display only (slot-level casting). */
     @JdbcTypeCode(SqlTypes.JSON)

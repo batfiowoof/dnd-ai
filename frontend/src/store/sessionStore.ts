@@ -12,6 +12,8 @@ import type {
   TurnEventDto,
   TurnMode,
 } from "@/types";
+import { conditionMeta } from "@/lib/conditions";
+import { bandMeta } from "@/lib/health";
 
 /* ─── Collaborative round collection status ──────────────────── */
 export interface RoundStatus {
@@ -121,7 +123,7 @@ function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
       outcome = "Heal";
       good = true;
     } else if (t.condition) {
-      outcome = t.condition;
+      outcome = conditionMeta(t.condition).label;
       good = t.targetKind === "ENEMY";
     }
     if (t.defeated) {
@@ -132,7 +134,8 @@ function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
     const bits: string[] = [];
     if (t.damageRoll) bits.push(`${t.damageRoll.total} dmg`);
     if (t.heal !== null && t.heal > 0) bits.push(`+${t.heal}`);
-    bits.push(`${Math.max(0, t.currentHp)}/${t.maxHp}`);
+    // Enemy HP is hidden — show the band; players show exact HP.
+    bits.push(t.healthBand ? bandMeta(t.healthBand).label : `${Math.max(0, t.currentHp)}/${t.maxHp}`);
 
     const tone: FeedEntry["tone"] =
       good === true ? "good" : good === false ? "bad" : "neutral";
@@ -177,6 +180,12 @@ interface SessionState {
   combatFeed: FeedEntry[];
   /** True between "Start Encounter" and the COMBAT_START event (drives the init loader). */
   combatInitializing: boolean;
+  /**
+   * True while the DM is narrating a resolved combat beat (DM_THINKING→DM_NARRATION for the
+   * "combat" sentinel). Combined with a non-empty {@link combatActionQueue} it gates the local
+   * player's controls so the turn doesn't snap back before the animations + narration finish.
+   */
+  combatNarrating: boolean;
   /** Collaborative round collection status (null when no window is open). */
   round: RoundStatus | null;
 
@@ -213,6 +222,8 @@ interface SessionState {
   applyCombatLifecycle: (evt: CombatLifecycleEvent) => void;
   applyCombatAction: (evt: CombatActionEvent) => void;
   dequeueCombatAction: () => void;
+  /** Defensive release of the narration gate (safety timeout if DM_NARRATION never arrives). */
+  clearCombatNarrating: () => void;
   setMyPlayerId: (id: string | null) => void;
   setCombatInitializing: (initializing: boolean) => void;
   setTurnChange: (nextPlayerId: string | null, turnNumber: number) => void;
@@ -246,8 +257,12 @@ const initialState = {
   myPlayerId: null as string | null,
   combatFeed: [] as FeedEntry[],
   combatInitializing: false,
+  combatNarrating: false,
   round: null as RoundStatus | null,
 };
+
+/** Sentinel playerId the backend uses for streamed combat-beat narration. */
+const COMBAT_NARRATION_KEY = "combat";
 
 export const useSessionStore = create<SessionState>((set) => ({
   ...initialState,
@@ -305,11 +320,15 @@ export const useSessionStore = create<SessionState>((set) => ({
      action line first, so order is consistent across all clients. */
   beginDmTurn: ({ turnNumber, playerId, playerName, action }) =>
     set((state) => {
+      // A "combat" beat narration is streaming — gate the local controls until it finishes.
+      const narrating =
+        playerId === COMBAT_NARRATION_KEY ? true : state.combatNarrating;
       // The DM is now resolving — the collaborative collection window has flushed.
-      if (!action) return { dmThinking: true, round: null };
+      if (!action)
+        return { dmThinking: true, round: null, combatNarrating: narrating };
       const actionId = `ws-action-${turnNumber}-${playerId}`;
       if (state.logs.some((e) => e.id === actionId))
-        return { dmThinking: true, round: null };
+        return { dmThinking: true, round: null, combatNarrating: narrating };
       const entry: LogEntry = {
         id: actionId,
         type: "action",
@@ -317,7 +336,12 @@ export const useSessionStore = create<SessionState>((set) => ({
         text: action,
         turnNumber,
       };
-      return { dmThinking: true, round: null, logs: [...state.logs, entry] };
+      return {
+        dmThinking: true,
+        round: null,
+        combatNarrating: narrating,
+        logs: [...state.logs, entry],
+      };
     }),
 
   /* DM_CHUNK — append a streamed token to the live DM entry (create on first chunk).
@@ -349,10 +373,14 @@ export const useSessionStore = create<SessionState>((set) => ({
   /* DM_NARRATION — finalize the opening narration text (turn 0, no turn advance). */
   applyDmNarration: ({ turnNumber, playerId, dmNarration }) =>
     set((state) => {
+      // Combat beat narration finished streaming — release the controls gate.
+      const narrating =
+        playerId === COMBAT_NARRATION_KEY ? false : state.combatNarrating;
       const dmId = `ws-dm-${turnNumber}-${playerId}`;
       if (state.logs.some((e) => e.id === dmId)) {
         return {
           dmThinking: false,
+          combatNarrating: narrating,
           logs: state.logs.map((e) =>
             e.id === dmId ? { ...e, text: dmNarration } : e
           ),
@@ -364,7 +392,11 @@ export const useSessionStore = create<SessionState>((set) => ({
         text: dmNarration,
         turnNumber,
       };
-      return { dmThinking: false, logs: [...state.logs, entry] };
+      return {
+        dmThinking: false,
+        combatNarrating: narrating,
+        logs: [...state.logs, entry],
+      };
     }),
 
   /* DmResponseDto — the canonical, persisted DM response. Reconciles the streamed
@@ -480,6 +512,7 @@ export const useSessionStore = create<SessionState>((set) => ({
           combatActionQueue: [],
           combatFeed: [],
           combatInitializing: false,
+          combatNarrating: false,
           logs: [
             ...state.logs,
             {
@@ -508,36 +541,30 @@ export const useSessionStore = create<SessionState>((set) => ({
       };
     }),
 
-  /* COMBAT_ACTION — always refresh combat (HP/positions) and push compact feed lines.
-     Only the LOCAL player's OWN action is queued for the big centre modal; enemy and
-     other players' actions show in the side feed only (and update the board). */
+  /* COMBAT_ACTION — refresh combat (HP/positions), push compact feed lines, AND queue the
+     action for paced one-at-a-time playback in the centre modal. EVERY action is queued (the
+     player's own, enemies', and other players') so the whole beat is watchable in initiative
+     order instead of enemy turns flashing by in the corner feed. */
   applyCombatAction: (evt) =>
-    set((s) => {
-      const me = s.players.find((p) => p.id === s.myPlayerId);
-      const mine =
-        !!me &&
-        !!evt.actorName &&
-        evt.actorName.toLowerCase() === me.characterName?.toLowerCase();
-      return {
-        combat: evt.combat,
-        combatActionQueue: mine
-          ? [
-              ...s.combatActionQueue,
-              {
-                ...evt,
-                eventId: `ca-${evt.seq}-${Date.now()}-${Math.random()
-                  .toString(36)
-                  .slice(2, 6)}`,
-              },
-            ]
-          : s.combatActionQueue,
-        combatFeed: prependFeed(s.combatFeed, feedFromAction(evt)),
-      };
-    }),
+    set((s) => ({
+      combat: evt.combat,
+      combatActionQueue: [
+        ...s.combatActionQueue,
+        {
+          ...evt,
+          eventId: `ca-${evt.seq}-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 6)}`,
+        },
+      ],
+      combatFeed: prependFeed(s.combatFeed, feedFromAction(evt)),
+    })),
 
   /* Drop the head of the queue once its animation has played. */
   dequeueCombatAction: () =>
     set((s) => ({ combatActionQueue: s.combatActionQueue.slice(1) })),
+
+  clearCombatNarrating: () => set({ combatNarrating: false }),
 
   setMyPlayerId: (id) => set({ myPlayerId: id }),
   setCombatInitializing: (initializing) =>

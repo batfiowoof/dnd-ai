@@ -5,12 +5,16 @@ import { Modal, cn } from "@/components/ui";
 import { useSessionStore } from "@/store/sessionStore";
 import Die from "@/components/dice/Die";
 import type { CombatActionEvent, CombatTarget } from "@/types";
+import { conditionMeta } from "@/lib/conditions";
+import { bandMeta } from "@/lib/health";
 
 type Phase = "rolling" | "revealed";
 
 const ROLL_MS = 650;
-const BASE_LINGER_MS = 1400;
-const PER_TARGET_MS = 320;
+// Dwell long enough that each action (the player's, then every enemy in initiative order) is
+// readable rather than flashing past. Click the modal to fast-forward to the next action.
+const BASE_LINGER_MS = 2200;
+const PER_TARGET_MS = 360;
 
 function reducedMotion(): boolean {
   return (
@@ -35,7 +39,7 @@ function outcome(t: CombatTarget): { text: string; tone: string } {
   if (t.hit === false) return { text: "Miss", tone: "text-text-muted" };
   if (t.attackRoll?.crit) return { text: "Critical!", tone: "text-accent" };
   if (t.hit) return { text: "Hit", tone: "text-accent" };
-  if (t.condition) return { text: t.condition, tone: "text-gold" };
+  if (t.condition) return { text: conditionMeta(t.condition).label, tone: "text-gold" };
   return { text: "", tone: "" };
 }
 
@@ -158,8 +162,16 @@ export default function CombatActionModal() {
                         {t.damageRoll.total}
                       </span>
                     )}
-                    <span className="tabular text-[10px] text-text-muted">
-                      {Math.max(0, t.currentHp)}/{t.maxHp}
+                    <span className="text-[10px] text-text-muted">
+                      {t.healthBand ? (
+                        <span className="uppercase tracking-wide">
+                          {bandMeta(t.healthBand).label}
+                        </span>
+                      ) : (
+                        <span className="tabular">
+                          {Math.max(0, t.currentHp)}/{t.maxHp}
+                        </span>
+                      )}
                     </span>
                   </span>
                 </div>

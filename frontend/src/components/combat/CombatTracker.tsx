@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CombatStateDto, PlayerRuntimeState, SpellSummary } from "@/types";
 import { Button, Tooltip, cn } from "@/components/ui";
+import { useSessionStore } from "@/store/sessionStore";
+import { conditionMeta, conditionChipClasses } from "@/lib/conditions";
+import { bandMeta } from "@/lib/health";
+import { isAllyTargeting, targetCap } from "@/lib/combat";
 import DeathSaveTrack, {
   StatusBadge,
   deriveDeathStatus,
@@ -19,6 +23,8 @@ interface CombatTrackerProps {
   combat: CombatStateDto;
   myPlayerId: string;
   myState: PlayerRuntimeState | null;
+  /** The local player's walking speed in feet (for the movement budget readout). */
+  mySpeed: number;
   isHost: boolean;
   connected: boolean;
   spells: SpellSummary[];
@@ -26,14 +32,18 @@ interface CombatTrackerProps {
   /** Per-player runtime — drives ally death-save pips / badges. */
   runtimeByPlayerId: Record<string, PlayerRuntimeState>;
   onAttack: (enemyId: string) => void;
-  onCast: (spellName: string, spellLevel: number, targetIds: string[]) => void;
-  /** Hand an AoE spell to the BattleMap for on-map origin placement. */
-  onBeginAoePlacement: (spell: {
-    name: string;
-    level: number;
-    aoeShape: string;
-    aoeSize: number;
-  }) => void;
+  /** Choose a spell to cast — the page routes it (self / AoE placement / grid targeting). */
+  onBeginCast: (spell: SpellSummary) => void;
+  /** The single/multi-target spell currently awaiting target selection on the grid, or null. */
+  castingSpell: SpellSummary | null;
+  /** Targets picked so far (multi-target spells), shared with the BattleMap. */
+  pickedTargets: string[];
+  /** Select/toggle a target (also reachable by clicking enemy/ally cards as a fallback). */
+  onSelectTarget: (refId: string) => void;
+  /** Commit a multi-target cast. */
+  onConfirmCast: () => void;
+  /** Abandon the in-flight cast. */
+  onCancelCast: () => void;
   /** Name of the AoE spell currently being placed on the map (drives the banner), or null. */
   placingSpellName: string | null;
   /** Abandon AoE placement. */
@@ -54,6 +64,51 @@ interface Castable extends SpellSummary {
   allyTargeting: boolean;
 }
 
+/** One action-economy pip: filled when available, hollow + struck when spent. */
+function EconomyPip({ label, spent }: { label: string; spent: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-1 py-0.5 font-semibold",
+        spent ? "text-text-muted/60 line-through" : "text-gold"
+      )}
+      title={spent ? `${label} used` : `${label} available`}
+    >
+      <span
+        className={cn(
+          "inline-block h-1.5 w-1.5 rounded-full",
+          spent ? "bg-text-muted/40" : "bg-gold"
+        )}
+      />
+      {label}
+    </span>
+  );
+}
+
+/** Inline row of condition chips (code + tooltip) for an enemy/ally card. */
+function ConditionChips({ conditions }: { conditions?: string[] | null }) {
+  if (!conditions || conditions.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {conditions.map((name) => {
+        const meta = conditionMeta(name);
+        return (
+          <span
+            key={name}
+            title={`${meta.label} — ${meta.hint}`}
+            className={cn(
+              "rounded border px-1 py-px text-[8px] font-semibold uppercase tracking-wide",
+              conditionChipClasses(meta.tone)
+            )}
+          >
+            {meta.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * Combat overlay: round + initiative order, enemy HP bars, party HP bars, and the active
  * player's controls. On your turn you can attack (click an enemy), cast a prepared spell
@@ -64,14 +119,19 @@ export default function CombatTracker({
   combat,
   myPlayerId,
   myState,
+  mySpeed,
   isHost,
   connected,
   spells,
   allies,
   runtimeByPlayerId,
   onAttack,
-  onCast,
-  onBeginAoePlacement,
+  onBeginCast,
+  castingSpell,
+  pickedTargets,
+  onSelectTarget,
+  onConfirmCast,
+  onCancelCast,
   placingSpellName,
   onCancelAoe,
   onUseItem,
@@ -84,8 +144,6 @@ export default function CombatTracker({
 }: CombatTrackerProps) {
   const [itemMenu, setItemMenu] = useState(false);
   const [spellMenu, setSpellMenu] = useState(false);
-  const [casting, setCasting] = useState<Castable | null>(null);
-  const [picked, setPicked] = useState<string[]>([]);
 
   const isMyTurn =
     combat.active?.kind === "PLAYER" && combat.active.refId === myPlayerId;
@@ -93,6 +151,28 @@ export default function CombatTracker({
 
   // My token's action-economy flags (drive the toggled Dash/Disengage/Dodge state).
   const myToken = combat.grid?.tokens[myPlayerId] ?? null;
+
+  // Combat is "busy" while queued action animations are still playing or the DM is narrating the
+  // beat — hold the controls so the turn doesn't snap back before the player can follow it.
+  const queueLength = useSessionStore((s) => s.combatActionQueue.length);
+  const combatNarrating = useSessionStore((s) => s.combatNarrating);
+  const clearCombatNarrating = useSessionStore((s) => s.clearCombatNarrating);
+  const busy = queueLength > 0 || combatNarrating;
+
+  // 5E action economy for this turn (drives the tracker + disables spent actions).
+  const actionSpent = !!myToken?.actionUsed;
+  const bonusSpent = !!myToken?.bonusActionUsed;
+  const reactionSpent = myToken ? !myToken.reactionAvailable : false;
+  const moveUsed = myToken?.movementUsedFeet ?? 0;
+  const moveBudget = mySpeed + (myToken?.dashed ? mySpeed : 0);
+
+  // Safety net: if the final DM_NARRATION is ever lost, don't strand the controls behind the
+  // narration gate forever — release it after a generous timeout.
+  useEffect(() => {
+    if (!combatNarrating) return;
+    const t = setTimeout(clearCombatNarrating, 15000);
+    return () => clearTimeout(t);
+  }, [combatNarrating, clearCombatNarrating]);
 
   const initiativeByEnemyId: Record<string, number> = {};
   combat.order.forEach((c) => {
@@ -128,51 +208,15 @@ export default function CombatTracker({
 
   function beginCast(spell: Castable) {
     setSpellMenu(false);
-    if (spell.targetType === "SELF") {
-      onCast(spell.name, spell.level, [myPlayerId]);
-      return;
-    }
-    // AoE spell → place an origin on the battle map (server computes the hit set).
-    if (spell.aoeShape && spell.aoeSize > 0) {
-      onBeginAoePlacement({
-        name: spell.name,
-        level: spell.level,
-        aoeShape: spell.aoeShape,
-        aoeSize: spell.aoeSize,
-      });
-      return;
-    }
-    setCasting(spell);
-    setPicked([]);
+    onBeginCast(spell);
   }
 
-  function toggleTarget(id: string) {
-    if (!casting) return;
-    setPicked((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      const cap = casting.maxTargets ?? Infinity; // null = AoE (all in area)
-      if (prev.length >= cap) {
-        // single-target spells replace the selection
-        return cap === 1 ? [id] : prev;
-      }
-      return [...prev, id];
-    });
-  }
-
-  function confirmCast() {
-    if (!casting || picked.length === 0) return;
-    onCast(casting.name, casting.level, picked);
-    setCasting(null);
-    setPicked([]);
-  }
-
-  function cancelCast() {
-    setCasting(null);
-    setPicked([]);
-  }
-
-  const targetingEnemies = !!casting && !casting.allyTargeting;
-  const targetingAllies = !!casting && casting.allyTargeting;
+  // Target selection now happens on the battle map; cards mirror it as an accessible fallback.
+  const casting = castingSpell;
+  const picked = pickedTargets;
+  const castingAlly = !!casting && isAllyTargeting(casting);
+  const targetingEnemies = !!casting && !castingAlly;
+  const targetingAllies = !!casting && castingAlly;
 
   return (
     <div className="border-b border-border-accent bg-accent-glow/40 p-3">
@@ -222,8 +266,9 @@ export default function CombatTracker({
       {/* Enemies */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {combat.enemies.map((e) => {
-          const ratio = e.maxHp > 0 ? e.currentHp / e.maxHp : 0;
-          const attackable = isMyTurn && e.alive && connected && !casting;
+          const band = bandMeta(e.healthBand);
+          const attackable =
+            isMyTurn && e.alive && connected && !casting && !actionSpent;
           const selectable = targetingEnemies && e.alive && connected;
           const chosen = picked.includes(e.id);
           return (
@@ -232,7 +277,7 @@ export default function CombatTracker({
               type="button"
               disabled={!attackable && !selectable}
               onClick={() =>
-                selectable ? toggleTarget(e.id) : attackable && onAttack(e.id)
+                selectable ? onSelectTarget(e.id) : attackable && onAttack(e.id)
               }
               className={cn(
                 "rounded-lg border p-2 text-left transition",
@@ -276,16 +321,14 @@ export default function CombatTracker({
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-light">
                 <div
-                  className={cn(
-                    "h-full rounded-full transition-all",
-                    ratio > 0.5 ? "bg-danger" : ratio > 0.25 ? "bg-gold" : "bg-accent-dark"
-                  )}
-                  style={{ width: `${Math.max(0, Math.min(100, ratio * 100))}%` }}
+                  className={cn("h-full rounded-full transition-all", band.barClass)}
+                  style={{ width: `${Math.round(band.fill * 100)}%` }}
                 />
               </div>
-              <div className="mt-0.5 text-right text-[9px] tabular text-text-muted">
-                {Math.max(0, e.currentHp)}/{e.maxHp}
+              <div className="mt-0.5 text-right text-[9px] font-semibold uppercase tracking-wide text-text-muted">
+                {e.alive ? band.label : "Dead"}
               </div>
+              {e.alive && <ConditionChips conditions={e.conditions} />}
             </button>
           );
         })}
@@ -301,13 +344,18 @@ export default function CombatTracker({
             const rs = runtimeByPlayerId[a.id];
             const status = deriveDeathStatus(rs);
             const canStabilize =
-              status === "DYING" && isMyTurn && connected && !casting;
+              status === "DYING" &&
+              isMyTurn &&
+              connected &&
+              !casting &&
+              !actionSpent &&
+              !busy;
             return (
               <div key={a.id} className="flex flex-col gap-1">
                 <button
                   type="button"
                   disabled={!selectable}
-                  onClick={() => selectable && toggleTarget(a.id)}
+                  onClick={() => selectable && onSelectTarget(a.id)}
                   className={cn(
                     "rounded-lg border p-2 text-left transition",
                     chosen
@@ -328,6 +376,7 @@ export default function CombatTracker({
                     </span>
                     {status && <StatusBadge status={status} />}
                   </div>
+                  <ConditionChips conditions={rs?.conditions} />
                   {status ? (
                     <div className="mt-1.5 flex items-center justify-between gap-2">
                       {status === "DEAD" ? (
@@ -401,7 +450,14 @@ export default function CombatTracker({
 
       {/* Controls */}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {!isMyTurn ? (
+        {busy ? (
+          <span className="flex items-center gap-2 text-xs italic text-text-muted">
+            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+            {queueLength > 0
+              ? "Resolving combat…"
+              : "The DM is narrating…"}
+          </span>
+        ) : !isMyTurn ? (
           <span className="text-xs italic text-text-muted">
             Waiting for {combat.active?.name ?? "the next combatant"}…
           </span>
@@ -424,25 +480,27 @@ export default function CombatTracker({
         ) : casting ? (
           <>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
-              {casting.name}
+              ✨ {casting.name}
             </span>
             <span className="text-[10px] text-text-muted">
-              {casting.allyTargeting
-                ? "— pick allies to affect"
-                : "— pick targets"}
-              {casting.maxTargets ? ` (up to ${casting.maxTargets})` : " (area)"}
+              {castingAlly
+                ? "— click an ally on the map"
+                : "— click a target on the map"}
+              {targetCap(casting) > 1 ? ` (up to ${targetCap(casting)})` : ""}
             </span>
+            {targetCap(casting) > 1 && (
+              <button
+                type="button"
+                disabled={!connected || picked.length === 0}
+                onClick={onConfirmCast}
+                className="rounded-md border border-accent/60 px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white disabled:opacity-40"
+              >
+                Cast ({picked.length})
+              </button>
+            )}
             <button
               type="button"
-              disabled={!connected || picked.length === 0}
-              onClick={confirmCast}
-              className="rounded-md border border-accent/60 px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white disabled:opacity-40"
-            >
-              Cast ({picked.length})
-            </button>
-            <button
-              type="button"
-              onClick={cancelCast}
+              onClick={onCancelCast}
               className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-text-muted transition hover:border-accent/60 hover:text-accent"
             >
               Cancel
@@ -450,10 +508,18 @@ export default function CombatTracker({
           </>
         ) : (
           <>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
-              Your turn
-            </span>
-            <span className="text-[10px] text-text-muted">— click an enemy to attack</span>
+            {/* Action-economy tracker */}
+            <div className="mr-1 flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
+              <EconomyPip label="Action" spent={actionSpent} />
+              <EconomyPip label="Bonus" spent={bonusSpent} />
+              <EconomyPip label="React" spent={reactionSpent} />
+              <span
+                className="tabular text-text-muted"
+                title="Movement used / available this turn"
+              >
+                {Math.max(0, moveBudget - moveUsed)}/{moveBudget} ft
+              </span>
+            </div>
 
             {/* Cast Spell */}
             <div className="relative">
@@ -468,20 +534,33 @@ export default function CombatTracker({
               </button>
               {spellMenu && (
                 <div className="absolute bottom-full left-0 z-20 mb-1 max-h-64 min-w-52 overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
-                  {castable.map((s) => (
-                    <button
-                      key={s.name}
-                      type="button"
-                      onClick={() => beginCast(s)}
-                      className="block w-full px-3 py-2 text-left text-xs text-text transition hover:bg-accent-glow hover:text-accent"
-                    >
-                      <span className="font-semibold">{s.name}</span>
-                      <span className="ml-1 text-[10px] text-text-muted">
-                        {s.level === 0 ? "Cantrip" : `L${s.level}`} ·{" "}
-                        {s.effectType.toLowerCase()}
-                      </span>
-                    </button>
-                  ))}
+                  {castable.map((s) => {
+                    const bonus = s.castingTime === "Bonus Action";
+                    const disabled = bonus ? bonusSpent : actionSpent;
+                    return (
+                      <button
+                        key={s.name}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => beginCast(s)}
+                        title={
+                          disabled
+                            ? bonus
+                              ? "Bonus action already used"
+                              : "Action already used"
+                            : `${s.range} · ${s.castingTime}`
+                        }
+                        className="block w-full px-3 py-2 text-left text-xs text-text transition hover:bg-accent-glow hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent"
+                      >
+                        <span className="font-semibold">{s.name}</span>
+                        {bonus && <span className="ml-1 text-gold" title="Bonus action">⚡</span>}
+                        <span className="ml-1 text-[10px] text-text-muted">
+                          {s.level === 0 ? "Cantrip" : `L${s.level}`} ·{" "}
+                          {s.effectType.toLowerCase()}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -490,8 +569,9 @@ export default function CombatTracker({
             <div className="relative">
               <button
                 type="button"
-                disabled={!connected}
+                disabled={!connected || actionSpent}
                 onClick={() => setItemMenu((v) => !v)}
+                title={actionSpent ? "Action already used" : "Use an item"}
                 className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-text-muted transition hover:border-accent/60 hover:text-accent disabled:opacity-40"
               >
                 🎒 Use Item ▾
@@ -536,7 +616,7 @@ export default function CombatTracker({
                 type="button"
                 size="sm"
                 variant={myToken?.dashed ? "primary" : "ghost"}
-                disabled={!connected || !!myToken?.dashed}
+                disabled={!connected || !!myToken?.dashed || actionSpent}
                 onClick={onDash}
               >
                 🏃 Dash
@@ -556,7 +636,7 @@ export default function CombatTracker({
                 type="button"
                 size="sm"
                 variant={myToken?.disengaged ? "primary" : "ghost"}
-                disabled={!connected || !!myToken?.disengaged}
+                disabled={!connected || !!myToken?.disengaged || actionSpent}
                 onClick={onDisengage}
               >
                 🛡 Disengage
@@ -576,7 +656,7 @@ export default function CombatTracker({
                 type="button"
                 size="sm"
                 variant={myToken?.dodging ? "primary" : "ghost"}
-                disabled={!connected || !!myToken?.dodging}
+                disabled={!connected || !!myToken?.dodging || actionSpent}
                 onClick={onDodge}
                 className={cn(myToken?.dodging && "!bg-gold !text-bg")}
               >
@@ -587,7 +667,24 @@ export default function CombatTracker({
             <button
               type="button"
               disabled={!connected}
-              onClick={onEndTurn}
+              onClick={() => {
+                // Guard against wasting an unused action/bonus action.
+                if (
+                  (!actionSpent || !bonusSpent) &&
+                  !window.confirm(
+                    `End your turn with your ${
+                      !actionSpent && !bonusSpent
+                        ? "action and bonus action"
+                        : !actionSpent
+                          ? "action"
+                          : "bonus action"
+                    } unused?`
+                  )
+                ) {
+                  return;
+                }
+                onEndTurn();
+              }}
               className="rounded-md border border-accent/60 px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white disabled:opacity-40"
             >
               End Turn

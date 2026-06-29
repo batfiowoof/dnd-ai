@@ -1,5 +1,6 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.dto.ActiveCondition;
 import com.dungeon.master.model.dto.MonsterAttack;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -75,11 +76,11 @@ public class Enemy {
     @Builder.Default
     private List<MonsterAttack> attacks = new ArrayList<>();
 
-    /** Active conditions on the enemy (e.g. from a player's control spell). */
+    /** Active conditions on the enemy (e.g. from a player's control spell), with source + duration. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     @Builder.Default
-    private List<String> conditions = new ArrayList<>();
+    private List<ActiveCondition> conditions = new ArrayList<>();
 
     /** Ability scores (STR/DEX/CON/INT/WIS/CHA) from the stat block — used for saving throws. */
     @JdbcTypeCode(SqlTypes.JSON)

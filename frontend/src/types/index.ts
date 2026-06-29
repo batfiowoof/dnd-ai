@@ -194,6 +194,8 @@ export interface PlayerRuntimeState {
   stable: boolean;
   /** Three failed death saves — the character has died. */
   dead: boolean;
+  /** Name of the concentration spell this player is currently sustaining, if any. */
+  concentratingSpell?: string | null;
 }
 
 /** Summary of a session the current user belongs to, for the "your adventures" list. */
@@ -230,10 +232,14 @@ export interface Combatant {
 export interface EnemyDto {
   id: string;
   name: string;
-  maxHp: number;
-  currentHp: number;
   armorClass: number;
   alive: boolean;
+  /** Active condition keys (e.g. "restrained", "blinded") for badges on the map/cards. */
+  conditions: string[];
+  /** Coarse health band — exact HP is hidden from players (5E convention). */
+  healthBand: string;
+  /** Melee reach in feet (for opportunity-attack threat zones on the grid). */
+  reachFeet: number;
 }
 
 /* ── Tactical grid (Phase A/B) ───────────────────────────────── */
@@ -263,6 +269,8 @@ export interface Token {
   dodging: boolean;
   /** Whether this combatant has spent its action this turn (Dash/Disengage/Dodge/Attack/Cast/Item are mutually exclusive). */
   actionUsed: boolean;
+  /** Whether this combatant has spent its bonus action this turn (e.g. a Bonus-Action spell). */
+  bonusActionUsed: boolean;
 }
 
 export interface GridState {
@@ -308,9 +316,12 @@ export interface CombatTarget {
   damageRoll: RollSummary | null;
   heal: number | null;
   condition: string | null;
+  /** Exact HP for player/ally targets; 0 for enemies (hidden — see {@link healthBand}). */
   currentHp: number;
   maxHp: number;
   defeated: boolean;
+  /** Health band for ENEMY targets (exact HP hidden); null for players/allies. */
+  healthBand: string | null;
 }
 
 export type CombatActionKind =
@@ -361,6 +372,8 @@ export interface SpellSummary {
   aoeShape: string | null;
   /** AoE size in feet (radius / cube side / cone or line length); 0 when not an area spell. */
   aoeSize: number;
+  /** Casting time, e.g. "Action", "Bonus Action", "Reaction" — drives the bonus-action economy. */
+  castingTime: string;
 }
 
 export interface MonsterSummary {
