@@ -181,7 +181,7 @@ export default function CombatControls({
             {/* Spell menu — anchored to the full-width controls row + size-capped so it can
                 never overflow the panel / viewport. */}
             {spellMenu && (
-              <div className="absolute bottom-full left-0 z-30 mb-1 max-h-[50vh] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
+              <div className="absolute top-full left-0 z-30 mt-1 max-h-[50vh] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
                 {castable.map((s) => {
                   const bonus = s.castingTime === "Bonus Action";
                   const disabled = bonus ? bonusSpent : actionSpent;
@@ -222,7 +222,7 @@ export default function CombatControls({
                 🎒 Use Item ▾
               </button>
               {itemMenu && (
-                <div className="absolute bottom-full left-0 z-20 mb-1 min-w-40 overflow-hidden rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
+                <div className="absolute top-full left-0 z-20 mt-1 max-h-[50vh] min-w-40 overflow-y-auto rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
                   {usableItems.length === 0 ? (
                     <p className="px-3 py-2 text-xs text-text-muted">Inventory empty</p>
                   ) : (

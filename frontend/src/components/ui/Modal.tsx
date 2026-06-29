@@ -82,7 +82,7 @@ export default function Modal({
         ref={panelRef}
         tabIndex={-1}
         className={cn(
-          "animate-rise relative w-full rounded-xl border border-border-accent bg-surface/95 shadow-[0_0_48px_var(--color-accent-glow)] outline-none backdrop-blur-sm panel-corners",
+          "animate-rise relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-xl border border-border-accent bg-surface/95 shadow-[0_0_48px_var(--color-accent-glow)] outline-none backdrop-blur-sm panel-corners",
           sizeClasses[size],
           className
         )}
@@ -114,7 +114,7 @@ export default function Modal({
             )}
           </div>
         )}
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
       </div>
     </div>,
     document.body

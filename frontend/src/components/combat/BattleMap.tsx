@@ -122,7 +122,7 @@ export default function BattleMap({
         <svg
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="xMidYMid meet"
-          className="block h-auto w-full select-none rounded-lg"
+          className="block h-auto max-h-[48vh] w-full select-none rounded-lg"
           role="group"
           aria-label="Tactical battle grid"
         >
