@@ -19,6 +19,7 @@ import DeathSaveTrack, {
   StatusBadge,
   deriveDeathStatus,
 } from "@/components/combat/DeathSaveTrack";
+import CombatRollFeed from "@/components/combat/CombatRollFeed";
 
 /** Logical cell size (px in the SVG user space). ≥44 keeps tap targets accessible. */
 const CELL = 48;
@@ -209,7 +210,7 @@ export default function BattleMap({
   })();
 
   return (
-    <Panel className="p-2 sm:p-3">
+    <Panel className={cn("p-2 sm:p-3", !reduced && "animate-rise")}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="font-display text-xs font-bold uppercase tracking-wider text-accent">
           Battlefield
@@ -272,7 +273,12 @@ export default function BattleMap({
         </div>
       )}
 
-      <div className="mx-auto w-full" style={{ maxWidth: Math.min(W, 640) }}>
+      <div
+        className="relative mx-auto w-full"
+        style={{ maxWidth: Math.min(W, 640) }}
+      >
+        {/* Compact roll feed docked on the map (enemy/NPC/other rolls). */}
+        <CombatRollFeed />
         <svg
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="xMidYMid meet"
@@ -570,7 +576,14 @@ export default function BattleMap({
               return (
                 <g
                   key={`tok${refId}`}
-                  transform={`translate(${cx} ${cy})`}
+                  style={{
+                    // CSS transform (not the SVG attribute) so the browser tweens
+                    // position changes — the token slides between squares.
+                    transform: `translate(${cx}px, ${cy}px)`,
+                    transition: reduced
+                      ? undefined
+                      : "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  }}
                   role={canAttack ? "button" : "img"}
                   tabIndex={canAttack ? 0 : undefined}
                   aria-label={canAttack ? `Attack ${label}` : label}

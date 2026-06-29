@@ -103,6 +103,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const round = useSessionStore((s) => s.round);
   const runtimeByPlayerId = useSessionStore((s) => s.runtimeByPlayerId);
   const combat = useSessionStore((s) => s.combat);
+  const combatInitializing = useSessionStore((s) => s.combatInitializing);
+  const setMyPlayerId = useSessionStore((s) => s.setMyPlayerId);
+  const setCombatInitializing = useSessionStore((s) => s.setCombatInitializing);
   const setError = useSessionStore((s) => s.setError);
   const hydrateFromGameState = useSessionStore((s) => s.hydrateFromGameState);
   const seedLogsFromHistory = useSessionStore((s) => s.seedLogsFromHistory);
@@ -146,6 +149,12 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
   const isMyTurn = currentTurnPlayerId === playerId;
   const isCreator = username === createdBy;
+
+  // Tell the store who "I" am so it routes MY own rolls to the big centre modal
+  // while enemy / NPC / other-player rolls go to the compact map-docked feed.
+  useEffect(() => {
+    setMyPlayerId(playerId || null);
+  }, [playerId, setMyPlayerId]);
 
   /* ── helpers ────────────────────────────────────────────────── */
   const scrollToBottom = useCallback(() => {
@@ -456,6 +465,10 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   /* ── combat handlers ────────────────────────────────────────── */
   function handleStartEncounter(enemyKeys: string[]) {
     if (!clientRef.current || !connected) return;
+    // Show the "preparing the battlefield" loader until COMBAT_START arrives (the LLM
+    // scene generation can take a couple seconds). Safety-clear it if nothing lands.
+    setCombatInitializing(true);
+    setTimeout(() => setCombatInitializing(false), 15000);
     sendStartEncounter(clientRef.current, sessionId, enemyKeys);
   }
   function handleCombatAttack(enemyId: string) {
@@ -974,6 +987,15 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
 
         {/* Main chat area */}
         <div className="flex flex-1 flex-col">
+          {/* Combat initializing — the encounter is being set up (scene + initiative). */}
+          {combatInitializing && !inCombat && (
+            <div className="flex items-center justify-center gap-3 border-b border-border-accent bg-accent-glow/20 px-4 py-6 text-accent animate-rise">
+              <D20Mark className="h-6 w-6 animate-spin" />
+              <span className="font-display text-sm font-bold uppercase tracking-wider">
+                Preparing the battlefield…
+              </span>
+            </div>
+          )}
           {/* Combat overlay */}
           {inCombat && combat && (
             <>

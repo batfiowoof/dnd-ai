@@ -48,6 +48,108 @@ export interface DiceRoll {
   fumble: boolean;
 }
 
+/* ─── Compact combat roll feed (docked on the map; non-blocking) ─── */
+export interface FeedRoll {
+  sides: number;
+  faces: number[];
+  total: number;
+  crit: boolean;
+  fumble: boolean;
+}
+
+/** One line in the map-docked roll feed (enemy attacks, NPC/other-player rolls). */
+export interface FeedEntry {
+  id: string;
+  actorName: string;
+  actorKind?: "PLAYER" | "ENEMY";
+  title: string;
+  roll: FeedRoll | null;
+  outcome: string | null;
+  detail: string | null;
+  tone: "good" | "bad" | "neutral";
+}
+
+/** Most recent entries kept in the feed (older ones scroll out; chat log keeps the full record). */
+const FEED_CAP = 8;
+
+/** Prepend an action's entries (newest first) and cap the list. */
+function prependFeed(feed: FeedEntry[], entries: FeedEntry[]): FeedEntry[] {
+  if (entries.length === 0) return feed;
+  return [...entries, ...feed].slice(0, FEED_CAP);
+}
+
+/** A single d20 roll line from a DiceRollEvent. */
+function feedFromRoll(evt: DiceRollEvent): FeedEntry {
+  return {
+    id: `rf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    actorName: evt.playerName,
+    title: evt.label,
+    roll: {
+      sides: evt.sides,
+      faces: evt.faces,
+      total: evt.total,
+      crit: evt.crit,
+      fumble: evt.fumble,
+    },
+    outcome: evt.crit ? "Crit!" : evt.fumble ? "Fumble!" : null,
+    detail: evt.notation,
+    tone: evt.crit ? "good" : evt.fumble ? "bad" : "neutral",
+  };
+}
+
+/** One feed line per target of a combat action. Pure-move actions (no targets) yield nothing. */
+function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
+  const base = `caf-${evt.seq}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+  return evt.targets.map((t, i) => {
+    const r = t.attackRoll ?? t.saveRoll;
+    const roll: FeedRoll | null = r
+      ? { sides: 20, faces: r.faces, total: r.total, crit: r.crit, fumble: r.fumble }
+      : null;
+
+    // Outcome + whether it benefits the party (drives colour from the players' POV).
+    let outcome: string | null = null;
+    let good: boolean | null = null;
+    if (t.hit !== null) {
+      outcome = t.hit ? "Hit" : "Miss";
+      good = t.targetKind === "ENEMY" ? t.hit : !t.hit;
+    } else if (t.saved !== null) {
+      outcome = t.saved ? "Saved" : "Failed";
+      good = t.targetKind === "ENEMY" ? !t.saved : t.saved;
+    } else if (t.heal !== null && t.heal > 0) {
+      outcome = "Heal";
+      good = true;
+    } else if (t.condition) {
+      outcome = t.condition;
+      good = t.targetKind === "ENEMY";
+    }
+    if (t.defeated) {
+      outcome = "Down!";
+      good = t.targetKind === "ENEMY";
+    }
+
+    const bits: string[] = [];
+    if (t.damageRoll) bits.push(`${t.damageRoll.total} dmg`);
+    if (t.heal !== null && t.heal > 0) bits.push(`+${t.heal}`);
+    bits.push(`${Math.max(0, t.currentHp)}/${t.maxHp}`);
+
+    const tone: FeedEntry["tone"] =
+      good === true ? "good" : good === false ? "bad" : "neutral";
+
+    return {
+      id: `${base}-${i}`,
+      actorName: evt.actorName,
+      actorKind: evt.actorKind,
+      title: `${evt.label} ${t.targetName}`.trim(),
+      roll,
+      outcome,
+      detail: bits.join(" · "),
+      tone,
+    };
+  });
+}
+
 interface SessionState {
   players: PlayerDto[];
   status: string;
@@ -69,6 +171,12 @@ interface SessionState {
    * the last event (the old single-slot bug where it looked like the enemy acted first).
    */
   combatActionQueue: (CombatActionEvent & { eventId: string })[];
+  /** The local player's id — used to route their OWN rolls to the big modal vs the side feed. */
+  myPlayerId: string | null;
+  /** Compact non-blocking roll feed shown docked on the battle map. */
+  combatFeed: FeedEntry[];
+  /** True between "Start Encounter" and the COMBAT_START event (drives the init loader). */
+  combatInitializing: boolean;
   /** Collaborative round collection status (null when no window is open). */
   round: RoundStatus | null;
 
@@ -105,6 +213,8 @@ interface SessionState {
   applyCombatLifecycle: (evt: CombatLifecycleEvent) => void;
   applyCombatAction: (evt: CombatActionEvent) => void;
   dequeueCombatAction: () => void;
+  setMyPlayerId: (id: string | null) => void;
+  setCombatInitializing: (initializing: boolean) => void;
   setTurnChange: (nextPlayerId: string | null, turnNumber: number) => void;
   applyPlayerEvent: (gs: GameStateDto) => void;
   applyGameStarted: (gs: GameStateDto) => void;
@@ -133,6 +243,9 @@ const initialState = {
   runtimeByPlayerId: {} as Record<string, PlayerRuntimeState>,
   combat: null as CombatStateDto | null,
   combatActionQueue: [] as (CombatActionEvent & { eventId: string })[],
+  myPlayerId: null as string | null,
+  combatFeed: [] as FeedEntry[],
+  combatInitializing: false,
   round: null as RoundStatus | null,
 };
 
@@ -330,7 +443,14 @@ export const useSessionStore = create<SessionState>((set) => ({
         text: `${evt.label}: ${evt.notation} → ${evt.total}${flourish}`,
         turnNumber: state.turnNumber,
       };
-      return { lastRoll: roll, logs: [...state.logs, entry] };
+      // Big centre modal only for the LOCAL player's own roll; everyone else's
+      // (enemy/NPC, other players, others' death saves) goes to the side feed only.
+      const mine = !!state.myPlayerId && evt.playerId === state.myPlayerId;
+      return {
+        lastRoll: mine ? roll : state.lastRoll,
+        logs: [...state.logs, entry],
+        combatFeed: prependFeed(state.combatFeed, [feedFromRoll(evt)]),
+      };
     }),
 
   setRuntimeStates: (states) =>
@@ -358,6 +478,8 @@ export const useSessionStore = create<SessionState>((set) => ({
         return {
           combat: null,
           combatActionQueue: [],
+          combatFeed: [],
+          combatInitializing: false,
           logs: [
             ...state.logs,
             {
@@ -380,29 +502,46 @@ export const useSessionStore = create<SessionState>((set) => ({
           : null;
       return {
         combat: evt.combat,
+        // The battlefield has arrived — clear the init loader.
+        combatInitializing: false,
         logs: note ? [...state.logs, note] : state.logs,
       };
     }),
 
-  /* COMBAT_ACTION — refresh combat (HP bars) and APPEND to the playback queue so each
-     action animates in arrival order (never overwrites a pending one). */
+  /* COMBAT_ACTION — always refresh combat (HP/positions) and push compact feed lines.
+     Only the LOCAL player's OWN action is queued for the big centre modal; enemy and
+     other players' actions show in the side feed only (and update the board). */
   applyCombatAction: (evt) =>
-    set((s) => ({
-      combat: evt.combat,
-      combatActionQueue: [
-        ...s.combatActionQueue,
-        {
-          ...evt,
-          eventId: `ca-${evt.seq}-${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 6)}`,
-        },
-      ],
-    })),
+    set((s) => {
+      const me = s.players.find((p) => p.id === s.myPlayerId);
+      const mine =
+        !!me &&
+        !!evt.actorName &&
+        evt.actorName.toLowerCase() === me.characterName?.toLowerCase();
+      return {
+        combat: evt.combat,
+        combatActionQueue: mine
+          ? [
+              ...s.combatActionQueue,
+              {
+                ...evt,
+                eventId: `ca-${evt.seq}-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .slice(2, 6)}`,
+              },
+            ]
+          : s.combatActionQueue,
+        combatFeed: prependFeed(s.combatFeed, feedFromAction(evt)),
+      };
+    }),
 
   /* Drop the head of the queue once its animation has played. */
   dequeueCombatAction: () =>
     set((s) => ({ combatActionQueue: s.combatActionQueue.slice(1) })),
+
+  setMyPlayerId: (id) => set({ myPlayerId: id }),
+  setCombatInitializing: (initializing) =>
+    set({ combatInitializing: initializing }),
 
   setTurnChange: (nextPlayerId, turnNumber) =>
     set({ currentTurnPlayerId: nextPlayerId, turnNumber }),
