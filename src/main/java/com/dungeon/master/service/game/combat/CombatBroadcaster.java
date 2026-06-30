@@ -32,8 +32,16 @@ public class CombatBroadcaster {
 
     public void broadcastAction(CombatEncounter enc, CombatantKind actorKind, String actorName,
                                 String actionKind, String label, List<CombatActionEvent.Target> targets) {
+        broadcastAction(enc, actorKind, actorName, actionKind, label, targets, false);
+    }
+
+    /** {@code awaitingDamage} marks a weapon hit whose damage the player still has to roll (phase 2). */
+    public void broadcastAction(CombatEncounter enc, CombatantKind actorKind, String actorName,
+                                String actionKind, String label, List<CombatActionEvent.Target> targets,
+                                boolean awaitingDamage) {
         broadcast(enc.getSessionId(), new CombatActionEvent(
                 CombatActionEvent.TYPE, enc.getSessionId(), actionSeq.incrementAndGet(),
-                actorKind, actorName, actionKind, label, targets, combatMapper.toStateDto(enc)));
+                actorKind, actorName, actionKind, label, targets, combatMapper.toStateDto(enc),
+                awaitingDamage));
     }
 }

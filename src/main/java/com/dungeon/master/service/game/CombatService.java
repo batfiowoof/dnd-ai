@@ -59,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Combat overlay state machine. While an encounter is ACTIVE the narrative turn
@@ -94,6 +95,19 @@ public class CombatService {
 
     /** DC of the Wisdom (Medicine) check to stabilize a dying creature. */
     private static final int STABILIZE_DC = 10;
+
+    /**
+     * Weapon hits whose damage the player hasn't rolled yet (two-phase attack). Keyed by
+     * {@code encounterId:playerId}; the to-hit is resolved on the attack, the damage on the
+     * player's "Roll damage" (phase 2) so DM narration only fires once the damage is known.
+     */
+    private final Map<String, PendingAttack> pendingAttacks = new ConcurrentHashMap<>();
+
+    private record PendingAttack(UUID enemyId, DiceRollResult atk, int targetAc) {}
+
+    private static String pendingKey(CombatEncounter enc, Player player) {
+        return enc.getId() + ":" + player.getId();
+    }
 
     /* ── reads ───────────────────────────────────────────────────── */
 
@@ -224,32 +238,84 @@ public class CombatService {
         // landed hit, and crit carries no extra weight against an enemy here, so it doesn't gate the hit.
         boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
 
-        RollSummary damageSummary = null;
-        boolean defeated = false;
-        if (hit) {
-            String dmgDice = damageDice(player);
-            DiceRollResult dmg = diceService.roll(atk.crit() ? CombatMath.critDouble(dmgDice) : dmgDice);
-            enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
-            if (enemy.getCurrentHp() == 0) {
-                enemy.setAlive(false);
-                defeated = true;
-            }
-            enemyRepository.save(enemy);
-            damageSummary = RollSummary.of(dmg);
+        markAction(enc, player);                 // spend the action (turn doesn't end yet)
+
+        if (!hit) {
+            // A miss resolves immediately — there's no damage to roll, so narrate now.
+            broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK", "attacks",
+                    List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
+                            RollSummary.of(atk), targetAc, false, null,
+                            enemy.getCurrentHp(), enemy.getMaxHp(), false)));
+            List<String> beat = new ArrayList<>();
+            beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(), atk,
+                    targetAc, false, null, enemy.getCurrentHp(), enemy.getMaxHp(), false));
+            maybeAutoEndTurn(enc, player, beat);
+            flushBeat(sessionId, player.getId(), beat);
+            return;
         }
 
-        markAction(enc, player);                 // spend the action (turn doesn't end yet)
+        // HIT → phase 1: announce the hit but hold the damage for the player to roll (phase 2).
+        // No narration yet — it fires from resolveAttackDamage once the damage is known.
+        pendingAttacks.put(pendingKey(enc, player), new PendingAttack(enemy.getId(), atk, targetAc));
         broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK", "attacks",
                 List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
-                        RollSummary.of(atk), targetAc, hit, damageSummary,
+                        RollSummary.of(atk), targetAc, true, null,
+                        enemy.getCurrentHp(), enemy.getMaxHp(), false)),
+                true);
+    }
+
+    /**
+     * Phase 2 of a weapon attack: the player rolled their damage, so resolve the held hit —
+     * the server rolls the authoritative damage, applies it, broadcasts the reveal, and fires
+     * the (now damage-aware) DM narration.
+     */
+    @Transactional
+    public void resolveAttackDamage(UUID sessionId, String username) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+        PendingAttack pending = pendingAttacks.remove(pendingKey(enc, player));
+        if (pending == null) {
+            throw new IllegalStateException("No attack is waiting for a damage roll");
+        }
+        List<String> beat = applyPendingDamage(enc, sessionId, player, pending);
+        maybeAutoEndTurn(enc, player, beat);
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /**
+     * Roll + apply a pending weapon hit's damage and broadcast the reveal (no attack roll —
+     * the d20 was already shown in phase 1). Returns the mechanical beat line(s) for narration;
+     * the caller decides whether to advance the turn / flush.
+     */
+    private List<String> applyPendingDamage(CombatEncounter enc, UUID sessionId, Player player,
+                                            PendingAttack pending) {
+        Enemy enemy = enemyRepository.findById(pending.enemyId())
+                .filter(e -> e.getSessionId().equals(sessionId))
+                .orElseThrow(() -> new IllegalArgumentException("Enemy not found"));
+
+        String dmgDice = damageDice(player);
+        DiceRollResult dmg = diceService.roll(
+                pending.atk().crit() ? CombatMath.critDouble(dmgDice) : dmgDice);
+        enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
+        boolean defeated = false;
+        if (enemy.getCurrentHp() == 0) {
+            enemy.setAlive(false);
+            defeated = true;
+        }
+        enemyRepository.save(enemy);
+        RollSummary damageSummary = RollSummary.of(dmg);
+
+        // Damage reveal — attackRoll null so the client skips a second d20 and rolls the damage.
+        broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK", "attacks",
+                List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
+                        null, pending.targetAc(), true, damageSummary,
                         enemy.getCurrentHp(), enemy.getMaxHp(), defeated)));
 
         List<String> beat = new ArrayList<>();
-        beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(), atk,
-                targetAc, hit, damageSummary,
+        beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(),
+                pending.atk(), pending.targetAc(), true, damageSummary,
                 enemy.getCurrentHp(), enemy.getMaxHp(), defeated));
-        maybeAutoEndTurn(enc, player, beat);
-        flushBeat(sessionId, player.getId(), beat);
+        return beat;
     }
 
     @Transactional
@@ -379,7 +445,15 @@ public class CombatService {
         Player player = requireCombatTurn(enc, sessionId, username);
 
         List<String> beat = new ArrayList<>();
-        beat.add(player.getCharacterName() + " holds their action and ends their turn.");
+        // Safety: if they end the turn with an unrolled hit, resolve its damage first so the
+        // enemy isn't spared and the beat is still narrated.
+        PendingAttack pending = pendingAttacks.remove(pendingKey(enc, player));
+        if (pending != null) {
+            beat.addAll(applyPendingDamage(enc, sessionId, player, pending));
+            beat.add(player.getCharacterName() + " ends their turn.");
+        } else {
+            beat.add(player.getCharacterName() + " holds their action and ends their turn.");
+        }
         advanceTurn(enc, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
@@ -1027,6 +1101,12 @@ public class CombatService {
     private void broadcastAction(CombatEncounter enc, CombatantKind actorKind, String actorName,
                                  String actionKind, String label, List<CombatActionEvent.Target> targets) {
         combatBroadcaster.broadcastAction(enc, actorKind, actorName, actionKind, label, targets);
+    }
+
+    private void broadcastAction(CombatEncounter enc, CombatantKind actorKind, String actorName,
+                                 String actionKind, String label, List<CombatActionEvent.Target> targets,
+                                 boolean awaitingDamage) {
+        combatBroadcaster.broadcastAction(enc, actorKind, actorName, actionKind, label, targets, awaitingDamage);
     }
 
     /* ── target selection / predicates ───────────────────────────── */

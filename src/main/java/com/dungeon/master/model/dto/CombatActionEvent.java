@@ -28,7 +28,9 @@ public record CombatActionEvent(
         String actionKind,
         String label,
         List<Target> targets,
-        CombatStateDto combat
+        CombatStateDto combat,
+        /** A weapon hit held for its second phase: the player must roll damage to resolve it. */
+        boolean awaitingDamage
 ) {
     public static final String TYPE = "COMBAT_ACTION";
 

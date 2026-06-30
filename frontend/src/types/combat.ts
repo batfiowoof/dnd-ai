@@ -127,6 +127,8 @@ export interface CombatActionEvent {
   label: string;
   targets: CombatTarget[];
   combat: CombatStateDto;
+  /** A weapon hit awaiting its second phase: the player must roll damage to resolve it. */
+  awaitingDamage?: boolean;
 }
 
 export interface CombatLifecycleEvent {

@@ -255,6 +255,7 @@ class CombatServiceTest {
         when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
 
         combat.playerAttack(sessionId, "Aria", enemyId);
+        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: the player rolls the damage
 
         assertEquals(0, goblin.getCurrentHp());
         assertTrue(!goblin.isAlive());
@@ -821,6 +822,7 @@ class CombatServiceTest {
         when(diceService.roll("1d8")).thenReturn(res(5));
 
         combat.playerAttack(sessionId, "Aria", aId);
+        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the damage
 
         assertEquals(15, goblin.getCurrentHp(), "a longbow reaches a 35 ft target");
     }
@@ -859,6 +861,7 @@ class CombatServiceTest {
         when(diceService.roll("2d6")).thenReturn(res(9));      // a greatsword rolls 2d6
 
         combat.playerAttack(sessionId, "Aria", enemyId);
+        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the damage
 
         assertEquals(11, goblin.getCurrentHp(), "greatsword deals its 2d6 die, not a flat 1d8");
         verify(diceService).roll("2d6");
@@ -882,6 +885,7 @@ class CombatServiceTest {
         when(diceService.roll("1d4")).thenReturn(res(3));
 
         combat.playerAttack(sessionId, "Aria", enemyId);
+        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the damage
 
         assertEquals(17, goblin.getCurrentHp(), "an unarmed strike falls back to 1d4");
         verify(diceService).roll("1d4");
@@ -905,6 +909,7 @@ class CombatServiceTest {
         when(diceService.roll("2d8")).thenReturn(res(12));       // the doubled dice
 
         combat.playerAttack(sessionId, "Aria", enemyId);
+        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the (doubled) crit damage
 
         assertEquals(18, goblin.getCurrentHp(), "a crit rolls 2d8, not 1d8");
         verify(diceService).roll("2d8");

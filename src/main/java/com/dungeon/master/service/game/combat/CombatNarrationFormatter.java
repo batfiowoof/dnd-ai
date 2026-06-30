@@ -21,7 +21,7 @@ public final class CombatNarrationFormatter {
 
     private CombatNarrationFormatter() {}
 
-    /** One mechanical attack line: "X hits Y (attack 18 vs AC 15) for 7 damage (Y now 4/11 HP)." */
+    /** One mechanical attack line: "X hits Y (attack 18 vs AC 15) for 7 damage — a solid hit (Y now 4/11 HP)." */
     public static String describeAttack(String attacker, String target, DiceRollResult atk,
                                         int targetAc, boolean hit, RollSummary dmg,
                                         int targetHp, int targetMax, boolean defeated) {
@@ -32,11 +32,25 @@ public final class CombatNarrationFormatter {
         }
         String crit = atk.crit() ? "a critical hit — " : "";
         String head = attacker + " hits " + target + " (" + crit + "attack " + atk.total()
-                + " vs AC " + targetAc + ") for " + dmg.total() + " damage";
+                + " vs AC " + targetAc + ") for " + dmg.total() + " damage"
+                + magnitudeTag(dmg.total(), targetMax, atk.crit());
         if (defeated) {
             return head + ", defeating " + target + ".";
         }
         return head + " (" + target + " now at " + targetHp + "/" + targetMax + " HP).";
+    }
+
+    /**
+     * A qualitative damage cue so narration scales drama by how hard the blow landed — a big
+     * fraction of the target's max HP (or a crit) reads as devastating; a sliver as glancing.
+     */
+    private static String magnitudeTag(int damage, int targetMax, boolean crit) {
+        if (targetMax <= 0) return "";
+        double frac = (double) damage / targetMax;
+        if (crit || frac >= 0.40) return " — a devastating blow";
+        if (frac >= 0.20) return " — a solid hit";
+        if (frac <= 0.12) return " — a glancing hit";
+        return "";
     }
 
     public static String describeItemUse(String actor, PlayerStateService.ItemUseResult r) {

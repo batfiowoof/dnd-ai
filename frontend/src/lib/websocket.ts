@@ -198,6 +198,14 @@ export function sendCombatAttack(
   });
 }
 
+/** Phase 2 of an attack: resolve the held hit's damage (server rolls it from the pending attack). */
+export function sendCombatAttackDamage(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/attack-damage`,
+    body: JSON.stringify({}),
+  });
+}
+
 export function sendCombatUseItem(
   client: Client,
   sessionId: string,

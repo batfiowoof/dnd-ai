@@ -163,8 +163,12 @@ public class DmAiService {
                 not invent new attacks. Keep it under 120 words. Refer to combatants by name. \
                 If the beat marks an attack as "a critical hit", amplify it dramatically as a \
                 spectacular, devastating blow; if it marks an attack as "a fumble", play it as a \
-                costly, embarrassing stumble — but in either case ONLY add flavour, never new \
-                damage, deaths, or mechanical outcomes beyond what the beat states.
+                costly, embarrassing stumble. Scale your drama to the damage dealt: a "devastating \
+                blow" or a large damage figure relative to the target's HP should read as a brutal, \
+                momentum-shifting strike, while a "glancing hit" or only a few points of damage \
+                should read as a weak, partly-deflected blow that barely fazes the target — but in \
+                every case ONLY add flavour, never new damage, deaths, or mechanical outcomes \
+                beyond what the beat states.
                 %s%s
                 Resolved combat beat:
                 %s""".formatted(promptBuilder.partySituation(sessionId, enemies),

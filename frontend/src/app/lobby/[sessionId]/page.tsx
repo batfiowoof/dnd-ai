@@ -28,6 +28,7 @@ import LobbyWaitingView from "@/components/game/LobbyWaitingView";
 import GameRoomHeader from "@/components/game/GameRoomHeader";
 import PlayersSidebar from "@/components/game/PlayersSidebar";
 import CombatRegion from "@/components/game/CombatRegion";
+import BattlefieldChatSplit from "@/components/game/BattlefieldChatSplit";
 import GameLog from "@/components/game/GameLog";
 import GameInputBar from "@/components/game/GameInputBar";
 
@@ -292,6 +293,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         pendingAction={gate.pendingAction}
         onRoll={gate.rollPending}
         onCancel={gate.cancelPending}
+        onRollDamage={actions.combatAttackDamage}
       />
       <InventoryManager
         open={manageOpen}
@@ -339,50 +341,49 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         <div className="flex min-h-0 flex-1 flex-col">
           <CombatRegion part="tracker" {...combatRegionProps} />
 
-          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            {/* Battlefield — left column (renders null when there's no grid). */}
-            <CombatRegion part="map" {...combatRegionProps} />
+          <BattlefieldChatSplit
+            map={<CombatRegion part="map" {...combatRegionProps} />}
+            chat={
+              <>
+                <GameLog playerByName={playerByName} scrollRef={scrollRef} />
 
-            {/* Chat + input — right column (full width when there's no map). */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <GameLog playerByName={playerByName} scrollRef={scrollRef} />
+                {/* Input — only when ACTIVE */}
+                {status === "ACTIVE" && (
+                  <GameInputBar
+                    playerId={playerId}
+                    actionText={actionText}
+                    setActionText={setActionText}
+                    spendInspiration={spendInspiration}
+                    setSpendInspiration={setSpendInspiration}
+                    onSend={handleSendAction}
+                    onPass={actions.pass}
+                    onRoll={actions.roll}
+                    onAttack={actions.attack}
+                    onCast={actions.cast}
+                    onUseItem={actions.useItem}
+                    onLongRest={actions.longRest}
+                    onManage={() => setManageOpen(true)}
+                  />
+                )}
 
-              {/* Input — only when ACTIVE */}
-              {status === "ACTIVE" && (
-                <GameInputBar
-                  playerId={playerId}
-                  actionText={actionText}
-                  setActionText={setActionText}
-                  spendInspiration={spendInspiration}
-                  setSpendInspiration={setSpendInspiration}
-                  onSend={handleSendAction}
-                  onPass={actions.pass}
-                  onRoll={actions.roll}
-                  onAttack={actions.attack}
-                  onCast={actions.cast}
-                  onUseItem={actions.useItem}
-                  onLongRest={actions.longRest}
-                  onManage={() => setManageOpen(true)}
-                />
-              )}
-
-              {/* Finished banner */}
-              {status === "FINISHED" && (
-                <div className="border-t border-border bg-surface p-4 text-center">
-                  <p className="text-sm text-text-muted">
-                    This adventure has ended.
-                  </p>
-                  <Button
-                    onClick={() => router.push("/play")}
-                    variant="outline"
-                    className="mt-2"
-                  >
-                    New Adventure
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
+                {/* Finished banner */}
+                {status === "FINISHED" && (
+                  <div className="border-t border-border bg-surface p-4 text-center">
+                    <p className="text-sm text-text-muted">
+                      This adventure has ended.
+                    </p>
+                    <Button
+                      onClick={() => router.push("/play")}
+                      variant="outline"
+                      className="mt-2"
+                    >
+                      New Adventure
+                    </Button>
+                  </div>
+                )}
+              </>
+            }
+          />
         </div>
       </div>
     </div>

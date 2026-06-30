@@ -11,12 +11,15 @@ export interface Prefs {
   sound: boolean;
   /** Root font scale multiplier, e.g. 1 = 100%. */
   textScale: number;
+  /** Battlefield (combat map) column width in px on desktop — drag the divider to resize. */
+  mapWidth: number;
 }
 
 export const DEFAULT_PREFS: Prefs = {
   reduceMotion: false,
   sound: true,
   textScale: 1,
+  mapWidth: 560,
 };
 
 const KEY = "dnd-prefs";

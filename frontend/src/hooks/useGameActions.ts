@@ -14,6 +14,7 @@ import {
   sendEquipItem,
   sendLongRest,
   sendCombatAttack,
+  sendCombatAttackDamage,
   sendCombatUseItem,
   sendCombatCast,
   sendCombatEndTurn,
@@ -80,6 +81,7 @@ export function useGameActions(
       combatAttack: run((c, enemyId: string) =>
         sendCombatAttack(c, sessionId, enemyId)
       ),
+      combatAttackDamage: run((c) => sendCombatAttackDamage(c, sessionId)),
       combatUseItem: run((c, itemName: string) =>
         sendCombatUseItem(c, sessionId, itemName)
       ),
