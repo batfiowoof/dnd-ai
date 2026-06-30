@@ -38,6 +38,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(WorldNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleWorldNotFound(WorldNotFoundException ex,
+                                                             HttpServletRequest request) {
+        log.warn("World not found: {}", ex.getMessage());
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(SessionFullException.class)
     public ResponseEntity<ErrorResponse> handleSessionFull(SessionFullException ex,
                                                             HttpServletRequest request) {

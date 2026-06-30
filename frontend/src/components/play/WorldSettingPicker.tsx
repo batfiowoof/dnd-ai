@@ -1,13 +1,17 @@
-import { controlClass, cn, useToast } from "@/components/ui";
+import { useRouter } from "next/navigation";
+import { controlClass, cn, Spinner, useToast } from "@/components/ui";
 import { PRESET_WORLDS } from "@/lib/presetWorlds";
+import { useMyWorlds } from "@/hooks/useWorldQueries";
 
-type WorldSource = "preset" | "custom-write" | "custom-upload";
+export type WorldSource = "preset" | "my-worlds" | "custom-write" | "custom-upload";
 
 interface WorldSettingPickerProps {
   worldSource: WorldSource;
   setWorldSource: (v: WorldSource) => void;
   selectedPreset: string;
   setSelectedPreset: (id: string) => void;
+  selectedWorldId: string;
+  setSelectedWorldId: (id: string) => void;
   customWorldText: string;
   setCustomWorldText: (text: string) => void;
   expandedPreset: string | null;
@@ -23,12 +27,17 @@ export default function WorldSettingPicker({
   setWorldSource,
   selectedPreset,
   setSelectedPreset,
+  selectedWorldId,
+  setSelectedWorldId,
   customWorldText,
   setCustomWorldText,
   expandedPreset,
   setExpandedPreset,
 }: WorldSettingPickerProps) {
   const toast = useToast();
+  const router = useRouter();
+  const worldsQuery = useMyWorlds(worldSource === "my-worlds");
+  const myWorlds = worldsQuery.data ?? [];
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -58,6 +67,7 @@ export default function WorldSettingPicker({
           {(
             [
               ["preset", "Presets"],
+              ["my-worlds", "My Worlds"],
               ["custom-write", "Write"],
               ["custom-upload", "Upload"],
             ] as const
@@ -131,6 +141,69 @@ export default function WorldSettingPicker({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* My Worlds (built in the World Builder) */}
+      {worldSource === "my-worlds" && (
+        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+          {worldsQuery.isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-xs text-text-muted">
+              <Spinner className="text-accent" /> Loading your worlds...
+            </div>
+          ) : myWorlds.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-bg-elevated p-5 text-center text-xs text-text-muted">
+              <p className="mb-3">You haven&rsquo;t built any worlds yet.</p>
+              <button
+                onClick={() => router.push("/worlds/new")}
+                className="cursor-pointer font-semibold text-accent transition hover:text-accent-light hover:underline"
+              >
+                Open the World Builder →
+              </button>
+            </div>
+          ) : (
+            myWorlds.map((world) => (
+              <button
+                key={world.id}
+                onClick={() => setSelectedWorldId(world.id)}
+                className={cn(
+                  "w-full cursor-pointer rounded-lg border px-4 py-3 text-left transition",
+                  selectedWorldId === world.id
+                    ? "border-accent bg-accent/10"
+                    : "border-border bg-bg-elevated hover:border-accent/50 hover:-translate-y-0.5"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p
+                      className="truncate text-sm font-semibold text-text"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {world.name}
+                    </p>
+                    {world.tagline && (
+                      <p className="truncate text-xs text-text-muted">
+                        {world.tagline}
+                      </p>
+                    )}
+                    <p className="mt-0.5 text-[10px] uppercase tracking-wider text-text-muted">
+                      {world.regionCount} regions · {world.factionCount} factions ·{" "}
+                      {world.npcCount} NPCs · {world.monsterCount} monsters ·{" "}
+                      {world.milestoneCount} milestones
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "h-3.5 w-3.5 flex-shrink-0 rounded-full border-2 transition",
+                      selectedWorldId === world.id
+                        ? "border-gold bg-gold"
+                        : "border-border"
+                    )}
+                  />
+                </div>
+              </button>
+            ))
+          )}
         </div>
       )}
 

@@ -46,7 +46,8 @@ public class RagService {
         String queryVector = embedQuery(playerAction);
 
         List<WorldDocument> relevantDocs = queryVector == null ? List.of()
-                : fetchByIds(worldDocumentRepository.findSimilarDocumentIds(queryVector, TOP_K_DOCUMENTS));
+                : fetchByIds(worldDocumentRepository.findSimilarSessionDocIds(
+                        queryVector, sessionId, TOP_K_DOCUMENTS));
         if (!relevantDocs.isEmpty()) {
             context.append("=== World Knowledge ===\n");
             for (WorldDocument doc : relevantDocs) {
@@ -132,11 +133,12 @@ public class RagService {
             String vectorString = embeddingService.embeddingToString(embedding);
             UUID docId = UUID.randomUUID();
 
-            worldDocumentRepository.insertWithEmbedding(
+            worldDocumentRepository.insertWithSession(
                     docId,
                     "Session History - " + sessionId,
                     historyText,
                     "SESSION_HISTORY",
+                    sessionId,
                     vectorString);
 
             log.info("Indexed session history for session: {}", sessionId);

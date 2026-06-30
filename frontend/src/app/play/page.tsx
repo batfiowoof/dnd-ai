@@ -10,7 +10,9 @@ import {
   useJoinByCode,
 } from "@/hooks/useSessionQueries";
 import SessionsPanel from "@/components/SessionsPanel";
-import WorldSettingPicker from "@/components/play/WorldSettingPicker";
+import WorldSettingPicker, {
+  type WorldSource,
+} from "@/components/play/WorldSettingPicker";
 import HostSettingsForm from "@/components/play/HostSettingsForm";
 import type { Difficulty, DmLength, DmStyle, TurnMode } from "@/types";
 import {
@@ -55,10 +57,9 @@ function PlayContent() {
   const loading = createMutation.isPending || joinMutation.isPending;
 
   // World setting
-  const [worldSource, setWorldSource] = useState<
-    "preset" | "custom-write" | "custom-upload"
-  >("preset");
+  const [worldSource, setWorldSource] = useState<WorldSource>("preset");
   const [selectedPreset, setSelectedPreset] = useState(PRESET_WORLDS[0].id);
+  const [selectedWorldId, setSelectedWorldId] = useState("");
   const [customWorldText, setCustomWorldText] = useState("");
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
 
@@ -103,8 +104,15 @@ function PlayContent() {
       toast.error("Please select a character.");
       return;
     }
-    const worldSetting = getWorldSetting();
-    if (!worldSetting) {
+    // A saved world is started by id (the server renders its setting + milestones + monsters);
+    // every other source supplies free-text world setting.
+    const usingSavedWorld = worldSource === "my-worlds";
+    if (usingSavedWorld && !selectedWorldId) {
+      toast.error("Please select one of your worlds.");
+      return;
+    }
+    const worldSetting = usingSavedWorld ? undefined : getWorldSetting();
+    if (!usingSavedWorld && !worldSetting) {
       toast.error("Please select or provide a world setting.");
       return;
     }
@@ -113,6 +121,7 @@ function PlayContent() {
         playerName: username,
         characterId: selectedCharId,
         worldSetting,
+        worldId: usingSavedWorld ? selectedWorldId : undefined,
         turnMode,
         maxPlayers,
         difficulty,
@@ -248,6 +257,8 @@ function PlayContent() {
               setWorldSource={setWorldSource}
               selectedPreset={selectedPreset}
               setSelectedPreset={setSelectedPreset}
+              selectedWorldId={selectedWorldId}
+              setSelectedWorldId={setSelectedWorldId}
               customWorldText={customWorldText}
               setCustomWorldText={setCustomWorldText}
               expandedPreset={expandedPreset}

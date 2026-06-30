@@ -13,7 +13,6 @@ import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.service.ai.DmAiService;
 import com.dungeon.master.service.ai.DmTags;
-import com.dungeon.master.service.game.Bestiary;
 import com.dungeon.master.service.game.CombatService;
 import com.dungeon.master.service.game.PlayerStateService;
 import com.dungeon.master.service.game.TurnService;
@@ -37,7 +36,7 @@ public class PlayerActionConsumer {
     private final DmAiService dmAiService;
     private final TurnService turnService;
     private final CombatService combatService;
-    private final com.dungeon.master.service.game.MonsterCatalog monsterCatalog;
+    private final com.dungeon.master.service.game.MonsterResolver monsterResolver;
     private final PlayerStateService playerStateService;
     private final GameSessionRepository sessionRepository;
     private final PlayerRepository playerRepository;
@@ -175,8 +174,8 @@ public class PlayerActionConsumer {
         // Combat trigger — only if allowed, no encounter is already active, and THIS turn did not roll
         // a skill/ability check (a check means the action was non-combat, so it must not also fight).
         if (allowCombat && !rolled && combatService.getActiveCombat(sessionId).isEmpty()) {
-            List<String> keys = DmTags.parseEncounter(assembled,
-                    monsterCatalog.isEmpty() ? Bestiary.keys() : monsterCatalog.keys());
+            // validKeys overlays this session's homebrew monster keys on top of the SRD catalogue.
+            List<String> keys = DmTags.parseEncounter(assembled, monsterResolver.validKeys(sessionId));
             if (!keys.isEmpty()) {
                 log.info("DM-triggered encounter: session={}, enemies={}", sessionId, keys);
                 combatService.startEncounter(sessionId, keys);

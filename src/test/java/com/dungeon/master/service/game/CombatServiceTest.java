@@ -65,6 +65,7 @@ class CombatServiceTest {
     private GameEventProducer eventProducer;
     private SimpMessagingTemplate messaging;
     private MonsterCatalog monsterCatalog;
+    private MonsterResolver monsterResolver;
     private com.dungeon.master.service.ai.SpellCatalog spellCatalog;
     private CheckModifierService checkModifierService;
     private com.dungeon.master.service.ai.SceneGenerator sceneGenerator;
@@ -86,9 +87,11 @@ class CombatServiceTest {
         eventProducer = mock(GameEventProducer.class);
         messaging = mock(SimpMessagingTemplate.class);
         monsterCatalog = mock(MonsterCatalog.class);
+        monsterResolver = mock(MonsterResolver.class);
         spellCatalog = mock(com.dungeon.master.service.ai.SpellCatalog.class);
-        // Default: no catalog entry → buildEnemy falls back to the hardcoded Bestiary.
+        // Default: no catalog entry and no session custom monsters → buildEnemy falls back to Bestiary.
         when(monsterCatalog.get(anyString())).thenReturn(Optional.empty());
+        when(monsterResolver.customTemplates(any())).thenReturn(java.util.List.of());
         checkModifierService = mock(CheckModifierService.class);
         sceneGenerator = mock(com.dungeon.master.service.ai.SceneGenerator.class);
         enemyTacticsService = mock(com.dungeon.master.service.ai.EnemyTacticsService.class);
@@ -124,7 +127,7 @@ class CombatServiceTest {
                         combatBroadcaster, combatLookups);
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
                 sessionRepo, playerStateService, diceService, turnService, eventProducer,
-                monsterCatalog, spellCatalog, new GridService(), checkModifierService,
+                monsterCatalog, monsterResolver, spellCatalog, new GridService(), checkModifierService,
                 sceneGenerator, enemyTacticsService, combatMapper, combatBroadcaster,
                 combatTerrainService, combatLookups, combatSpellResolver);
 

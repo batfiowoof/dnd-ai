@@ -13,6 +13,7 @@ import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.MonsterAttack;
+import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
 import com.dungeon.master.model.dto.RollSummary;
@@ -82,6 +83,7 @@ public class CombatService {
     private final TurnService turnService;
     private final GameEventProducer eventProducer;
     private final MonsterCatalog monsterCatalog;
+    private final MonsterResolver monsterResolver;
     private final SpellCatalog spellCatalog;
     private final GridService gridService;
     private final CheckModifierService checkModifierService;
@@ -135,13 +137,15 @@ public class CombatService {
 
         // Create enemies, numbering duplicates (Goblin 1, Goblin 2, ...). Difficulty scales
         // HP and attack bonus so the same key is tougher on DEADLY and softer on EASY.
+        // Overlay this session's homebrew stat blocks (from its world) on top of the SRD catalogue.
+        List<MonsterTemplate> sessionCustom = monsterResolver.customTemplates(sessionId);
         List<Enemy> enemies = new ArrayList<>();
         Map<String, Integer> counts = new java.util.HashMap<>();
         for (String key : enemyKeys) {
             long sameType = enemyKeys.stream().filter(k -> k.equalsIgnoreCase(key)).count();
             int n = counts.merge(key.toLowerCase(), 1, Integer::sum);
-            enemies.add(EnemyFactory.buildEnemy(monsterCatalog, diceService, sessionId, key,
-                    sameType > 1 ? n : 0, difficulty));
+            enemies.add(EnemyFactory.buildEnemy(monsterCatalog, sessionCustom, diceService, sessionId,
+                    key, sameType > 1 ? n : 0, difficulty));
         }
         enemyRepository.saveAll(enemies);
 

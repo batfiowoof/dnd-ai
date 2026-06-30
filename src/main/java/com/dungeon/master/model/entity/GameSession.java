@@ -1,5 +1,6 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
@@ -68,6 +69,15 @@ public class GameSession {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<Milestone> milestones = new ArrayList<>();
+
+    /**
+     * Homebrew monster stat blocks copied from the {@link World} this session was started from. They
+     * overlay the SRD {@code MonsterCatalog} for this session's combat (see {@code MonsterResolver}).
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "custom_monsters", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<CustomMonster> customMonsters = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "turn_mode", nullable = false)

@@ -41,6 +41,13 @@ public class WorldDocument {
     @Column(nullable = false)
     private DocumentCategory category;
 
+    /**
+     * Session this document belongs to, or null when global (e.g. the bundled SRD RULES). LORE and
+     * SESSION_HISTORY rows are scoped so retrieval never crosses campaigns.
+     */
+    @Column(name = "session_id")
+    private UUID sessionId;
+
     @Transient
     private float[] embedding;
 }

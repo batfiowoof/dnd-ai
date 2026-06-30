@@ -15,6 +15,10 @@ export const queryKeys = {
     all: ["characters"] as const,
     byId: (id: string) => ["characters", id] as const,
   },
+  worlds: {
+    all: ["worlds"] as const,
+    byId: (id: string) => ["worlds", id] as const,
+  },
   dnd5e: {
     species: ["dnd5e", "species"] as const,
     backgrounds: ["dnd5e", "backgrounds"] as const,

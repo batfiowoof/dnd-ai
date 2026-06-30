@@ -5,6 +5,7 @@ import com.dungeon.master.kafka.event.SessionEvent;
 import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.dto.CreateSessionRequest;
 import com.dungeon.master.model.dto.CreateSessionResponse;
+import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.PlayerDto;
@@ -12,6 +13,7 @@ import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.TurnEvent;
+import com.dungeon.master.model.entity.World;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
 import com.dungeon.master.model.enums.DmStyle;
@@ -24,6 +26,10 @@ import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
+import com.dungeon.master.service.world.WorldRagIndexer;
+import com.dungeon.master.service.world.WorldSanitizer;
+import com.dungeon.master.service.world.WorldService;
+import com.dungeon.master.service.world.WorldSettingRenderer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -54,17 +60,33 @@ public class GameSessionService {
     private final DiceService diceService;
     private final GameEventProducer eventProducer;
     private final PlayerMapper playerMapper;
+    private final WorldSanitizer worldSanitizer;
+    private final WorldService worldService;
+    private final WorldRagIndexer worldRagIndexer;
 
     @Transactional
     public CreateSessionResponse createSession(CreateSessionRequest request, String username) {
         String code = generateJoinCode();
         log.info("Creating new game session with code: {}", code);
 
+        // When a saved world is chosen, compile it: its rendered setting, milestones, and custom
+        // monsters take precedence over the free-text fields. Otherwise use the request as-is.
+        String worldSetting = request.worldSetting();
+        List<Milestone> milestones = worldSanitizer.normalizeMilestones(request.milestones());
+        List<CustomMonster> customMonsters = List.of();
+        World world = null;
+        if (request.worldId() != null) {
+            world = worldService.requireOwned(request.worldId(), username);
+            worldSetting = WorldSettingRenderer.render(world);
+            milestones = worldSanitizer.normalizeMilestones(world.getMilestones());
+            customMonsters = world.getCustomMonsters() == null ? List.of() : world.getCustomMonsters();
+        }
+
         GameSession session = GameSession.builder()
                 .code(code)
                 .status(GameStatus.WAITING)
                 .createdBy(username)
-                .worldSetting(request.worldSetting())
+                .worldSetting(worldSetting)
                 .maxPlayers(clamp(request.maxPlayers() == null ? 4 : request.maxPlayers(),
                         MIN_PARTY, MAX_PARTY))
                 .turnMode(request.turnMode() == null ? TurnMode.COLLABORATIVE : request.turnMode())
@@ -75,9 +97,16 @@ public class GameSessionService {
                 .allowAiRolls(request.allowAiRolls() == null || request.allowAiRolls())
                 .collabWindowSeconds(clamp(request.collabWindowSeconds() == null ? 10
                         : request.collabWindowSeconds(), MIN_COLLAB_WINDOW, MAX_COLLAB_WINDOW))
-                .milestones(normalizeMilestones(request.milestones()))
+                .milestones(milestones)
+                .customMonsters(customMonsters)
                 .build();
         session = sessionRepository.save(session);
+
+        // Embed the world's regions/factions/NPCs/creatures as session-scoped lore so the DM stays
+        // consistent via RAG. Best-effort — never blocks session creation.
+        if (world != null) {
+            worldRagIndexer.indexWorldForSession(session.getId(), world);
+        }
 
         Character character = characterRepository.findByIdAndOwnerUsername(request.characterId(), username)
                 .orElseThrow(() -> new IllegalArgumentException("Character not found or not owned by you"));
@@ -174,30 +203,6 @@ public class GameSessionService {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
-    }
-
-    /**
-     * Sanitize authored milestones from the create request: keep only entries with a non-blank key
-     * and title, force {@code completed=false} (the client never marks a milestone done), and drop
-     * duplicate keys. Returns an empty list when none were supplied (e.g. custom/uploaded worlds).
-     */
-    private static List<Milestone> normalizeMilestones(List<Milestone> requested) {
-        if (requested == null || requested.isEmpty()) {
-            return new java.util.ArrayList<>();
-        }
-        java.util.Set<String> seenKeys = new java.util.HashSet<>();
-        List<Milestone> out = new java.util.ArrayList<>();
-        for (Milestone m : requested) {
-            if (m == null || m.key() == null || m.key().isBlank() || m.title() == null || m.title().isBlank()) {
-                continue;
-            }
-            String key = m.key().trim();
-            if (seenKeys.add(key.toLowerCase())) {
-                out.add(new Milestone(key, m.title().trim(),
-                        m.description() == null ? "" : m.description().trim(), false));
-            }
-        }
-        return out;
     }
 
     @Transactional

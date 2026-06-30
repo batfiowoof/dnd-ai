@@ -48,6 +48,8 @@ export interface CreateSessionRequest {
   playerName: string;
   characterId: string;
   worldSetting?: string;
+  /** When set, start from a saved World (server renders its setting, milestones, monsters). */
+  worldId?: string;
   turnMode?: TurnMode;
   maxPlayers?: number;
   difficulty?: Difficulty;

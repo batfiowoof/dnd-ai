@@ -46,6 +46,12 @@ function MenuContent() {
       onClick: () => router.push("/characters"),
     },
     {
+      label: "World Builder",
+      description: "Craft a campaign world with AI",
+      icon: <IconGlobe />,
+      onClick: () => router.push("/worlds"),
+    },
+    {
       label: "Settings",
       description: "Display & audio preferences",
       icon: <IconGear />,
@@ -169,6 +175,16 @@ function IconScroll() {
       <path d="M5 7a2 2 0 0 1 2-2h10v12a2 2 0 0 1-2 2H6" />
       <path d="M17 5a2 2 0 0 1 2 2v1h-2" />
       <path d="M8 9h6M8 13h6" />
+    </svg>
+  );
+}
+
+function IconGlobe() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z" />
     </svg>
   );
 }

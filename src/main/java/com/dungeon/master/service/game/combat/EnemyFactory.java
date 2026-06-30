@@ -25,40 +25,65 @@ public final class EnemyFactory {
     private EnemyFactory() {}
 
     /**
-     * Build one enemy from the {@link MonsterCatalog} stat block (preferred), falling
-     * back to the legacy hardcoded {@link Bestiary} when the key has no catalog entry.
-     * {@code index} numbers duplicates ("Goblin 2"); 0 means it is the only one of its type.
+     * Build one enemy, resolving {@code key} against the session's homebrew {@code sessionCustom}
+     * stat blocks first (copied from the world it was started from), then the {@link MonsterCatalog},
+     * and finally the legacy hardcoded {@link Bestiary}. {@code index} numbers duplicates ("Goblin 2");
+     * 0 means it is the only one of its type.
      */
+    public static Enemy buildEnemy(MonsterCatalog monsterCatalog, List<MonsterTemplate> sessionCustom,
+                                   DiceService diceService, UUID sessionId, String key, int index,
+                                   Difficulty difficulty) {
+        Optional<MonsterTemplate> tmpl = findCustom(sessionCustom, key)
+                .or(() -> monsterCatalog.get(key));
+        if (tmpl.isPresent()) {
+            return fromTemplate(tmpl.get(), diceService, sessionId, key, index, difficulty);
+        }
+        return fromBestiary(diceService, sessionId, key, index, difficulty);
+    }
+
+    /** Backward-compatible overload with no session overlay (used by tests / catalog-only callers). */
     public static Enemy buildEnemy(MonsterCatalog monsterCatalog, DiceService diceService,
                                    UUID sessionId, String key, int index, Difficulty difficulty) {
+        return buildEnemy(monsterCatalog, List.of(), diceService, sessionId, key, index, difficulty);
+    }
+
+    private static Optional<MonsterTemplate> findCustom(List<MonsterTemplate> sessionCustom, String key) {
+        if (sessionCustom == null || key == null) {
+            return Optional.empty();
+        }
+        return sessionCustom.stream().filter(t -> key.equalsIgnoreCase(t.key())).findFirst();
+    }
+
+    private static Enemy fromTemplate(MonsterTemplate t, DiceService diceService, UUID sessionId,
+                                      String key, int index, Difficulty difficulty) {
         int atkDelta = attackBonusDelta(difficulty);
         int d20 = diceService.roll("1d20").total();
-
-        Optional<MonsterTemplate> tmpl = monsterCatalog.get(key);
-        if (tmpl.isPresent()) {
-            MonsterTemplate t = tmpl.get();
-            String name = index > 0 ? t.name() + " " + index : t.name();
-            int hp = scaleHp(t.hp(), difficulty);
-            List<MonsterAttack> scaled = new ArrayList<>();
-            for (MonsterAttack a : t.attacks()) {
-                scaled.add(new MonsterAttack(a.name(), a.kind(), a.toHit() + atkDelta,
-                        a.reach(), a.range(), a.damageDice(), a.damageType()));
-            }
-            MonsterAttack primary = scaled.isEmpty() ? null : scaled.get(0);
-            int perTurn = t.multiattack() != null ? Math.max(1, t.multiattack().count()) : 1;
-            return Enemy.builder()
-                    .id(UUID.randomUUID()).sessionId(sessionId).name(name)
-                    .maxHp(hp).currentHp(hp).armorClass(t.ac())
-                    .attackBonus(primary != null ? primary.toHit() : 2 + atkDelta)
-                    .damageDice(primary != null ? primary.damageDice() : "1d6")
-                    .attacks(scaled).attacksPerTurn(perTurn)
-                    .abilities(t.abilities() != null ? new LinkedHashMap<>(t.abilities())
-                            : new LinkedHashMap<>())
-                    .speed(t.speed() != null ? t.speed() : 30)
-                    .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
-                    .build();
+        String name = index > 0 ? t.name() + " " + index : t.name();
+        int hp = scaleHp(t.hp(), difficulty);
+        List<MonsterAttack> scaled = new ArrayList<>();
+        for (MonsterAttack a : t.attacks()) {
+            scaled.add(new MonsterAttack(a.name(), a.kind(), a.toHit() + atkDelta,
+                    a.reach(), a.range(), a.damageDice(), a.damageType()));
         }
+        MonsterAttack primary = scaled.isEmpty() ? null : scaled.get(0);
+        int perTurn = t.multiattack() != null ? Math.max(1, t.multiattack().count()) : 1;
+        return Enemy.builder()
+                .id(UUID.randomUUID()).sessionId(sessionId).name(name)
+                .maxHp(hp).currentHp(hp).armorClass(t.ac())
+                .attackBonus(primary != null ? primary.toHit() : 2 + atkDelta)
+                .damageDice(primary != null ? primary.damageDice() : "1d6")
+                .attacks(scaled).attacksPerTurn(perTurn)
+                .abilities(t.abilities() != null ? new LinkedHashMap<>(t.abilities())
+                        : new LinkedHashMap<>())
+                .speed(t.speed() != null ? t.speed() : 30)
+                .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
+                .build();
+    }
 
+    private static Enemy fromBestiary(DiceService diceService, UUID sessionId, String key, int index,
+                                      Difficulty difficulty) {
+        int atkDelta = attackBonusDelta(difficulty);
+        int d20 = diceService.roll("1d20").total();
         Bestiary.Template t = Bestiary.get(key);
         String name = index > 0 ? t.name() + " " + index : t.name();
         int hp = scaleHp(t.hp(), difficulty);

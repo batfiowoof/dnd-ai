@@ -13,6 +13,16 @@ import type {
   CharacterDto,
   CharacterCreateUpdateRequest,
   CharacterLevelUpRequest,
+  WorldDto,
+  WorldSummaryDto,
+  WorldCreateUpdateRequest,
+  WorldGenerateRequest,
+  WorldOverviewSuggestion,
+  WorldRegion,
+  WorldFaction,
+  WorldNpc,
+  CustomMonster,
+  Milestone,
 } from "@/types";
 import { ApiError } from "./errors";
 
@@ -336,3 +346,87 @@ export async function deleteCharacter(
     await throwApiError(res);
   }
 }
+
+/* ── World Builder endpoints ─────────────────────────────────── */
+
+export async function getMyWorlds(token: string): Promise<WorldSummaryDto[]> {
+  const res = await fetch(`${BASE_URL}/worlds`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+export async function getWorld(token: string, id: string): Promise<WorldDto> {
+  const res = await fetch(`${BASE_URL}/worlds/${id}`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+export async function createWorld(
+  token: string,
+  body: WorldCreateUpdateRequest
+): Promise<WorldDto> {
+  const res = await fetch(`${BASE_URL}/worlds`, {
+    method: "POST",
+    headers: getHeaders(token),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+export async function updateWorld(
+  token: string,
+  id: string,
+  body: WorldCreateUpdateRequest
+): Promise<WorldDto> {
+  const res = await fetch(`${BASE_URL}/worlds/${id}`, {
+    method: "PUT",
+    headers: getHeaders(token),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteWorld(token: string, id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/worlds/${id}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) {
+    await throwApiError(res);
+  }
+}
+
+/* ── World Builder AI generation ─────────────────────────────── */
+
+async function generateWorldSection<T>(
+  token: string,
+  section: string,
+  body: WorldGenerateRequest
+): Promise<T> {
+  const res = await fetch(`${BASE_URL}/worlds/generate/${section}`, {
+    method: "POST",
+    headers: getHeaders(token),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+export const generateWorldOverview = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<WorldOverviewSuggestion>(token, "overview", body);
+
+export const generateWorldRegions = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<WorldRegion[]>(token, "regions", body);
+
+export const generateWorldFactions = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<WorldFaction[]>(token, "factions", body);
+
+export const generateWorldNpcs = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<WorldNpc[]>(token, "npcs", body);
+
+export const generateWorldMonster = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<CustomMonster>(token, "monster", body);
+
+export const generateWorldMilestones = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<Milestone[]>(token, "milestones", body);

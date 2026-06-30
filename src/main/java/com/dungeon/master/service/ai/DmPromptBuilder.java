@@ -173,9 +173,17 @@ public class DmPromptBuilder {
             String enemyKeys = monsterCatalog.isEmpty()
                     ? String.join(", ", com.dungeon.master.service.game.Bestiary.keys())
                     : String.join(", ", monsterCatalog.promptKeys(40));
+            // Surface this world's homebrew monsters so the DM can stage them by their CUSTOM_ keys.
+            String customKeys = session.getCustomMonsters() == null ? "" : session.getCustomMonsters().stream()
+                    .map(m -> m.key() + " (" + m.name() + ")")
+                    .collect(java.util.stream.Collectors.joining(", "));
             b.append("- Combat: when the story leads to a fight, END your reply with an encounter tag on ")
                     .append("its own final line — [[ENCOUNTER: GOBLIN_WARRIOR x2, WOLF]] — using ONLY these enemy keys: ")
-                    .append(enemyKeys).append(".\n");
+                    .append(enemyKeys);
+            if (!customKeys.isBlank()) {
+                b.append(". This world also has custom monsters you may use: ").append(customKeys);
+            }
+            b.append(".\n");
         } else {
             b.append("- Combat: do NOT start encounters with tags; the host triggers combat manually.\n");
         }

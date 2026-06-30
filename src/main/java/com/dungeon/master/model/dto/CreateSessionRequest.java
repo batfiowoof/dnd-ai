@@ -19,6 +19,12 @@ public record CreateSessionRequest(
         @NotBlank(message = "Player name is required") String playerName,
         @NotNull(message = "Character ID is required") UUID characterId,
         String worldSetting,
+        /**
+         * When set, the session is compiled from a saved {@link com.dungeon.master.model.entity.World}
+         * owned by the host: its rendered setting, milestones, and custom monsters take precedence over
+         * the free-text {@code worldSetting}/{@code milestones} fields above.
+         */
+        UUID worldId,
         TurnMode turnMode,
         Integer maxPlayers,
         Difficulty difficulty,
