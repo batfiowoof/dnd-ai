@@ -311,6 +311,19 @@ export async function levelUpCharacter(
   return handleResponse(res);
 }
 
+export async function applyLevelChoices(
+  token: string,
+  id: string,
+  body: CharacterLevelUpRequest
+): Promise<CharacterDto> {
+  const res = await fetch(`${BASE_URL}/characters/${id}/level-choices`, {
+    method: "POST",
+    headers: getHeaders(token),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
 export async function deleteCharacter(
   token: string,
   id: string

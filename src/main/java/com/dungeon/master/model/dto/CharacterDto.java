@@ -28,6 +28,7 @@ public record CharacterDto(
         List<String> cantrips,
         List<String> knownSpells,
         List<InventoryItem> startingInventory,
+        List<Integer> pendingChoiceLevels,
         String backstory,
         String imageUrl,
         LocalDateTime createdAt,

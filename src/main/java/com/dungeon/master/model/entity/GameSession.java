@@ -1,5 +1,6 @@
 package com.dungeon.master.model.entity;
 
+import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
 import com.dungeon.master.model.enums.DmStyle;
@@ -61,6 +62,12 @@ public class GameSession {
 
     @Column(name = "world_setting", columnDefinition = "text")
     private String worldSetting;
+
+    /** Authored campaign milestones; the DM may award only these (each once). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<Milestone> milestones = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "turn_mode", nullable = false)

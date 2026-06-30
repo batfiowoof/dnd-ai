@@ -34,6 +34,7 @@ public class DmAiService {
 
     private final ToolCallingManager toolCallingManager;
     private final DmRollTools dmRollTools;
+    private final DmCampaignTools dmCampaignTools;
     private final RagService ragService;
     private final GameSessionRepository sessionRepository;
     private final EnemyRepository enemyRepository;
@@ -85,7 +86,7 @@ public class DmAiService {
         }
 
         ToolCallingChatOptions toolOpts = ToolCallingChatOptions.builder()
-                .toolCallbacks(ToolCallbacks.from(dmRollTools))
+                .toolCallbacks(ToolCallbacks.from(dmRollTools, dmCampaignTools))
                 .toolContext(promptBuilder.buildToolContext(sessionId, session, spendInspiration))
                 .internalToolExecutionEnabled(false)
                 .build();

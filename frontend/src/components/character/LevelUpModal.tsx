@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal, Button, useToast, cn, controlClass } from "@/components/ui";
 import { SpellPicker } from "@/components/character/shared";
 import { useClasses, useClassSpells } from "@/hooks/useDnd5eData";
-import { useLevelUpCharacter } from "@/hooks/useCharacterQueries";
+import {
+  useLevelUpCharacter,
+  useApplyLevelChoices,
+} from "@/hooks/useCharacterQueries";
 import { getErrorMessage } from "@/lib/errors";
 import {
   ABILITY_NAMES,
@@ -25,22 +28,26 @@ import {
 import type { CharacterDto, AsiMode } from "@/types";
 
 /**
- * Guided one-level advancement for a character. Shows the automatic gains (level,
- * proficiency, HP, spellcasting reach), then collects the choices the rules require —
- * an Ability Score Improvement at ASI levels and new spells for casters — and posts
- * them to the authoritative `/level-up` endpoint.
+ * Guided level-up for a character. In `advance` mode it gains a full level (auto gains +
+ * choices) via `/level-up`. In `pending` mode it resolves the ASI / new-spell choices a
+ * milestone advance deferred — the mechanical level already applied — via `/level-choices`.
  */
 export default function LevelUpModal({
   character,
   open,
   onClose,
+  mode = "advance",
 }: {
   character: CharacterDto;
   open: boolean;
   onClose: () => void;
+  mode?: "advance" | "pending";
 }) {
   const toast = useToast();
   const levelUp = useLevelUpCharacter();
+  const applyChoices = useApplyLevelChoices();
+  const advancing = mode === "advance";
+  const mutation = advancing ? levelUp : applyChoices;
 
   const classesQuery = useClasses();
   const classInfo = useMemo(
@@ -48,10 +55,15 @@ export default function LevelUpModal({
     [classesQuery.data, character.characterClass]
   );
 
-  const newLevel = character.level + 1;
-  const isAsi = isAsiLevel(newLevel);
+  // Advance: the level we're gaining. Pending: the earliest owed level (already applied).
+  const targetLevel = advancing
+    ? character.level + 1
+    : character.pendingChoiceLevels.length > 0
+      ? Math.min(...character.pendingChoiceLevels)
+      : character.level;
+  const isAsi = isAsiLevel(targetLevel);
   const caster = isCasterClass(classInfo);
-  const picks = newSpellPicksFor(classInfo, newLevel);
+  const picks = newSpellPicksFor(classInfo, targetLevel);
 
   /* ── Choice state ───────────────────────────────────────────── */
   const [asiMode, setAsiMode] = useState<AsiMode>("PLUS_TWO");
@@ -95,9 +107,9 @@ export default function LevelUpModal({
   const hpGain = Math.max(1, fixedHpForHitDie(hitDie) + getAbilityModifier(previewCon));
 
   const profOld = proficiencyBonusForLevel(character.level);
-  const profNew = proficiencyBonusForLevel(newLevel);
+  const profNew = proficiencyBonusForLevel(targetLevel);
   const spellLevelOld = highestSpellLevel(classInfo, character.level);
-  const spellLevelNew = highestSpellLevel(classInfo, newLevel);
+  const spellLevelNew = highestSpellLevel(classInfo, targetLevel);
   const unlockedSpellLevel = spellLevelNew > spellLevelOld ? spellLevelNew : 0;
 
   /* ── Validation ─────────────────────────────────────────────── */
@@ -107,7 +119,7 @@ export default function LevelUpModal({
   const spellsReady =
     selectedCantrips.length === picks.cantrips &&
     selectedSpells.length === picks.spells;
-  const canConfirm = asiReady && spellsReady && !levelUp.isPending;
+  const canConfirm = asiReady && spellsReady && !mutation.isPending;
 
   const toggle = (
     setter: React.Dispatch<React.SetStateAction<string[]>>,
@@ -119,7 +131,7 @@ export default function LevelUpModal({
 
   async function handleConfirm() {
     try {
-      await levelUp.mutateAsync({
+      await mutation.mutateAsync({
         id: character.id,
         body: {
           asi: isAsi
@@ -133,10 +145,14 @@ export default function LevelUpModal({
           newSpells: selectedSpells,
         },
       });
-      toast.success(`${character.name} is now level ${newLevel}!`);
+      toast.success(
+        advancing
+          ? `${character.name} is now level ${targetLevel}!`
+          : `${character.name}'s level-${targetLevel} choices are set!`
+      );
       onClose();
     } catch (e: unknown) {
-      toast.error(getErrorMessage(e, "Failed to level up"));
+      toast.error(getErrorMessage(e, advancing ? "Failed to level up" : "Failed to save choices"));
     }
   }
 
@@ -145,41 +161,53 @@ export default function LevelUpModal({
       open={open}
       onClose={onClose}
       size="lg"
-      dismissible={!levelUp.isPending}
-      title={`Level Up — ${character.name}`}
+      dismissible={!mutation.isPending}
+      title={advancing ? `Level Up — ${character.name}` : `Complete Level ${targetLevel} — ${character.name}`}
     >
-      {/* Celebration banner */}
+      {/* Celebration / context banner */}
       <div className="mb-5 rounded-xl border border-border-accent bg-bg-elevated p-5 text-center panel-corners">
         <p className="text-xs uppercase tracking-[0.2em] text-text-muted">
           {character.race} {character.characterClass}
         </p>
-        <p
-          className="mt-1 flex items-center justify-center gap-3 text-2xl font-bold text-text"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          <span className="tabular text-text-muted">Lv {character.level}</span>
-          <span className="text-accent">→</span>
-          <span className="tabular text-gold">Lv {newLevel}</span>
-        </p>
+        {advancing ? (
+          <p
+            className="mt-1 flex items-center justify-center gap-3 text-2xl font-bold text-text"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            <span className="tabular text-text-muted">Lv {character.level}</span>
+            <span className="text-accent">→</span>
+            <span className="tabular text-gold">Lv {targetLevel}</span>
+          </p>
+        ) : (
+          <>
+            <p
+              className="mt-1 text-2xl font-bold text-gold"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Level {targetLevel}
+            </p>
+            <p className="mt-1 text-xs text-text-muted">
+              A milestone advanced you here — finish your choices below.
+            </p>
+          </>
+        )}
       </div>
 
-      {/* Automatic gains */}
-      <div className="mb-5 grid grid-cols-3 gap-3">
-        <Gain label="Hit Points" value={`+${hpGain}`} hint={`${character.hitPoints} → ${character.hitPoints + hpGain}`} />
-        <Gain
-          label="Proficiency"
-          value={`+${profNew}`}
-          hint={profNew > profOld ? `up from +${profOld}` : "no change"}
-          highlight={profNew > profOld}
-        />
-        <Gain
-          label="Hit Die"
-          value={`+1 d${hitDie}`}
-          hint="added to your pool"
-        />
-      </div>
+      {/* Automatic gains — only when actually advancing a level */}
+      {advancing && (
+        <div className="mb-5 grid grid-cols-3 gap-3">
+          <Gain label="Hit Points" value={`+${hpGain}`} hint={`${character.hitPoints} → ${character.hitPoints + hpGain}`} />
+          <Gain
+            label="Proficiency"
+            value={`+${profNew}`}
+            hint={profNew > profOld ? `up from +${profOld}` : "no change"}
+            highlight={profNew > profOld}
+          />
+          <Gain label="Hit Die" value={`+1 d${hitDie}`} hint="added to your pool" />
+        </div>
+      )}
 
-      {unlockedSpellLevel > 0 && (
+      {advancing && unlockedSpellLevel > 0 && (
         <div className="mb-5 rounded-lg border border-gold/40 bg-gold/5 px-4 py-3 text-sm text-gold">
           You can now cast <span className="font-semibold">level {unlockedSpellLevel}</span> spells.
           New spell slots apply the next time you enter a session.
@@ -277,11 +305,11 @@ export default function LevelUpModal({
 
       {/* Actions */}
       <div className="flex gap-3 border-t border-border pt-4">
-        <Button onClick={onClose} variant="ghost" fullWidth disabled={levelUp.isPending}>
+        <Button onClick={onClose} variant="ghost" fullWidth disabled={mutation.isPending}>
           Cancel
         </Button>
-        <Button onClick={handleConfirm} disabled={!canConfirm} loading={levelUp.isPending} fullWidth>
-          Confirm Level Up
+        <Button onClick={handleConfirm} disabled={!canConfirm} loading={mutation.isPending} fullWidth>
+          {advancing ? "Confirm Level Up" : "Save Choices"}
         </Button>
       </div>
     </Modal>

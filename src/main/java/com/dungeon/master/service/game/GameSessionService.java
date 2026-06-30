@@ -6,6 +6,7 @@ import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.dto.CreateSessionRequest;
 import com.dungeon.master.model.dto.CreateSessionResponse;
 import com.dungeon.master.model.dto.GameStateDto;
+import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.entity.GameSession;
@@ -74,6 +75,7 @@ public class GameSessionService {
                 .allowAiRolls(request.allowAiRolls() == null || request.allowAiRolls())
                 .collabWindowSeconds(clamp(request.collabWindowSeconds() == null ? 10
                         : request.collabWindowSeconds(), MIN_COLLAB_WINDOW, MAX_COLLAB_WINDOW))
+                .milestones(normalizeMilestones(request.milestones()))
                 .build();
         session = sessionRepository.save(session);
 
@@ -172,6 +174,30 @@ public class GameSessionService {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    /**
+     * Sanitize authored milestones from the create request: keep only entries with a non-blank key
+     * and title, force {@code completed=false} (the client never marks a milestone done), and drop
+     * duplicate keys. Returns an empty list when none were supplied (e.g. custom/uploaded worlds).
+     */
+    private static List<Milestone> normalizeMilestones(List<Milestone> requested) {
+        if (requested == null || requested.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        java.util.Set<String> seenKeys = new java.util.HashSet<>();
+        List<Milestone> out = new java.util.ArrayList<>();
+        for (Milestone m : requested) {
+            if (m == null || m.key() == null || m.key().isBlank() || m.title() == null || m.title().isBlank()) {
+                continue;
+            }
+            String key = m.key().trim();
+            if (seenKeys.add(key.toLowerCase())) {
+                out.add(new Milestone(key, m.title().trim(),
+                        m.description() == null ? "" : m.description().trim(), false));
+            }
+        }
+        return out;
     }
 
     @Transactional

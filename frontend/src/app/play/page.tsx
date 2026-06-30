@@ -91,6 +91,13 @@ function PlayContent() {
     return undefined;
   }
 
+  // Only preset campaigns ship authored milestones; custom/uploaded worlds carry none.
+  function getMilestones() {
+    return worldSource === "preset"
+      ? PRESET_WORLDS.find((w) => w.id === selectedPreset)?.milestones ?? []
+      : [];
+  }
+
   async function handleCreate() {
     if (!username || !selectedCharId) {
       toast.error("Please select a character.");
@@ -114,6 +121,7 @@ function PlayContent() {
         allowAiCombat,
         allowAiRolls,
         collabWindowSeconds,
+        milestones: getMilestones(),
       });
       rememberSession(res.sessionId, {
         playerId: res.playerId,

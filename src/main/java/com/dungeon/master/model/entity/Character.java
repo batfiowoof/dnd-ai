@@ -95,6 +95,15 @@ public class Character {
     @Builder.Default
     private int proficiencyBonus = 2;
 
+    /**
+     * Levels whose Ability Score Improvement / new-spell choices a player still owes after a
+     * milestone applied the mechanical advance. Empty for normal (choices-included) level-ups.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "pending_choice_levels", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<Integer> pendingChoiceLevels = new ArrayList<>();
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     @Builder.Default

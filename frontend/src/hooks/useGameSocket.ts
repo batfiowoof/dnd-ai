@@ -183,5 +183,21 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       }
       break;
     }
+    case "MILESTONE": {
+      // The DM awarded an authored milestone; the party's live HP/slots arrive via
+      // PLAYER_STATE. Announce it in the log — ASI/spell choices are finished on the
+      // Characters page (shown there as a "pending" Level Up).
+      const text = data.text as string | undefined;
+      if (text) {
+        s.addLog({
+          id: `milestone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: "system",
+          text,
+          turnNumber: s.turnNumber,
+        });
+        scrollToBottom();
+      }
+      break;
+    }
   }
 }

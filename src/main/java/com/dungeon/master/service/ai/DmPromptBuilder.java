@@ -2,6 +2,7 @@ package com.dungeon.master.service.ai;
 
 import com.dungeon.master.kafka.event.RoundActionEvent.Contribution;
 import com.dungeon.master.model.dto.GridState;
+import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.model.entity.Character;
@@ -177,6 +178,22 @@ public class DmPromptBuilder {
                     .append(enemyKeys).append(".\n");
         } else {
             b.append("- Combat: do NOT start encounters with tags; the host triggers combat manually.\n");
+        }
+        List<Milestone> openMilestones = session.getMilestones().stream()
+                .filter(m -> !m.completed())
+                .toList();
+        if (!openMilestones.isEmpty()) {
+            b.append("- Campaign milestones: these authored story beats are the ONLY way the party gains ")
+                    .append("levels — never level them any other way, and never invent a milestone. When the ")
+                    .append("party GENUINELY achieves one, call the awardMilestone tool with its exact key ")
+                    .append("(the engine advances the whole party a level), then narrate it. Remaining:\n");
+            for (Milestone m : openMilestones) {
+                b.append("    • key=\"").append(m.key()).append("\" — ").append(m.title());
+                if (m.description() != null && !m.description().isBlank()) {
+                    b.append(": ").append(m.description());
+                }
+                b.append("\n");
+            }
         }
         b.append("---\n\n");
         return b.toString();

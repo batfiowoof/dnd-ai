@@ -26,6 +26,8 @@ export interface CharacterDto {
   cantrips: string[];
   knownSpells: string[];
   startingInventory: InventoryItem[];
+  /** Levels whose ASI/spell choices the player still owes after a milestone advance. */
+  pendingChoiceLevels: number[];
   backstory: string | null;
   imageUrl: string | null;
   createdAt: string;

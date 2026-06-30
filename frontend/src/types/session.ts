@@ -37,6 +37,13 @@ export interface GameStateDto {
   collabWindowSeconds: number;
 }
 
+/** An authored campaign milestone the DM can award once to level the whole party. */
+export interface Milestone {
+  key: string;
+  title: string;
+  description: string;
+}
+
 export interface CreateSessionRequest {
   playerName: string;
   characterId: string;
@@ -49,6 +56,7 @@ export interface CreateSessionRequest {
   allowAiCombat?: boolean;
   allowAiRolls?: boolean;
   collabWindowSeconds?: number;
+  milestones?: Milestone[];
 }
 
 export interface CreateSessionResponse {

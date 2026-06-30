@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -227,6 +228,81 @@ public class CharacterService {
         return result;
     }
 
+    /**
+     * Advance a character one level with only the AUTOMATIC parts applied (level, HP, proficiency).
+     * This is the milestone path: choices can't be collected during an AI turn, so when the new level
+     * grants an ASI or a caster's spell pick, the level is recorded in {@code pendingChoiceLevels} for
+     * the player to finish later via {@link #applyPendingChoices}. A maxed character is left untouched.
+     * Returns the saved character. Spell <em>slots</em> are refreshed on the runtime state, not here.
+     */
+    @Transactional
+    public Character applyMilestoneLevel(Character character) {
+        if (character.getLevel() >= LevelingRules.MAX_LEVEL) {
+            return character;
+        }
+        int newLevel = character.getLevel() + 1;
+        int hitDie = hitDieForClass(character.getCharacterClass());
+        int hpGain = Math.max(1, LevelingRules.fixedHpForHitDie(hitDie)
+                + LevelingRules.abilityMod(character.getConstitution()));
+        character.setHitPoints(character.getHitPoints() + hpGain);
+        character.setLevel(newLevel);
+        character.setProficiencyBonus(LevelingRules.proficiencyBonusForLevel(newLevel));
+        if (grantsChoice(character.getCharacterClass(), newLevel)) {
+            List<Integer> pending = new ArrayList<>(character.getPendingChoiceLevels());
+            if (!pending.contains(newLevel)) {
+                pending.add(newLevel);
+            }
+            character.setPendingChoiceLevels(pending);
+        }
+        character.setUpdatedAt(LocalDateTime.now());
+        return characterRepository.save(character);
+    }
+
+    /**
+     * Resolve the earliest level whose choices are still owed: apply the chosen ASI (only at an ASI
+     * level) and append any new spells, then clear that level from {@code pendingChoiceLevels}. Does
+     * not change the character's level or HP — those already applied when the milestone fired. The
+     * updated ability/spell snapshot reaches a live session on the next join (mirrors the manual
+     * out-of-session flow).
+     */
+    @Transactional
+    public CharacterDto applyPendingChoices(UUID id, CharacterLevelUpRequest request, String username) {
+        Character character = characterRepository.findByIdAndOwnerUsername(id, username)
+                .orElseThrow(() -> new CharacterNotFoundException("Character not found"));
+
+        List<Integer> pending = new ArrayList<>(character.getPendingChoiceLevels());
+        if (pending.isEmpty()) {
+            throw new IllegalStateException(character.getName() + " has no pending level-up choices.");
+        }
+        int level = pending.stream().min(Integer::compareTo).orElseThrow();
+
+        if (LevelingRules.isAsiLevel(level)) {
+            applyAbilityScoreImprovement(character, request.asi());
+        }
+        character.setCantrips(appendUnique(character.getCantrips(), request.newCantrips()));
+        character.setKnownSpells(appendUnique(character.getKnownSpells(), request.newSpells()));
+
+        pending.remove(Integer.valueOf(level));
+        character.setPendingChoiceLevels(pending);
+        character.setUpdatedAt(LocalDateTime.now());
+        character = characterRepository.save(character);
+        log.info("Pending level-{} choices resolved: id={}, owner={}", level, character.getId(), username);
+        return toDto(character);
+    }
+
+    /** Lower-cased class names that gain a spell pick on every level in our simplified model. */
+    private static final Set<String> CASTER_CLASSES =
+            Set.of("wizard", "sorcerer", "cleric", "druid", "bard", "warlock", "paladin", "ranger");
+
+    /** A level grants a player choice when it's an ASI level or the class learns a new spell. */
+    private static boolean grantsChoice(String characterClass, int newLevel) {
+        if (LevelingRules.isAsiLevel(newLevel)) {
+            return true;
+        }
+        return characterClass != null
+                && CASTER_CLASSES.contains(characterClass.toLowerCase(Locale.ROOT));
+    }
+
     @Transactional
     public void deleteCharacter(UUID id, String username) {
         Character character = characterRepository.findByIdAndOwnerUsername(id, username)
@@ -260,6 +336,7 @@ public class CharacterService {
                 c.getCantrips(),
                 c.getKnownSpells(),
                 c.getStartingInventory(),
+                c.getPendingChoiceLevels(),
                 c.getBackstory(),
                 c.getImageUrl(),
                 c.getCreatedAt(),

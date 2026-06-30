@@ -35,7 +35,10 @@ function CharactersList() {
   const deleteMutation = useDeleteCharacter();
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [levelUpTarget, setLevelUpTarget] = useState<CharacterDto | null>(null);
+  const [levelUpState, setLevelUpState] = useState<{
+    character: CharacterDto;
+    mode: "advance" | "pending";
+  } | null>(null);
 
   useEffect(() => {
     if (charactersQuery.isError) toast.error("Failed to load characters");
@@ -131,6 +134,11 @@ function CharactersList() {
                       <p className="text-sm text-text-muted">
                         Level {c.level} {c.race} {c.characterClass}
                       </p>
+                      {c.pendingChoiceLevels.length > 0 && (
+                        <span className="mt-1 inline-block rounded-full border border-gold/50 bg-gold/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold">
+                          Level-up choices pending
+                        </span>
+                      )}
                       {c.background && (
                         <p className="text-xs text-text-muted">
                           {c.background}
@@ -220,28 +228,41 @@ function CharactersList() {
                   })}
                 </div>
 
-                {/* Level Up */}
-                <Button
-                  onClick={() => setLevelUpTarget(c)}
-                  variant="outline"
-                  size="sm"
-                  fullWidth
-                  disabled={c.level >= MAX_LEVEL}
-                  className="mt-4"
-                >
-                  {c.level >= MAX_LEVEL ? "Max Level" : "Level Up"}
-                </Button>
+                {/* Level Up / finish pending milestone choices */}
+                {c.pendingChoiceLevels.length > 0 ? (
+                  <Button
+                    onClick={() => setLevelUpState({ character: c, mode: "pending" })}
+                    variant="primary"
+                    size="sm"
+                    fullWidth
+                    className="mt-4"
+                  >
+                    Finish Level Up
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => setLevelUpState({ character: c, mode: "advance" })}
+                    variant="outline"
+                    size="sm"
+                    fullWidth
+                    disabled={c.level >= MAX_LEVEL}
+                    className="mt-4"
+                  >
+                    {c.level >= MAX_LEVEL ? "Max Level" : "Level Up"}
+                  </Button>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {levelUpTarget && (
+      {levelUpState && (
         <LevelUpModal
-          character={levelUpTarget}
-          open={!!levelUpTarget}
-          onClose={() => setLevelUpTarget(null)}
+          character={levelUpState.character}
+          mode={levelUpState.mode}
+          open={!!levelUpState}
+          onClose={() => setLevelUpState(null)}
         />
       )}
     </main>

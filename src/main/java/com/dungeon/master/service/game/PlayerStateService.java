@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -100,6 +102,52 @@ public class PlayerStateService {
             DyingRules.damage(s, -amount, critical);
         }
         return toDto(repository.save(s));
+    }
+
+    /**
+     * Apply a level-up to a player's LIVE runtime state from their (already-advanced) character
+     * template: raise max HP to the new value and credit the gain to current HP, refresh spell-slot
+     * maximums for the new level while preserving spent slots (a milestone is not a rest), and
+     * re-snapshot the ability scores. Proficiency needs no work here — combat math reads it from the
+     * Character template. Called by the milestone flow after {@code CharacterService.applyMilestoneLevel}.
+     */
+    @Transactional
+    public PlayerRuntimeStateDto applyLevelUpToRuntime(UUID playerId, Character c) {
+        PlayerRuntimeState s = require(playerId);
+        int gained = Math.max(0, c.getHitPoints() - s.getMaxHp());
+        s.setMaxHp(c.getHitPoints());
+        s.setCurrentHp(Math.min(c.getHitPoints(), s.getCurrentHp() + gained));
+        s.setSpellSlots(rebuildSlotsPreservingUsed(s.getSpellSlots(),
+                SpellSlotTable.forClass(c.getCharacterClass(), c.getLevel())));
+        s.setAbilities(abilitiesOf(c));
+        return toDto(repository.save(s));
+    }
+
+    private static Map<String, Integer> abilitiesOf(Character c) {
+        Map<String, Integer> m = new LinkedHashMap<>();
+        m.put("STR", c.getStrength());
+        m.put("DEX", c.getDexterity());
+        m.put("CON", c.getConstitution());
+        m.put("INT", c.getIntelligence());
+        m.put("WIS", c.getWisdom());
+        m.put("CHA", c.getCharisma());
+        return m;
+    }
+
+    /** New slot table for the level, carrying over each level's spent count (capped at the new max). */
+    private static List<SpellSlot> rebuildSlotsPreservingUsed(List<SpellSlot> current, List<SpellSlot> fresh) {
+        List<SpellSlot> result = new ArrayList<>();
+        for (SpellSlot f : fresh) {
+            int used = 0;
+            for (SpellSlot o : current) {
+                if (o.level() == f.level()) {
+                    used = Math.min(o.used(), f.max());
+                    break;
+                }
+            }
+            result.add(new SpellSlot(f.level(), f.max(), used));
+        }
+        return result;
     }
 
     /**

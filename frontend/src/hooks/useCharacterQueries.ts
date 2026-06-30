@@ -8,6 +8,7 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import { useRequireToken } from "@/hooks/useRequireToken";
 import {
+  applyLevelChoices,
   createCharacter,
   deleteCharacter,
   getCharacter,
@@ -85,6 +86,26 @@ export function useLevelUpCharacter() {
       id: string;
       body: CharacterLevelUpRequest;
     }) => levelUpCharacter(await requireToken(), id, body),
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.characters.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.characters.byId(id),
+      });
+    },
+  });
+}
+
+export function useApplyLevelChoices() {
+  const requireToken = useRequireToken();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: CharacterLevelUpRequest;
+    }) => applyLevelChoices(await requireToken(), id, body),
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.characters.all });
       queryClient.invalidateQueries({

@@ -73,6 +73,15 @@ public class CharacterController {
         return ResponseEntity.ok(characterService.levelUp(id, request, username));
     }
 
+    @PostMapping("/{id}/level-choices")
+    public ResponseEntity<CharacterDto> applyLevelChoices(
+            @PathVariable UUID id,
+            @Valid @RequestBody CharacterLevelUpRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = AuthUtils.username(jwt);
+        return ResponseEntity.ok(characterService.applyPendingChoices(id, request, username));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCharacter(
             @PathVariable UUID id,

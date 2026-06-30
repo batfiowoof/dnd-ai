@@ -7,6 +7,7 @@ import com.dungeon.master.model.enums.TurnMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -25,6 +26,7 @@ public record CreateSessionRequest(
         DmLength dmLength,
         Boolean allowAiCombat,
         Boolean allowAiRolls,
-        Integer collabWindowSeconds
+        Integer collabWindowSeconds,
+        List<Milestone> milestones
 ) {
 }
