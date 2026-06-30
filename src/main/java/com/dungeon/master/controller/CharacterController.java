@@ -3,6 +3,7 @@ package com.dungeon.master.controller;
 import com.dungeon.master.config.AuthUtils;
 import com.dungeon.master.model.dto.CharacterCreateUpdateRequest;
 import com.dungeon.master.model.dto.CharacterDto;
+import com.dungeon.master.model.dto.CharacterLevelUpRequest;
 import com.dungeon.master.service.game.CharacterService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +62,15 @@ public class CharacterController {
             @AuthenticationPrincipal Jwt jwt) {
         String username = AuthUtils.username(jwt);
         return ResponseEntity.ok(characterService.updateCharacter(id, request, username));
+    }
+
+    @PostMapping("/{id}/level-up")
+    public ResponseEntity<CharacterDto> levelUp(
+            @PathVariable UUID id,
+            @Valid @RequestBody CharacterLevelUpRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = AuthUtils.username(jwt);
+        return ResponseEntity.ok(characterService.levelUp(id, request, username));
     }
 
     @DeleteMapping("/{id}")

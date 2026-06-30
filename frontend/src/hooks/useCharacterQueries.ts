@@ -12,9 +12,13 @@ import {
   deleteCharacter,
   getCharacter,
   getMyCharacters,
+  levelUpCharacter,
   updateCharacter,
 } from "@/lib/api";
-import type { CharacterCreateUpdateRequest } from "@/types";
+import type {
+  CharacterCreateUpdateRequest,
+  CharacterLevelUpRequest,
+} from "@/types";
 
 /* ── Queries ─────────────────────────────────────────────────── */
 
@@ -61,6 +65,26 @@ export function useUpdateCharacter() {
       id: string;
       body: CharacterCreateUpdateRequest;
     }) => updateCharacter(await requireToken(), id, body),
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.characters.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.characters.byId(id),
+      });
+    },
+  });
+}
+
+export function useLevelUpCharacter() {
+  const requireToken = useRequireToken();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: CharacterLevelUpRequest;
+    }) => levelUpCharacter(await requireToken(), id, body),
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.characters.all });
       queryClient.invalidateQueries({

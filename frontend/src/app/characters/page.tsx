@@ -15,6 +15,8 @@ import {
 import { Button, Brand, Spinner, useToast } from "@/components/ui";
 import { getErrorMessage } from "@/lib/errors";
 import Portrait from "@/components/Portrait";
+import LevelUpModal from "@/components/character/LevelUpModal";
+import { MAX_LEVEL } from "@/lib/leveling";
 
 export default function CharactersPage() {
   return (
@@ -33,6 +35,7 @@ function CharactersList() {
   const deleteMutation = useDeleteCharacter();
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [levelUpTarget, setLevelUpTarget] = useState<CharacterDto | null>(null);
 
   useEffect(() => {
     if (charactersQuery.isError) toast.error("Failed to load characters");
@@ -176,6 +179,7 @@ function CharactersList() {
                       ["HP", c.hitPoints],
                       ["AC", c.armorClass],
                       ["SPD", c.speed],
+                      ["PB", `+${c.proficiencyBonus}`],
                     ] as const
                   ).map(([label, value]) => (
                     <div
@@ -215,11 +219,31 @@ function CharactersList() {
                     );
                   })}
                 </div>
+
+                {/* Level Up */}
+                <Button
+                  onClick={() => setLevelUpTarget(c)}
+                  variant="outline"
+                  size="sm"
+                  fullWidth
+                  disabled={c.level >= MAX_LEVEL}
+                  className="mt-4"
+                >
+                  {c.level >= MAX_LEVEL ? "Max Level" : "Level Up"}
+                </Button>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {levelUpTarget && (
+        <LevelUpModal
+          character={levelUpTarget}
+          open={!!levelUpTarget}
+          onClose={() => setLevelUpTarget(null)}
+        />
+      )}
     </main>
   );
 }

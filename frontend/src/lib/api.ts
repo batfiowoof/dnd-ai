@@ -12,6 +12,7 @@ import type {
   TurnEventDto,
   CharacterDto,
   CharacterCreateUpdateRequest,
+  CharacterLevelUpRequest,
 } from "@/types";
 import { ApiError } from "./errors";
 
@@ -291,6 +292,19 @@ export async function updateCharacter(
 ): Promise<CharacterDto> {
   const res = await fetch(`${BASE_URL}/characters/${id}`, {
     method: "PUT",
+    headers: getHeaders(token),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+export async function levelUpCharacter(
+  token: string,
+  id: string,
+  body: CharacterLevelUpRequest
+): Promise<CharacterDto> {
+  const res = await fetch(`${BASE_URL}/characters/${id}/level-up`, {
+    method: "POST",
     headers: getHeaders(token),
     body: JSON.stringify(body),
   });

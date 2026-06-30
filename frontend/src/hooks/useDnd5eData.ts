@@ -139,6 +139,8 @@ export function useEquipmentKindMap() {
 export interface ClassSpells {
   cantrips: Spell[];
   level1: Spell[];
+  /** All leveled spells (level ≥ 1), for level-up picks across the full slot range. */
+  leveled: Spell[];
 }
 
 function firstSentence(desc: string | undefined): string {
@@ -152,20 +154,19 @@ export function useClassSpells(classIndex: string | undefined, enabled = true) {
     enabled: enabled && !!classIndex,
     ...STATIC,
     queryFn: async (): Promise<ClassSpells> => {
-      // The endpoint returns full spell records (school + desc already present),
-      // so we filter to creation-relevant levels client-side — no detail fetch.
-      const all = await listClassSpells(classIndex!);
-      const spells: Spell[] = all
-        .filter((s) => s.level === 0 || s.level === 1)
-        .map((s) => ({
-          name: s.name,
-          level: s.level,
-          school: s.school,
-          desc: firstSentence(s.desc),
-        }));
+      // The endpoint returns full spell records (school + desc already present), so we
+      // map the whole list client-side — no detail fetch. Creation reads cantrips/level1;
+      // level-up reads `leveled` (all spell levels, capped per character level in the UI).
+      const spells: Spell[] = (await listClassSpells(classIndex!)).map((s) => ({
+        name: s.name,
+        level: s.level,
+        school: s.school,
+        desc: firstSentence(s.desc),
+      }));
       return {
         cantrips: spells.filter((s) => s.level === 0),
         level1: spells.filter((s) => s.level === 1),
+        leveled: spells.filter((s) => s.level >= 1),
       };
     },
   });

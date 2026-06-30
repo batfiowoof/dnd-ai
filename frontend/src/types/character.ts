@@ -32,6 +32,26 @@ export interface CharacterDto {
   updatedAt: string;
 }
 
+/** +2 to one ability, or +1 to two different abilities (cap 20, enforced server-side). */
+export type AsiMode = "PLUS_TWO" | "TWO_PLUS_ONE";
+
+export interface AbilityScoreImprovement {
+  mode: AsiMode;
+  /** Lower-cased ability name (e.g. "constitution"). */
+  first: string;
+  /** Second target for TWO_PLUS_ONE; omitted/null for PLUS_TWO. */
+  second?: string | null;
+}
+
+export interface CharacterLevelUpRequest {
+  /** Required only at ASI levels (4/8/12/16/19); null otherwise. */
+  asi: AbilityScoreImprovement | null;
+  /** New cantrip names to append (casters only). */
+  newCantrips: string[];
+  /** New leveled-spell names to append (casters only). */
+  newSpells: string[];
+}
+
 export interface CharacterCreateUpdateRequest {
   name: string;
   race: string;

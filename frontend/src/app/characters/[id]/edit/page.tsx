@@ -96,10 +96,14 @@ function EditForm({ characterId }: { characterId: string }) {
 
   const selectedClass = classesQuery.data?.find((c) => c.name === characterClass);
 
-  const derivedHP = useMemo(() => {
+  // Level-1 HP formula, used only as a fallback for characters with no stored HP.
+  // A leveled character's accumulated HP must be preserved here — recomputing it from
+  // the hit die would silently reset it to level-1 value. HP changes go through Level Up.
+  const fallbackHP = useMemo(() => {
     if (!selectedClass) return 10;
     return calculateHitPoints(selectedClass.hitDie, abilities.constitution);
   }, [selectedClass, abilities.constitution]);
+  const preservedHP = characterQuery.data?.hitPoints ?? fallbackHP;
 
   const derivedAC = useMemo(
     () => calculateArmorClass(abilities.dexterity),
@@ -127,7 +131,7 @@ function EditForm({ characterId }: { characterId: string }) {
           intelligence: abilities.intelligence,
           wisdom: abilities.wisdom,
           charisma: abilities.charisma,
-          hitPoints: derivedHP,
+          hitPoints: preservedHP,
           armorClass: derivedAC,
           speed: derivedSpeed,
           // Edit has no equipment step — preserve the stored gear/inventory.
@@ -250,19 +254,17 @@ function EditForm({ characterId }: { characterId: string }) {
             </div>
           </div>
 
-          {/* Level */}
+          {/* Level (read-only — advance via the Level Up flow) */}
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
               Level
             </label>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={level}
-              onChange={(e) => setLevel(Number(e.target.value))}
-              className="w-24 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm text-text outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-            />
+            <div className="flex items-center gap-3">
+              <span className="tabular text-lg font-bold text-gold">{level}</span>
+              <span className="text-xs text-text-muted">
+                Advance from the Characters page using Level Up.
+              </span>
+            </div>
           </div>
 
           {/* Background & Alignment */}
@@ -345,7 +347,7 @@ function EditForm({ characterId }: { characterId: string }) {
           {/* Combat stats preview */}
           <div className="flex justify-around rounded-lg border border-border bg-bg-elevated p-3 text-center">
             <div>
-              <div className="tabular text-lg font-bold text-gold">{derivedHP}</div>
+              <div className="tabular text-lg font-bold text-gold">{preservedHP}</div>
               <div className="text-[10px] text-text-muted">HP</div>
             </div>
             <div>
