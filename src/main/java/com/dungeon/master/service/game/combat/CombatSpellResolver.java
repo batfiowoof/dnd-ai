@@ -71,9 +71,35 @@ public class CombatSpellResolver {
         }
     }
 
-    public void resolveSpellDamage(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
-                                   SpellEffect effect, int spellLevel, List<UUID> targetIds,
-                                   List<CombatActionEvent.Target> results, List<String> beat) {
+    /** A damaging spell whose to-hit/saves are resolved but whose damage the player hasn't rolled. */
+    public record PendingSpell(SpellEffect effect, int spellLevel, String dice, int dc,
+                               List<PendingSpellTarget> targets) {
+        /** True when at least one target will take damage once rolled (else the cast misses / fizzles). */
+        public boolean anyDamage() {
+            for (PendingSpellTarget t : targets) {
+                boolean dmg = switch (t.mode()) {
+                    case SPELL_ATTACK -> t.hit();
+                    case SAVE -> !t.saved() || effect.halfOnSave();
+                    default -> t.darts() > 0;
+                };
+                if (dmg) return true;
+            }
+            return false;
+        }
+    }
+
+    /** One target's resolved phase-1 outcome (carries the to-hit/save roll for the phase-2 beat). */
+    public record PendingSpellTarget(UUID enemyId, SpellResolution mode, DiceRollResult roll,
+                                     int targetAc, boolean hit, boolean saved, int darts) {}
+
+    /**
+     * Phase 1 of a damaging spell: roll each target's spell attack / save and emit phase-1
+     * result rows ({@code damageRoll == null}). Rolls NO damage, applies NO HP/conditions, and
+     * adds NO narration — those happen in {@link #applySpellDamage} when the player rolls damage.
+     */
+    public PendingSpell resolveSpellToHit(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
+                                          SpellEffect effect, int spellLevel, List<UUID> targetIds,
+                                          List<CombatActionEvent.Target> results) {
         List<Enemy> targets = enemyTargets(sessionId, targetIds, effect);
         String dice = CombatMath.scaledNotation(effect.damageDice(), effect, spellLevel, casterChar);
         int dc = SpellcastingRules.spellSaveDc(casterChar);
@@ -82,9 +108,9 @@ public class CombatSpellResolver {
         int[] darts = CombatMath.distribute(Math.max(1, effect.projectiles()), targets.size());
         GridState grid = enc.getGridState();
         Token casterTok = CombatMath.tokenFor(grid, caster.getId().toString());
+        List<PendingSpellTarget> outcomes = new ArrayList<>();
         for (int i = 0; i < targets.size(); i++) {
             Enemy e = targets.get(i);
-            String label = caster.getCharacterName() + "'s " + effect.name();
             switch (effect.resolution()) {
                 case SPELL_ATTACK -> {
                     Token targetTok = CombatMath.tokenFor(grid, e.getId().toString());
@@ -98,18 +124,11 @@ public class CombatSpellResolver {
                     DiceRollResult atk = CombatMath.rollAttack(diceService, atkBonus, mode);
                     int targetAc = CombatMath.effectiveAc(gridService, e.getArmorClass(), casterTok, targetTok, grid);
                     boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
-                    RollSummary dmg = null;
-                    if (hit) {
-                        DiceRollResult d = CombatMath.rollExpr(diceService,
-                                atk.crit() ? CombatMath.critDouble(dice) : dice);
-                        applyEnemyDamage(e, d.total());
-                        dmg = RollSummary.of(d);
-                    }
                     results.add(CombatActionEvent.Target.attack(CombatantKind.ENEMY, e.getName(),
-                            RollSummary.of(atk), targetAc, hit, dmg,
+                            RollSummary.of(atk), targetAc, hit, null,
                             e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
-                    beat.add(CombatNarrationFormatter.describeAttack(label, e.getName(), atk, targetAc, hit, dmg,
-                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                    outcomes.add(new PendingSpellTarget(e.getId(), SpellResolution.SPELL_ATTACK,
+                            atk, targetAc, hit, false, 0));
                 }
                 case SAVE -> {
                     boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
@@ -118,6 +137,58 @@ public class CombatSpellResolver {
                     DiceRollResult save = diceService.roll(CombatMath.notation(saveMod),
                             ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
                     boolean saved = !autoFail && save.total() >= dc;
+                    results.add(CombatActionEvent.Target.save(CombatantKind.ENEMY, e.getName(),
+                            RollSummary.of(save), dc, saved, null,
+                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                    outcomes.add(new PendingSpellTarget(e.getId(), SpellResolution.SAVE,
+                            save, 0, false, saved, 0));
+                }
+                default -> { // AUTO — auto-hit; projectiles (darts) distributed across targets
+                    results.add(CombatActionEvent.Target.autoDamage(CombatantKind.ENEMY, e.getName(),
+                            null, e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                    outcomes.add(new PendingSpellTarget(e.getId(), SpellResolution.AUTO,
+                            null, 0, false, false, darts[i]));
+                }
+            }
+        }
+        return new PendingSpell(effect, spellLevel, dice, dc, outcomes);
+    }
+
+    /**
+     * Phase 2 of a damaging spell: roll + apply each resolved target's damage (crit-double on a
+     * spell-attack crit, half-on-save, summed darts), apply any failed-save condition, and emit
+     * the reveal rows (with {@code damageRoll}) + narration beats. Mirrors the original one-shot
+     * resolver, just deferred to the player's damage roll.
+     */
+    public List<String> applySpellDamage(CombatEncounter enc, Player caster, PendingSpell ps,
+                                         List<CombatActionEvent.Target> results) {
+        SpellEffect effect = ps.effect();
+        String dice = ps.dice();
+        int dc = ps.dc();
+        String label = caster.getCharacterName() + "'s " + effect.name();
+        List<String> beat = new ArrayList<>();
+        for (PendingSpellTarget t : ps.targets()) {
+            Enemy e = enemyRepository.findById(t.enemyId()).orElse(null);
+            if (e == null) continue;
+            switch (t.mode()) {
+                case SPELL_ATTACK -> {
+                    DiceRollResult atk = t.roll();
+                    RollSummary dmg = null;
+                    if (t.hit()) {
+                        DiceRollResult d = CombatMath.rollExpr(diceService,
+                                atk.crit() ? CombatMath.critDouble(dice) : dice);
+                        applyEnemyDamage(e, d.total());
+                        dmg = RollSummary.of(d);
+                    }
+                    results.add(CombatActionEvent.Target.attack(CombatantKind.ENEMY, e.getName(),
+                            RollSummary.of(atk), t.targetAc(), t.hit(), dmg,
+                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                    beat.add(CombatNarrationFormatter.describeAttack(label, e.getName(), atk, t.targetAc(), t.hit(), dmg,
+                            e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
+                }
+                case SAVE -> {
+                    DiceRollResult save = t.roll();
+                    boolean saved = t.saved();
                     DiceRollResult d = CombatMath.rollExpr(diceService, dice);
                     int dealt = saved ? (effect.halfOnSave() ? d.total() / 2 : 0) : d.total();
                     applyEnemyDamage(e, dealt);
@@ -132,8 +203,8 @@ public class CombatSpellResolver {
                             : " hits " + e.getName() + " (failed DC " + dc + ") for ") + dealt
                             + " damage (" + e.getName() + " " + e.getCurrentHp() + "/" + e.getMaxHp() + ").");
                 }
-                default -> { // AUTO — auto-hit; projectiles (darts) distributed across targets
-                    int hits = darts[i];
+                default -> { // AUTO
+                    int hits = t.darts();
                     if (hits <= 0) continue;  // this target got no darts
                     int total = 0;
                     List<Integer> faces = new ArrayList<>();
@@ -152,6 +223,7 @@ public class CombatSpellResolver {
                 }
             }
         }
+        return beat;
     }
 
     /** BUFF / DEBUFF / CONTROL / UTILITY — tag a structured condition (save-gated for enemies) and narrate. */

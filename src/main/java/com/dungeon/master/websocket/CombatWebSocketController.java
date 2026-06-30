@@ -56,11 +56,11 @@ public class CombatWebSocketController extends AbstractGameWebSocketController {
         }
     }
 
-    @MessageMapping("/game/{sessionId}/combat/attack-damage")
-    public void handleCombatAttackDamage(@DestinationVariable UUID sessionId, Principal principal) {
+    @MessageMapping("/game/{sessionId}/combat/resolve-damage")
+    public void handleCombatResolveDamage(@DestinationVariable UUID sessionId, Principal principal) {
         String username = principal.getName();
         try {
-            combatService.resolveAttackDamage(sessionId, username);
+            combatService.resolvePlayerDamage(sessionId, username);
         } catch (Exception e) {
             log.error("Error resolving combat damage: session={}, player={}", sessionId, username, e);
             sendError(username, e);

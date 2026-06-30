@@ -293,7 +293,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         pendingAction={gate.pendingAction}
         onRoll={gate.rollPending}
         onCancel={gate.cancelPending}
-        onRollDamage={actions.combatAttackDamage}
+        onRollDamage={actions.combatResolveDamage}
       />
       <InventoryManager
         open={manageOpen}

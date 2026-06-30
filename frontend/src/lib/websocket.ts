@@ -198,10 +198,10 @@ export function sendCombatAttack(
   });
 }
 
-/** Phase 2 of an attack: resolve the held hit's damage (server rolls it from the pending attack). */
-export function sendCombatAttackDamage(client: Client, sessionId: string) {
+/** Phase 2 of an attack or damaging spell: roll the held damage (server resolves from the pending). */
+export function sendCombatResolveDamage(client: Client, sessionId: string) {
   client.publish({
-    destination: `/app/game/${sessionId}/combat/attack-damage`,
+    destination: `/app/game/${sessionId}/combat/resolve-damage`,
     body: JSON.stringify({}),
   });
 }

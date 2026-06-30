@@ -102,6 +102,8 @@ public class CombatService {
      * player's "Roll damage" (phase 2) so DM narration only fires once the damage is known.
      */
     private final Map<String, PendingAttack> pendingAttacks = new ConcurrentHashMap<>();
+    /** Damaging spells whose to-hit/saves are resolved but whose damage the player hasn't rolled. */
+    private final Map<String, CombatSpellResolver.PendingSpell> pendingSpells = new ConcurrentHashMap<>();
 
     private record PendingAttack(UUID enemyId, DiceRollResult atk, int targetAc) {}
 
@@ -265,21 +267,44 @@ public class CombatService {
     }
 
     /**
-     * Phase 2 of a weapon attack: the player rolled their damage, so resolve the held hit —
-     * the server rolls the authoritative damage, applies it, broadcasts the reveal, and fires
-     * the (now damage-aware) DM narration.
+     * Phase 2 of an attack OR a damaging spell: the player rolled their damage, so resolve the
+     * held hit — the server rolls the authoritative damage, applies it, broadcasts the reveal,
+     * and fires the (now damage-aware) DM narration.
      */
     @Transactional
-    public void resolveAttackDamage(UUID sessionId, String username) {
+    public void resolvePlayerDamage(UUID sessionId, String username) {
         CombatEncounter enc = activeEncounter(sessionId);
         Player player = requireCombatTurn(enc, sessionId, username);
-        PendingAttack pending = pendingAttacks.remove(pendingKey(enc, player));
-        if (pending == null) {
+        List<String> beat = resolvePendingDamage(enc, sessionId, player);
+        if (beat.isEmpty()) {
             throw new IllegalStateException("No attack is waiting for a damage roll");
         }
-        List<String> beat = applyPendingDamage(enc, sessionId, player, pending);
         maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /**
+     * Resolve whichever pending damage the player holds (a weapon hit or a damaging spell),
+     * broadcasting the reveal and returning the narration beat. Returns an empty list when the
+     * player has no pending damage (so callers can distinguish "nothing to resolve").
+     */
+    private List<String> resolvePendingDamage(CombatEncounter enc, UUID sessionId, Player player) {
+        String key = pendingKey(enc, player);
+        PendingAttack weapon = pendingAttacks.remove(key);
+        if (weapon != null) {
+            return applyPendingDamage(enc, sessionId, player, weapon);
+        }
+        CombatSpellResolver.PendingSpell spell = pendingSpells.remove(key);
+        if (spell != null) {
+            log.info("[two-phase] SPELL DAMAGE (phase 2) — applying {}: session={}, player={}",
+                    spell.effect().name(), sessionId, player.getCharacterName());
+            List<CombatActionEvent.Target> reveal = new ArrayList<>();
+            List<String> beat = combatSpellResolver.applySpellDamage(enc, player, spell, reveal);
+            broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(),
+                    "SPELL_DAMAGE", "casts " + spell.effect().name(), reveal);
+            return beat;
+        }
+        return new ArrayList<>();
     }
 
     /**
@@ -396,6 +421,9 @@ public class CombatService {
             breakConcentration(enc, player.getId(), beat);
         }
 
+        // For a DAMAGE spell, phase 1 only rolls to-hit/saves; the damage is held for the player
+        // to roll (phase 2), mirroring weapon attacks. HEAL / EFFECT resolve in one shot.
+        CombatSpellResolver.PendingSpell pendingSpell = null;
         String actionKind = switch (effect.effectType()) {
             case HEAL -> {
                 combatSpellResolver.resolveHeal(sessionId, player, caster, effect, spellLevel,
@@ -403,8 +431,8 @@ public class CombatService {
                 yield "SPELL_HEAL";
             }
             case DAMAGE -> {
-                combatSpellResolver.resolveSpellDamage(enc, sessionId, player, caster, effect,
-                        spellLevel, effectiveTargets, results, beat);
+                pendingSpell = combatSpellResolver.resolveSpellToHit(enc, sessionId, player, caster, effect,
+                        spellLevel, effectiveTargets, results);
                 yield "SPELL_DAMAGE";
             }
             default -> {
@@ -433,8 +461,25 @@ public class CombatService {
             encounterRepository.save(enc);
         }
 
-        broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(),
-                actionKind, "casts " + effect.name(), results);
+        String label = "casts " + effect.name();
+        if (pendingSpell != null && pendingSpell.anyDamage()) {
+            // Hold the spell's damage for the player to roll (phase 2) — no narration / turn
+            // advance yet, mirroring a weapon hit.
+            pendingSpells.put(pendingKey(enc, player), pendingSpell);
+            log.info("[two-phase] SPELL HIT (phase 1) — holding damage, enemy HP unchanged: session={}, player={}, spell={}",
+                    sessionId, player.getCharacterName(), effect.name());
+            broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), actionKind, label, results, true);
+            return;
+        }
+        if (pendingSpell != null) {
+            // A damaging spell that hit no one (missed attack / fizzled AoE) — resolve now,
+            // mirroring a weapon miss.
+            List<CombatActionEvent.Target> reveal = new ArrayList<>();
+            beat.addAll(combatSpellResolver.applySpellDamage(enc, player, pendingSpell, reveal));
+            broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), actionKind, label, reveal);
+        } else {
+            broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), actionKind, label, results);
+        }
         maybeAutoEndTurn(enc, player, beat);
         flushBeat(sessionId, player.getId(), beat);
     }
@@ -445,11 +490,11 @@ public class CombatService {
         Player player = requireCombatTurn(enc, sessionId, username);
 
         List<String> beat = new ArrayList<>();
-        // Safety: if they end the turn with an unrolled hit, resolve its damage first so the
-        // enemy isn't spared and the beat is still narrated.
-        PendingAttack pending = pendingAttacks.remove(pendingKey(enc, player));
-        if (pending != null) {
-            beat.addAll(applyPendingDamage(enc, sessionId, player, pending));
+        // Safety: if they end the turn with unrolled damage (a weapon hit or a damaging spell),
+        // resolve it first so the enemy isn't spared and the beat is still narrated.
+        List<String> pendingBeat = resolvePendingDamage(enc, sessionId, player);
+        if (!pendingBeat.isEmpty()) {
+            beat.addAll(pendingBeat);
             beat.add(player.getCharacterName() + " ends their turn.");
         } else {
             beat.add(player.getCharacterName() + " holds their action and ends their turn.");

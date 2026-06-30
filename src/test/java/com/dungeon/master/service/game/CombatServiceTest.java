@@ -255,7 +255,7 @@ class CombatServiceTest {
         when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(goblin));
 
         combat.playerAttack(sessionId, "Aria", enemyId);
-        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: the player rolls the damage
+        combat.resolvePlayerDamage(sessionId, "Aria"); // phase 2: the player rolls the damage
 
         assertEquals(0, goblin.getCurrentHp());
         assertTrue(!goblin.isAlive());
@@ -608,11 +608,13 @@ class CombatServiceTest {
         when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
         when(spellCatalog.effect("Fireball")).thenReturn(Optional.of(damageSpell("Fireball", "sphere", 20)));
         when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(inside, outside));
+        when(enemyRepo.findById(aId)).thenReturn(Optional.of(inside)); // phase-2 re-fetch
         when(diceService.roll("2d6")).thenReturn(res(8));
 
         // Origin on the inside enemy; client targetIds deliberately wrong (names the outside enemy)
         // to prove the server overrides them for an AoE.
         combat.playerCastSpell(sessionId, "Aria", "Fireball", 0, List.of(bId), 10, 5);
+        combat.resolvePlayerDamage(sessionId, "Aria"); // phase 2: roll the spell damage
 
         assertEquals(12, inside.getCurrentHp(), "enemy inside the template takes the AoE damage");
         assertEquals(20, outside.getCurrentHp(), "enemy outside the template is untouched");
@@ -634,10 +636,12 @@ class CombatServiceTest {
         when(playerStateService.getSessionStates(sessionId)).thenReturn(List.of(stateFor(pid, 20)));
         when(spellCatalog.effect("Firebolt")).thenReturn(Optional.of(damageSpell("Firebolt", null, 0)));
         when(enemyRepo.findBySessionId(sessionId)).thenReturn(List.of(enemyA, enemyB));
+        when(enemyRepo.findById(bId)).thenReturn(Optional.of(enemyB)); // phase-2 re-fetch
         when(diceService.roll("2d6")).thenReturn(res(8));
 
         // No origin → single-target: targetIds drive selection (enemy B), enemy A untouched.
         combat.playerCastSpell(sessionId, "Aria", "Firebolt", 0, List.of(bId), null, null);
+        combat.resolvePlayerDamage(sessionId, "Aria"); // phase 2: roll the spell damage
 
         assertEquals(20, enemyA.getCurrentHp(), "non-targeted enemy is untouched");
         assertEquals(12, enemyB.getCurrentHp(), "the client-selected target takes the damage");
@@ -822,7 +826,7 @@ class CombatServiceTest {
         when(diceService.roll("1d8")).thenReturn(res(5));
 
         combat.playerAttack(sessionId, "Aria", aId);
-        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the damage
+        combat.resolvePlayerDamage(sessionId, "Aria"); // phase 2: roll the damage
 
         assertEquals(15, goblin.getCurrentHp(), "a longbow reaches a 35 ft target");
     }
@@ -861,7 +865,7 @@ class CombatServiceTest {
         when(diceService.roll("2d6")).thenReturn(res(9));      // a greatsword rolls 2d6
 
         combat.playerAttack(sessionId, "Aria", enemyId);
-        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the damage
+        combat.resolvePlayerDamage(sessionId, "Aria"); // phase 2: roll the damage
 
         assertEquals(11, goblin.getCurrentHp(), "greatsword deals its 2d6 die, not a flat 1d8");
         verify(diceService).roll("2d6");
@@ -885,7 +889,7 @@ class CombatServiceTest {
         when(diceService.roll("1d4")).thenReturn(res(3));
 
         combat.playerAttack(sessionId, "Aria", enemyId);
-        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the damage
+        combat.resolvePlayerDamage(sessionId, "Aria"); // phase 2: roll the damage
 
         assertEquals(17, goblin.getCurrentHp(), "an unarmed strike falls back to 1d4");
         verify(diceService).roll("1d4");
@@ -909,7 +913,7 @@ class CombatServiceTest {
         when(diceService.roll("2d8")).thenReturn(res(12));       // the doubled dice
 
         combat.playerAttack(sessionId, "Aria", enemyId);
-        combat.resolveAttackDamage(sessionId, "Aria"); // phase 2: roll the (doubled) crit damage
+        combat.resolvePlayerDamage(sessionId, "Aria"); // phase 2: roll the (doubled) crit damage
 
         assertEquals(18, goblin.getCurrentHp(), "a crit rolls 2d8, not 1d8");
         verify(diceService).roll("2d8");
