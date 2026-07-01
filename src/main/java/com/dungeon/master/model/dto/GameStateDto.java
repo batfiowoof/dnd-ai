@@ -25,6 +25,8 @@ public record GameStateDto(
         DmLength dmLength,
         boolean allowAiCombat,
         boolean allowAiRolls,
-        int collabWindowSeconds
+        int collabWindowSeconds,
+        /** End-of-session chronicle; null until the session is ended. Rendered on the post-game screen. */
+        String recap
 ) {
 }

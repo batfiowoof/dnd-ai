@@ -13,6 +13,9 @@ public interface TurnEventRepository extends JpaRepository<TurnEvent, UUID> {
 
     List<TurnEvent> findBySessionIdOrderByTurnNumberDesc(UUID sessionId);
 
+    /** Full session transcript in play order — used to build the end-of-session recap. */
+    List<TurnEvent> findBySessionIdOrderByTurnNumberAsc(UUID sessionId);
+
     List<TurnEvent> findTop20BySessionIdOrderByTurnNumberDesc(UUID sessionId);
 
     List<TurnEvent> findTop5BySessionIdOrderByTurnNumberDesc(UUID sessionId);

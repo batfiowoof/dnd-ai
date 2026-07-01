@@ -107,6 +107,20 @@ export async function startSession(
   return handleResponse(res);
 }
 
+/** Host-only: end the session (status → FINISHED) and trigger the end-of-session recap. */
+export async function endSession(
+  token: string,
+  sessionId: string
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/end`, {
+    method: "POST",
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) {
+    await throwApiError(res);
+  }
+}
+
 export async function getGameState(
   token: string,
   sessionId: string

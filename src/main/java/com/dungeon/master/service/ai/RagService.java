@@ -24,6 +24,7 @@ public class RagService {
     private static final int TOP_K_RULES = 3;
     private static final int RECENT_TURNS_COUNT = 5;
     private static final String SESSION_HISTORY_CATEGORY = "SESSION_HISTORY";
+    private static final String CAMPAIGN_RECAP_CATEGORY = "CAMPAIGN_RECAP";
 
     private final WorldDocumentRepository worldDocumentRepository;
     private final TurnEventRepository turnEventRepository;
@@ -148,6 +149,34 @@ public class RagService {
             log.info("Indexed session history for session: {}", sessionId);
         } catch (Exception e) {
             log.error("Failed to index session history for session: {}", sessionId, e);
+        }
+    }
+
+    /**
+     * Seed a prior session's recap into THIS (continuing) session's retrievable lore, so the DM can
+     * recall the campaign so far via RAG throughout — not only in the opening. Idempotent per session
+     * (replaces any existing recap doc). Best-effort — a failure never blocks the opening.
+     */
+    public void indexPriorRecap(UUID sessionId, String recapText) {
+        if (recapText == null || recapText.isBlank()) {
+            return;
+        }
+        try {
+            float[] embedding = embeddingService.generateEmbedding(recapText);
+            String vectorString = embeddingService.embeddingToString(embedding);
+
+            worldDocumentRepository.deleteBySessionIdAndCategory(sessionId, CAMPAIGN_RECAP_CATEGORY);
+            worldDocumentRepository.insertWithSession(
+                    UUID.randomUUID(),
+                    "Previously, on this campaign",
+                    recapText,
+                    CAMPAIGN_RECAP_CATEGORY,
+                    sessionId,
+                    vectorString);
+
+            log.info("Seeded prior-campaign recap for session: {}", sessionId);
+        } catch (Exception e) {
+            log.error("Failed to seed prior recap for session: {}", sessionId, e);
         }
     }
 }

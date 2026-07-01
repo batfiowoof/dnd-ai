@@ -63,6 +63,17 @@ function PlayContent() {
   const [customWorldText, setCustomWorldText] = useState("");
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
 
+  // Continuing a finished adventure (set via /play?continueFrom=<sessionId>): its recap is carried
+  // forward server-side. Read from the URL directly to avoid a Suspense boundary for useSearchParams.
+  const [continuedFromSessionId, setContinuedFromSessionId] = useState<string | undefined>();
+  useEffect(() => {
+    const cont = new URLSearchParams(window.location.search).get("continueFrom");
+    if (cont) {
+      setContinuedFromSessionId(cont);
+      setMode("create");
+    }
+  }, []);
+
   // Host session settings
   const [turnMode, setTurnMode] = useState<TurnMode>("COLLABORATIVE");
   const [maxPlayers, setMaxPlayers] = useState(4);
@@ -131,6 +142,7 @@ function PlayContent() {
         allowAiRolls,
         collabWindowSeconds,
         milestones: getMilestones(),
+        continuedFromSessionId,
       });
       rememberSession(res.sessionId, {
         playerId: res.playerId,
@@ -252,6 +264,11 @@ function PlayContent() {
         {/* Create */}
         {mode === "create" && (
           <div className="space-y-4">
+            {continuedFromSessionId && (
+              <div className="rounded-lg border border-gold/40 bg-gold/5 px-3 py-2 text-xs text-gold">
+                Continuing your previous adventure — the DM will pick up the story where it left off.
+              </div>
+            )}
             <WorldSettingPicker
               worldSource={worldSource}
               setWorldSource={setWorldSource}

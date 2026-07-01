@@ -82,6 +82,15 @@ public class GameSessionController {
         return ResponseEntity.ok(state);
     }
 
+    @PostMapping("/{sessionId}/end")
+    public ResponseEntity<Void> endSession(
+            @PathVariable UUID sessionId,
+            @AuthenticationPrincipal Jwt jwt) {
+        String username = AuthUtils.username(jwt);
+        gameSessionService.endSession(sessionId, username);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{sessionId}/state")
     public ResponseEntity<GameStateDto> getGameState(@PathVariable UUID sessionId) {
         GameStateDto state = gameSessionService.getGameState(sessionId);

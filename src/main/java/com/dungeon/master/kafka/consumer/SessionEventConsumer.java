@@ -9,7 +9,9 @@ import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.TurnEventRepository;
 import com.dungeon.master.service.ai.DmAiService;
 import com.dungeon.master.service.ai.DmTags;
+import com.dungeon.master.service.ai.RagService;
 import com.dungeon.master.service.game.GameSessionService;
+import com.dungeon.master.service.game.SessionRecapService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -32,6 +34,8 @@ public class SessionEventConsumer {
     private final DmAiService dmAiService;
     private final PlayerRepository playerRepository;
     private final TurnEventRepository turnEventRepository;
+    private final SessionRecapService sessionRecapService;
+    private final RagService ragService;
 
     @KafkaListener(topics = KafkaConfig.TOPIC_SESSION_EVENT, groupId = "dnd-ai-session-group",
             properties = { "auto.offset.reset=latest" })
@@ -60,10 +64,42 @@ public class SessionEventConsumer {
                         (Object) Map.of("type", "GAME_STARTED", "gameState", gameState));
                 generateOpeningNarration(event.sessionId());
             }
-            case GAME_ENDED -> messagingTemplate.convertAndSend(
-                    "/topic/game/" + event.sessionId(),
-                    (Object) Map.of("type", "GAME_ENDED",
-                            "sessionId", event.sessionId().toString()));
+            case GAME_ENDED -> {
+                messagingTemplate.convertAndSend(
+                        "/topic/game/" + event.sessionId(),
+                        (Object) Map.of("type", "GAME_ENDED",
+                                "sessionId", event.sessionId().toString()));
+                generateRecap(event.sessionId());
+            }
+        }
+    }
+
+    /**
+     * Streams the end-of-session chronicle off-thread and persists it (via {@link SessionRecapService}).
+     * Broadcasts {@code RECAP_PENDING} first, streams {@code RECAP_CHUNK}s, then a final
+     * {@code RECAP_READY} with the stored text — mirroring the DM streaming shape so the post-game
+     * screen can render it forming. Fail-soft: a recap failure never disrupts the ended session.
+     */
+    private void generateRecap(UUID sessionId) {
+        String destination = "/topic/game/" + sessionId;
+        try {
+            messagingTemplate.convertAndSend(destination, (Object) Map.of("type", "RECAP_PENDING"));
+
+            String recap = sessionRecapService.generateAndStore(sessionId,
+                    chunk -> messagingTemplate.convertAndSend(destination, (Object) Map.of(
+                            "type", "RECAP_CHUNK",
+                            "delta", chunk)));
+
+            messagingTemplate.convertAndSend(destination, (Object) Map.of(
+                    "type", "RECAP_READY",
+                    "sessionId", sessionId.toString(),
+                    "recap", recap));
+        } catch (Exception e) {
+            log.error("Failed to generate session recap for session={}", sessionId, e);
+            messagingTemplate.convertAndSend(destination, (Object) Map.of(
+                    "type", "RECAP_READY",
+                    "sessionId", sessionId.toString(),
+                    "recap", ""));
         }
     }
 
@@ -78,11 +114,18 @@ public class SessionEventConsumer {
             GameSession session = gameSessionService.getSession(sessionId);
             String worldSetting = session.getWorldSetting();
 
+            // Continuing a campaign? Pull the prior recap so the opening picks up the thread, and seed
+            // it as a session-scoped RAG doc so the DM can recall it throughout, not just at the start.
+            String priorRecap = sessionRecapService.priorRecapFor(session);
+            if (priorRecap != null && !priorRecap.isBlank()) {
+                ragService.indexPriorRecap(sessionId, priorRecap);
+            }
+
             messagingTemplate.convertAndSend(destination, (Object) Map.of(
                     "type", "DM_THINKING",
                     "turnNumber", "0"));
 
-            String opening = dmAiService.generateOpening(sessionId, worldSetting,
+            String opening = dmAiService.generateOpening(sessionId, worldSetting, priorRecap,
                     chunk -> messagingTemplate.convertAndSend(destination, (Object) Map.of(
                             "type", "DM_CHUNK",
                             "turnNumber", "0",

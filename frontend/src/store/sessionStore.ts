@@ -92,6 +92,10 @@ interface SessionState {
   combatNarrating: boolean;
   /** Collaborative round collection status (null when no window is open). */
   round: RoundStatus | null;
+  /** End-of-session recap; null until the session ends (or while it's still being written). */
+  recap: string | null;
+  /** True while the recap is being generated after the session ends. */
+  recapPending: boolean;
 
   /* server-state seeding (React Query → store) */
   hydrateFromGameState: (gs: GameStateDto) => void;
@@ -136,6 +140,10 @@ interface SessionState {
   applyPlayerEvent: (gs: GameStateDto) => void;
   applyGameStarted: (gs: GameStateDto) => void;
   applyGameEnded: () => void;
+  /** The recap is being generated (RECAP_PENDING). */
+  beginRecap: () => void;
+  /** The recap finished (RECAP_READY) — store the final text. */
+  setRecap: (recap: string) => void;
 
   /* collaborative round */
   applyRoundStatus: (evt: RoundStatusEvent) => void;
@@ -163,6 +171,8 @@ const initialState = {
   combatInitializing: false,
   combatNarrating: false,
   round: null as RoundStatus | null,
+  recap: null as string | null,
+  recapPending: false,
 };
 
 /** Sentinel playerId the backend uses for streamed combat-beat narration. */
@@ -179,6 +189,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       currentTurnPlayerId: gs.currentTurnPlayerId,
       turnNumber: gs.turnNumber,
       turnMode: gs.turnMode ?? "COLLABORATIVE",
+      recap: gs.recap ?? null,
     }),
 
   seedLogsFromHistory: (history) =>
@@ -517,7 +528,12 @@ export const useSessionStore = create<SessionState>((set) => ({
           turnNumber: state.turnNumber,
         },
       ],
+      recapPending: true,
     })),
+
+  beginRecap: () => set({ recapPending: true }),
+
+  setRecap: (recap) => set({ recap: recap || null, recapPending: false }),
 
   /* ROUND_STATUS — live collaborative collection indicator. */
   applyRoundStatus: (evt) =>

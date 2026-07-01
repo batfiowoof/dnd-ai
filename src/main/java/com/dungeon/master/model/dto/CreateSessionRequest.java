@@ -33,6 +33,11 @@ public record CreateSessionRequest(
         Boolean allowAiCombat,
         Boolean allowAiRolls,
         Integer collabWindowSeconds,
-        List<Milestone> milestones
+        List<Milestone> milestones,
+        /**
+         * When set, this session explicitly continues a finished session: its end-of-session recap is
+         * injected into the opening and seeded into RAG so the story carries over.
+         */
+        UUID continuedFromSessionId
 ) {
 }

@@ -35,6 +35,8 @@ export interface GameStateDto {
   allowAiCombat: boolean;
   allowAiRolls: boolean;
   collabWindowSeconds: number;
+  /** End-of-session chronicle; null until the session is ended. */
+  recap: string | null;
 }
 
 /** An authored campaign milestone the DM can award once to level the whole party. */
@@ -59,6 +61,8 @@ export interface CreateSessionRequest {
   allowAiRolls?: boolean;
   collabWindowSeconds?: number;
   milestones?: Milestone[];
+  /** When set, this session continues a finished one — its recap is carried forward. */
+  continuedFromSessionId?: string;
 }
 
 export interface CreateSessionResponse {

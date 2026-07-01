@@ -11,6 +11,8 @@ interface GameRoomHeaderProps {
   isCreator: boolean;
   /** Host-only: kick off an encounter (shown out of combat). */
   onStartEncounter: (enemyKeys: string[]) => void;
+  /** Host-only: open the "end adventure?" confirmation. */
+  onEndSession: () => void;
   /** Open the "leave session?" confirmation. */
   onLeave: () => void;
   /** Open a player's character sheet. */
@@ -27,6 +29,7 @@ export default function GameRoomHeader({
   playerId,
   isCreator,
   onStartEncounter,
+  onEndSession,
   onLeave,
   onOpenSheet,
 }: GameRoomHeaderProps) {
@@ -114,6 +117,17 @@ export default function GameRoomHeader({
           )}
           title={connected ? "Connected" : "Disconnected"}
         />
+
+        {isCreator && status === "ACTIVE" && !inCombat && (
+          <button
+            type="button"
+            onClick={onEndSession}
+            title="End the adventure and write its recap"
+            className="rounded-md border border-gold/40 px-2.5 py-1 text-xs font-semibold text-gold transition hover:border-gold hover:bg-gold/10"
+          >
+            End Adventure
+          </button>
+        )}
 
         <button
           type="button"

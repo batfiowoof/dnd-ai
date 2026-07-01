@@ -10,6 +10,7 @@ import { useRequireToken } from "@/hooks/useRequireToken";
 import {
   createSession,
   deleteSession,
+  endSession,
   getGameState,
   getSessionByCode,
   getSessionHistory,
@@ -118,6 +119,15 @@ export function useStartSession() {
   return useMutation({
     mutationFn: async (sessionId: string) =>
       startSession(await requireToken(), sessionId),
+  });
+}
+
+/** Host-only: end the session. The recap arrives later via the RECAP_READY WebSocket event. */
+export function useEndSession() {
+  const requireToken = useRequireToken();
+  return useMutation({
+    mutationFn: async (sessionId: string) =>
+      endSession(await requireToken(), sessionId),
   });
 }
 

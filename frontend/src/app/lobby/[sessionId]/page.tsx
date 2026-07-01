@@ -4,7 +4,11 @@ import { useEffect, useState, useRef, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
-import { useStartSession, useKickPlayer } from "@/hooks/useSessionQueries";
+import {
+  useStartSession,
+  useKickPlayer,
+  useEndSession,
+} from "@/hooks/useSessionQueries";
 import { useSessionStore } from "@/store/sessionStore";
 import { sendAction, sendStartEncounter } from "@/lib/websocket";
 import { useGameSocket } from "@/hooks/useGameSocket";
@@ -67,6 +71,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const setMyPlayerId = useSessionStore((s) => s.setMyPlayerId);
   const setCombatInitializing = useSessionStore((s) => s.setCombatInitializing);
   const hydrateFromGameState = useSessionStore((s) => s.hydrateFromGameState);
+  const recap = useSessionStore((s) => s.recap);
+  const recapPending = useSessionStore((s) => s.recapPending);
 
   /* ── purely-local UI state ──────────────────────────────────── */
   const [copied, setCopied] = useState(false);
@@ -76,12 +82,14 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const [manageOpen, setManageOpen] = useState(false);
   const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
   const [leaveConfirm, setLeaveConfirm] = useState(false);
+  const [endConfirm, setEndConfirm] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
   /* ── mutations ──────────────────────────────────────────────── */
   const startMutation = useStartSession();
   const kickMutation = useKickPlayer();
+  const endMutation = useEndSession();
   const loading = startMutation.isPending;
 
   /* ── reset per-session live state on mount / session change ─── */
@@ -210,6 +218,16 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     router.push("/play");
   }
 
+  /** Host-only: end the adventure. Status flips to FINISHED and the recap streams in via WS. */
+  async function handleEndSession() {
+    setEndConfirm(false);
+    try {
+      await endMutation.mutateAsync(sessionId);
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, "Failed to end the session"));
+    }
+  }
+
   /** Host-only battle-map background upload (server broadcasts the refreshed grid). */
   async function handleUploadMap(file: File) {
     const token = await getToken();
@@ -318,6 +336,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         playerId={playerId}
         isCreator={isCreator}
         onStartEncounter={handleStartEncounter}
+        onEndSession={() => setEndConfirm(true)}
         onLeave={() => setLeaveConfirm(true)}
         onOpenSheet={setSheetPlayerId}
       />
@@ -331,6 +350,16 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         tone="danger"
         onConfirm={handleLeaveSession}
         onClose={() => setLeaveConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={endConfirm}
+        title="End the adventure?"
+        message="This ends the session for everyone and writes a recap of the story so far, which you can carry into a follow-up adventure. This can't be undone."
+        confirmLabel="End Adventure"
+        cancelLabel="Keep Playing"
+        onConfirm={handleEndSession}
+        onClose={() => setEndConfirm(false)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -366,19 +395,47 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                   />
                 )}
 
-                {/* Finished banner */}
+                {/* Finished banner + end-of-session recap */}
                 {status === "FINISHED" && (
-                  <div className="border-t border-border bg-surface p-4 text-center">
-                    <p className="text-sm text-text-muted">
+                  <div className="border-t border-border bg-surface p-4">
+                    <p className="text-center text-sm text-text-muted">
                       This adventure has ended.
                     </p>
-                    <Button
-                      onClick={() => router.push("/play")}
-                      variant="outline"
-                      className="mt-2"
-                    >
-                      New Adventure
-                    </Button>
+
+                    {(recapPending || recap) && (
+                      <div className="mx-auto mt-3 max-w-2xl rounded-lg border border-gold/30 bg-gold/5 p-4">
+                        <h3 className="mb-2 font-display text-xs font-bold uppercase tracking-wider text-gold">
+                          The Story So Far
+                        </h3>
+                        {recap ? (
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-text">
+                            {recap}
+                          </p>
+                        ) : (
+                          <p className="text-sm italic text-text-muted">
+                            Chronicling your adventure…
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex justify-center gap-2">
+                      {isCreator && (
+                        <Button
+                          onClick={() =>
+                            router.push(`/play?continueFrom=${sessionId}`)
+                          }
+                        >
+                          Continue this adventure
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => router.push("/play")}
+                        variant="outline"
+                      >
+                        New Adventure
+                      </Button>
+                    </div>
                   </div>
                 )}
               </>

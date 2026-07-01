@@ -118,9 +118,22 @@ export default function SessionsPanel({ className }: { className?: string }) {
                     {new Date(s.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <Button size="sm" onClick={() => rejoin(s)}>
-                  {s.status === "FINISHED" ? "View" : "Rejoin"}
-                </Button>
+                <div className="flex flex-col gap-1.5">
+                  <Button size="sm" onClick={() => rejoin(s)}>
+                    {s.status === "FINISHED" ? "View" : "Rejoin"}
+                  </Button>
+                  {s.status === "FINISHED" && s.isCreator && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        router.push(`/play?continueFrom=${s.sessionId}`)
+                      }
+                    >
+                      Continue
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Manage row */}

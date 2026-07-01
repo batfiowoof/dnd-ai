@@ -147,6 +147,13 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       s.applyGameEnded();
       scrollToBottom();
       break;
+    case "RECAP_PENDING":
+      s.beginRecap();
+      break;
+    case "RECAP_READY":
+      s.setRecap(String(data.recap ?? ""));
+      scrollToBottom();
+      break;
     case "DICE_ROLL":
       s.applyDiceRoll(data as unknown as DiceRollEvent);
       scrollToBottom();

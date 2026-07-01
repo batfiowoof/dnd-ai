@@ -115,7 +115,8 @@ public class DmAiService {
      * Generates the opening scene when a game starts, streaming tokens to {@code onChunk}.
      */
     @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackOpening")
-    public String generateOpening(UUID sessionId, String worldSetting, Consumer<String> onChunk) {
+    public String generateOpening(UUID sessionId, String worldSetting, String priorRecap,
+                                  Consumer<String> onChunk) {
         log.info("Generating opening narration for session={}", sessionId);
 
         StringBuilder prompt = new StringBuilder();
@@ -129,6 +130,12 @@ public class DmAiService {
         prompt.append("The adventure is about to begin. ");
         if (worldSetting != null && !worldSetting.isBlank()) {
             prompt.append("World setting:\n").append(worldSetting).append("\n\n");
+        }
+        // Continuing a campaign: ground the opening in what happened last time so it reads as the next
+        // chapter, not a fresh start. This is a recap of PRIOR sessions, not the current scene.
+        if (priorRecap != null && !priorRecap.isBlank()) {
+            prompt.append("Previously, on this campaign (recap of earlier sessions — continue from here, ")
+                    .append("do not contradict it):\n").append(priorRecap).append("\n\n");
         }
         prompt.append("Narrate an immersive opening scene that sets the mood, establishes where ")
                 .append("the party finds itself, and ends by inviting the players to describe what they ")
@@ -181,6 +188,43 @@ public class DmAiService {
         return response;
     }
 
+    /**
+     * Writes a concise narrative chronicle of a finished session to hand to the next one. One
+     * tool-free LLM call over pre-assembled source text ({@code sourceText} — party + narrative turns
+     * + notable combat outcomes, built by {@code SessionRecapService}). Story only: no dice, no
+     * mechanics, no blow-by-blow. Streams tokens so the UI can show it forming.
+     */
+    @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackSessionRecap")
+    public String generateSessionRecap(UUID sessionId, String sourceText, Consumer<String> onChunk) {
+        log.info("Generating session recap for session={}", sessionId);
+
+        String prompt = """
+                The adventuring session below has ended. Write a cohesive PAST-TENSE chronicle recap \
+                (about 200-300 words) to hand to the Dungeon Master of the NEXT session so the story \
+                continues seamlessly. Cover: where the party went, what they discovered, the key \
+                decisions they made, notable NPCs met, and any unresolved threads or looming dangers. \
+                Mention combat ONLY for consequential outcomes (a foe slain, an ally who fell, a narrow \
+                escape) — never blow-by-blow rolls or numbers. Do NOT use game mechanics, dice, HP, or \
+                stat language. Write it as an evocative "story so far", not a bullet list.
+
+                %s""".formatted(sourceText);
+
+        String response = chatStreamer.streamToString(prompt, onChunk);
+
+        log.info("Session recap generated for session={}, length={}", sessionId, response.length());
+        return response;
+    }
+
+    @SuppressWarnings("unused")
+    private String fallbackSessionRecap(UUID sessionId, String sourceText,
+                                        Consumer<String> onChunk, Throwable throwable) {
+        log.error("AI session recap unavailable, using fallback. session={}, error={}",
+                sessionId, throwable.getMessage());
+        // No recap is better than a broken one — return empty so the handoff simply carries nothing
+        // forward rather than a stack trace or partial text.
+        return "";
+    }
+
     @SuppressWarnings("unused")
     private NarrativeTurnResult fallbackNarrativeTurn(UUID sessionId, List<Contribution> actions,
                                                       Map<UUID, Boolean> spendInspiration,
@@ -213,7 +257,7 @@ public class DmAiService {
     }
 
     @SuppressWarnings("unused")
-    private String fallbackOpening(UUID sessionId, String worldSetting,
+    private String fallbackOpening(UUID sessionId, String worldSetting, String priorRecap,
                                    Consumer<String> onChunk, Throwable throwable) {
         log.error("AI opening narration unavailable, using fallback. session={}, error={}",
                 sessionId, throwable.getMessage());

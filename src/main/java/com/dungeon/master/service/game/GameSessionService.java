@@ -99,6 +99,8 @@ public class GameSessionService {
                         : request.collabWindowSeconds(), MIN_COLLAB_WINDOW, MAX_COLLAB_WINDOW))
                 .milestones(milestones)
                 .customMonsters(customMonsters)
+                .worldId(request.worldId())
+                .continuedFromSessionId(request.continuedFromSessionId())
                 .build();
         session = sessionRepository.save(session);
 
@@ -206,15 +208,17 @@ public class GameSessionService {
     }
 
     @Transactional
-    public void endSession(UUID sessionId) {
-        GameSession session = getSession(sessionId);
+    public void endSession(UUID sessionId, String username) {
+        GameSession session = requireHost(sessionId, username, "end the session");
         session.setStatus(GameStatus.FINISHED);
         sessionRepository.save(session);
 
+        // GAME_ENDED is consumed off-thread (SessionEventConsumer) to broadcast the end and generate
+        // the end-of-session recap — the multi-second LLM call must not block this request.
         eventProducer.sendSessionEvent(new SessionEvent(
                 sessionId, null, SessionEvent.Type.GAME_ENDED));
 
-        log.info("Session {} ended", sessionId);
+        log.info("Session {} ended by {}", sessionId, username);
     }
 
     public GameSession getSession(UUID sessionId) {
@@ -268,7 +272,8 @@ public class GameSessionService {
                 session.getDmLength(),
                 session.isAllowAiCombat(),
                 session.isAllowAiRolls(),
-                session.getCollabWindowSeconds());
+                session.getCollabWindowSeconds(),
+                session.getRecap());
     }
 
     public List<PlayerDto> getPlayers(UUID sessionId) {

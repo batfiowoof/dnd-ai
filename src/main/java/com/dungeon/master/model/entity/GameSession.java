@@ -117,4 +117,19 @@ public class GameSession {
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    /** Narrative chronicle written when this session ends; handed to the next session. Null until then. */
+    @Column(columnDefinition = "text")
+    private String recap;
+
+    @Column(name = "recap_generated_at")
+    private LocalDateTime recapGeneratedAt;
+
+    /** Soft link to the saved {@link World} this session was started from (null for free-text worlds). */
+    @Column(name = "world_id")
+    private UUID worldId;
+
+    /** Soft link to the finished session this one explicitly continues (null for a fresh campaign). */
+    @Column(name = "continued_from_session_id")
+    private UUID continuedFromSessionId;
 }
