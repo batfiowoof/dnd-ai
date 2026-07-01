@@ -44,7 +44,8 @@ public class PlayerActionConsumer {
 
     /* ── initiative / freeform: one action → one streamed DM turn (rolls via tools) ─────── */
 
-    @KafkaListener(topics = KafkaConfig.TOPIC_PLAYER_ACTION, groupId = "dnd-ai-dm-group")
+    @KafkaListener(topics = KafkaConfig.TOPIC_PLAYER_ACTION, groupId = "dnd-ai-dm-group",
+            properties = { "auto.offset.reset=latest" })
     public void handlePlayerAction(PlayerActionEvent event) {
         log.info("Received player action: session={}, player={}, turn={}",
                 event.sessionId(), event.playerId(), event.turnNumber());
@@ -88,7 +89,8 @@ public class PlayerActionConsumer {
 
     /* ── collaborative: a whole round → one combined streamed DM turn ─────────── */
 
-    @KafkaListener(topics = KafkaConfig.TOPIC_ROUND_ACTION, groupId = "dnd-ai-round-group")
+    @KafkaListener(topics = KafkaConfig.TOPIC_ROUND_ACTION, groupId = "dnd-ai-round-group",
+            properties = { "auto.offset.reset=latest" })
     public void handleRoundAction(RoundActionEvent event) {
         log.info("Received collaborative round: session={}, turn={}, actions={}",
                 event.sessionId(), event.turnNumber(), event.actions().size());

@@ -33,7 +33,8 @@ public class CombatNarrationConsumer {
     private final TurnService turnService;
     private final SimpMessagingTemplate messagingTemplate;
 
-    @KafkaListener(topics = KafkaConfig.TOPIC_COMBAT_NARRATION, groupId = "dnd-ai-dm-group")
+    @KafkaListener(topics = KafkaConfig.TOPIC_COMBAT_NARRATION, groupId = "dnd-ai-dm-group",
+            properties = { "auto.offset.reset=latest" })
     public void handleCombatNarration(CombatNarrationEvent event) {
         log.info("Received combat narration beat: session={}, turnEvent={}, turn={}",
                 event.sessionId(), event.turnEventId(), event.turnNumber());

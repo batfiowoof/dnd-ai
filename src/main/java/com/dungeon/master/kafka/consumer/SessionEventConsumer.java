@@ -33,7 +33,8 @@ public class SessionEventConsumer {
     private final PlayerRepository playerRepository;
     private final TurnEventRepository turnEventRepository;
 
-    @KafkaListener(topics = KafkaConfig.TOPIC_SESSION_EVENT, groupId = "dnd-ai-session-group")
+    @KafkaListener(topics = KafkaConfig.TOPIC_SESSION_EVENT, groupId = "dnd-ai-session-group",
+            properties = { "auto.offset.reset=latest" })
     public void handleSessionEvent(SessionEvent event) {
         log.info("Session event: session={}, type={}", event.sessionId(), event.type());
 

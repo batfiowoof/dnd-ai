@@ -41,16 +41,22 @@ A multiplayer Dungeons & Dragons web application where an AI acts as the Dungeon
 | `game_sessions` | Session state, turn order (JSONB), join code |
 | `players` | Player/character info, role (PLAYER / DM_AI) |
 | `turn_events` | Action log with DM responses, ordered by turn |
-| `world_documents` | RAG vector store — world lore with 1536-dim embeddings |
+| `world_documents` | RAG vector store — world lore with 1024-dim embeddings (bge-m3) |
 
 ### Kafka Topics
 
 | Topic | Description |
 |---|---|
-| `game.player.action` | Player submits an action |
-| `game.dm.response` | AI DM narration result |
-| `game.turn.next` | Turn advancement signal |
-| `game.session.event` | Join/start/end lifecycle events |
+| `game.player.action` | Player submits an action (initiative/freeform) → streamed DM turn |
+| `game.round.action` | Collaborative round flush → one combined DM turn |
+| `game.dm.response` | AI DM narration result → broadcast + turn advance |
+| `game.turn.next` | Turn advancement signal (initiative mode) |
+| `game.session.event` | Join/leave/start/end lifecycle events (start streams the opening) |
+| `game.combat.narration` | Resolved combat beat → LLM narration off-thread |
+| `game.rag.index` | Periodic session-history (re)index into pgvector off the broadcast thread |
+
+Each `<topic>` has a companion `<topic>.DLT` dead-letter topic; a `DefaultErrorHandler` retries a
+failing record with backoff, then routes it there.
 
 ## Prerequisites
 

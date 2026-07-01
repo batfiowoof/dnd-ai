@@ -101,7 +101,13 @@ export function useJoinByCode() {
     }) => {
       const token = await requireToken();
       const gameState = await getSessionByCode(token, code);
-      const player = await joinSession(token, gameState.sessionId, body);
+      // Already a member? Rejoin without calling POST /join — the backend join is idempotent, but
+      // short-circuiting here avoids a needless round trip and works for an already-ACTIVE session.
+      const existing = gameState.players.find(
+        (p) => p.username === body.playerName
+      );
+      const player =
+        existing ?? (await joinSession(token, gameState.sessionId, body));
       return { gameState, player };
     },
   });

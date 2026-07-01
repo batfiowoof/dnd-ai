@@ -46,6 +46,18 @@ public class SessionMembershipService {
     public PlayerDto joinSession(UUID sessionId, JoinSessionRequest request, String username) {
         GameSession session = gameSessionService.getSession(sessionId);
 
+        // Existing member → idempotent rejoin: return their player as-is, regardless of the session's
+        // status or capacity. A rejoin is a pure read — it must NOT re-seed runtime state (that would
+        // wipe HP/spell slots), re-emit PLAYER_JOINED, or touch the turn order, and it ignores any
+        // characterId in the request (no mid-game character swap). This is what lets a player who
+        // refreshed or navigated away get back into an already-ACTIVE session. The WAITING/full guards
+        // below therefore apply only to genuinely NEW joiners.
+        Optional<Player> existing = playerRepository.findBySessionIdAndUsername(sessionId, username);
+        if (existing.isPresent()) {
+            log.info("Player {} rejoined session {}", username, sessionId);
+            return playerMapper.toDto(existing.get());
+        }
+
         if (session.getStatus() != GameStatus.WAITING) {
             throw new IllegalStateException("Session is not accepting new players");
         }
@@ -54,11 +66,6 @@ public class SessionMembershipService {
         if (humanPlayerCount >= session.getMaxPlayers()) {
             throw new SessionFullException(
                     "Session is full (max " + session.getMaxPlayers() + " players)");
-        }
-
-        Optional<Player> existing = playerRepository.findBySessionIdAndUsername(sessionId, username);
-        if (existing.isPresent()) {
-            throw new IllegalStateException("Player already in session");
         }
 
         Character character = characterRepository.findByIdAndOwnerUsername(request.characterId(), username)

@@ -67,7 +67,7 @@ Next.js frontend  ⇄  Spring Boot backend  ⇄  Kafka (KRaft)
                          PostgreSQL+pgvector   Ollama        Keycloak
 ```
 
-See `README.md` for the full diagram, the four `game.*` Kafka topics, and the table-level
+See `README.md` for the full diagram, the `game.*` Kafka topics (+ their `.DLT` companions), and the table-level
 data model.
 
 ## Backend layout — `src/main/java/com/dungeon/master/`
@@ -75,7 +75,7 @@ data model.
 - `controller/` + `websocket/` — REST and STOMP entry points (+ JWT channel interceptor)
 - `service/ai/` — `DmAiService`, `RagService`, `EmbeddingService`
 - `service/game/` — `GameSession`, `Turn`, `Player`, `Character` services
-- `kafka/` — `producer/` + `consumer/` (action, dm-response, turn, session)
+- `kafka/` — `producer/` + `consumer/` (action, dm-response, turn, session, combat-narration, rag-index)
 - `model/{entity,dto,enums}`, `repository/`, `config/`, `exception/`
 - Flyway migrations: `src/main/resources/db/migration` (V1–V3). **Add a new
   `V{n}__*.sql`; never edit an already-applied migration.**

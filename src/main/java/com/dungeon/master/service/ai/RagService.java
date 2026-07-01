@@ -23,6 +23,7 @@ public class RagService {
     private static final int TOP_K_DOCUMENTS = 5;
     private static final int TOP_K_RULES = 3;
     private static final int RECENT_TURNS_COUNT = 5;
+    private static final String SESSION_HISTORY_CATEGORY = "SESSION_HISTORY";
 
     private final WorldDocumentRepository worldDocumentRepository;
     private final TurnEventRepository turnEventRepository;
@@ -131,13 +132,16 @@ public class RagService {
         try {
             float[] embedding = embeddingService.generateEmbedding(historyText);
             String vectorString = embeddingService.embeddingToString(embedding);
-            UUID docId = UUID.randomUUID();
 
+            // Replace the session's prior history snapshot rather than appending a new row each tick,
+            // so re-indexing (including Kafka redelivery) stays idempotent: one SESSION_HISTORY doc
+            // per session, always the latest window.
+            worldDocumentRepository.deleteBySessionIdAndCategory(sessionId, SESSION_HISTORY_CATEGORY);
             worldDocumentRepository.insertWithSession(
-                    docId,
+                    UUID.randomUUID(),
                     "Session History - " + sessionId,
                     historyText,
-                    "SESSION_HISTORY",
+                    SESSION_HISTORY_CATEGORY,
                     sessionId,
                     vectorString);
 

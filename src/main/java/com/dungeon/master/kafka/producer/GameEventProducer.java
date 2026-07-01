@@ -4,6 +4,7 @@ import com.dungeon.master.config.KafkaConfig;
 import com.dungeon.master.kafka.event.CombatNarrationEvent;
 import com.dungeon.master.kafka.event.DmResponseEvent;
 import com.dungeon.master.kafka.event.PlayerActionEvent;
+import com.dungeon.master.kafka.event.RagIndexEvent;
 import com.dungeon.master.kafka.event.RoundActionEvent;
 import com.dungeon.master.kafka.event.SessionEvent;
 import com.dungeon.master.kafka.event.TurnNextEvent;
@@ -58,6 +59,13 @@ public class GameEventProducer {
         log.info("Publishing combat narration beat: session={}, turnEvent={}, turn={}",
                 event.sessionId(), event.turnEventId(), event.turnNumber());
         kafkaTemplate.send(KafkaConfig.TOPIC_COMBAT_NARRATION,
+                event.sessionId().toString(), event);
+    }
+
+    public void sendRagIndex(RagIndexEvent event) {
+        log.info("Publishing RAG index request: session={}, turn={}",
+                event.sessionId(), event.turnNumber());
+        kafkaTemplate.send(KafkaConfig.TOPIC_RAG_INDEX,
                 event.sessionId().toString(), event);
     }
 }

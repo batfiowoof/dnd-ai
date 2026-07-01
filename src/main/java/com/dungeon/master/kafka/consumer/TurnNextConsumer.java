@@ -23,7 +23,8 @@ public class TurnNextConsumer {
 
     private final SimpMessagingTemplate messagingTemplate;
 
-    @KafkaListener(topics = KafkaConfig.TOPIC_TURN_NEXT, groupId = "dnd-ai-turn-group")
+    @KafkaListener(topics = KafkaConfig.TOPIC_TURN_NEXT, groupId = "dnd-ai-turn-group",
+            properties = { "auto.offset.reset=latest" })
     public void handleTurnNext(TurnNextEvent event) {
         log.info("Turn advanced: session={}, nextPlayer={}, turn={}",
                 event.sessionId(), event.nextPlayerId(), event.turnNumber());

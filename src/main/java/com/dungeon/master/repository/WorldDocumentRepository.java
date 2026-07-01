@@ -91,4 +91,17 @@ public interface WorldDocumentRepository extends JpaRepository<WorldDocument, UU
             WHERE id = :id
             """, nativeQuery = true)
     void updateEmbedding(@Param("id") UUID id, @Param("embedding") String embedding);
+
+    /**
+     * Remove a session's documents of one category (e.g. {@code SESSION_HISTORY}) so a re-index can
+     * replace the prior snapshot instead of accumulating rows — this is what keeps
+     * {@link com.dungeon.master.service.ai.RagService#indexSessionHistory} idempotent under replay.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            DELETE FROM world_documents WHERE session_id = :sessionId AND category = :category
+            """, nativeQuery = true)
+    void deleteBySessionIdAndCategory(@Param("sessionId") UUID sessionId,
+                                      @Param("category") String category);
 }

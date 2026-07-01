@@ -2,11 +2,12 @@ package com.dungeon.master.kafka.consumer;
 
 import com.dungeon.master.config.KafkaConfig;
 import com.dungeon.master.kafka.event.DmResponseEvent;
+import com.dungeon.master.kafka.event.RagIndexEvent;
+import com.dungeon.master.kafka.producer.GameEventProducer;
 import com.dungeon.master.model.dto.DmResponseDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.enums.TurnMode;
 import com.dungeon.master.repository.GameSessionRepository;
-import com.dungeon.master.service.ai.RagService;
 import com.dungeon.master.service.game.TurnService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,9 +25,10 @@ public class DmResponseConsumer {
     private final SimpMessagingTemplate messagingTemplate;
     private final TurnService turnService;
     private final GameSessionRepository sessionRepository;
-    private final RagService ragService;
+    private final GameEventProducer eventProducer;
 
-    @KafkaListener(topics = KafkaConfig.TOPIC_DM_RESPONSE, groupId = "dnd-ai-ws-group")
+    @KafkaListener(topics = KafkaConfig.TOPIC_DM_RESPONSE, groupId = "dnd-ai-ws-group",
+            properties = { "auto.offset.reset=latest" })
     public void handleDmResponse(DmResponseEvent event) {
         log.info("Broadcasting DM response: session={}, turn={}",
                 event.sessionId(), event.turnNumber());
@@ -56,10 +58,11 @@ public class DmResponseConsumer {
         messagingTemplate.convertAndSend(
                 "/topic/game/" + event.sessionId() + "/dm", (Object) responseDto);
 
-        // Periodically fold recent history into the RAG index. Relocated here from
-        // TurnNextConsumer so it runs in every mode (collaborative/freeform emit no TURN_CHANGE).
+        // Periodically fold recent history into the RAG index. The trigger stays here (runs in every
+        // mode — collaborative/freeform emit no TURN_CHANGE), but the blocking embedding + pgvector
+        // write is offloaded onto game.rag.index so it never stalls this broadcast thread.
         if (event.turnNumber() > 0 && event.turnNumber() % 10 == 0) {
-            ragService.indexSessionHistory(event.sessionId());
+            eventProducer.sendRagIndex(new RagIndexEvent(event.sessionId(), event.turnNumber()));
         }
 
         log.info("DM response broadcast complete: session={}", event.sessionId());
