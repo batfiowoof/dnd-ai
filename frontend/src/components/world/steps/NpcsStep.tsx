@@ -1,10 +1,11 @@
 "use client";
 
 import { useWorldDraftStore } from "@/store/worldDraftStore";
-import { Field, controlClass, useToast } from "@/components/ui";
+import { Field, SegmentedControl, controlClass, useToast } from "@/components/ui";
 import { getErrorMessage } from "@/lib/errors";
 import { useGenerateNpcs } from "@/hooks/useWorldQueries";
 import { draftToContext, emptyNpc } from "@/lib/worldBuilder";
+import { BANDS, bandFromScore, centerOfBand, type DispositionBandKey } from "@/lib/dispositions";
 import SectionIntro from "@/components/world/shared/SectionIntro";
 import AiGenerateButton from "@/components/world/shared/AiGenerateButton";
 import RepeatableSection from "@/components/world/shared/RepeatableSection";
@@ -113,6 +114,16 @@ export default function NpcsStep() {
                 value={npc.location}
                 onChange={(v) => update({ location: v })}
               />
+              <Field
+                label="Attitude to party"
+                hint="Their starting feeling toward the party — the DM shifts it as the story unfolds."
+              >
+                <SegmentedControl<DispositionBandKey>
+                  value={bandFromScore(npc.disposition).key}
+                  onChange={(key) => update({ disposition: centerOfBand(key) })}
+                  options={BANDS.map((b) => ({ value: b.key, label: b.label }))}
+                />
+              </Field>
               <LabeledInput
                 label="Bond"
                 placeholder="Their hook or tie to the party / conflict"

@@ -36,6 +36,7 @@ public class DmAiService {
     private final ToolCallingManager toolCallingManager;
     private final DmRollTools dmRollTools;
     private final DmCampaignTools dmCampaignTools;
+    private final DmNpcTools dmNpcTools;
     private final RagService ragService;
     private final GameSessionRepository sessionRepository;
     private final EnemyRepository enemyRepository;
@@ -66,7 +67,10 @@ public class DmAiService {
 
         GameSession session = sessionRepository.findById(sessionId).orElse(null);
         // Travel narration must never roll checks — a check would suppress the encounter tag downstream.
-        boolean allowRolls = (session == null || session.isAllowAiRolls()) && travel == null;
+        boolean travelTurn = travel != null;
+        boolean allowRolls = (session == null || session.isAllowAiRolls()) && !travelTurn;
+        boolean allowDisposition = session != null && session.isAllowAiDisposition() && !travelTurn;
+        boolean toolsAllowed = allowRolls || allowDisposition;
 
         String combinedForContext = actions.stream()
                 .filter(c -> !c.passed())
@@ -83,14 +87,25 @@ public class DmAiService {
 
         StringBuilder assembled = new StringBuilder();
 
-        // No rolls allowed → plain streamed narration, no tools at all.
-        if (!allowRolls) {
+        // No tools enabled → plain streamed narration, no tools at all.
+        if (!toolsAllowed) {
             chatStreamer.streamAggregate(new Prompt(baseMessages), assembled, onChunk);
             return new NarrativeTurnResult(assembled.toString(), false);
         }
 
+        // Attach only the tool groups the session enables: roll/campaign tools with AI rolls, the
+        // NPC disposition tool with AI relationships — so either can work independently of the other.
+        List<Object> tools = new ArrayList<>();
+        if (allowRolls) {
+            tools.add(dmRollTools);
+            tools.add(dmCampaignTools);
+        }
+        if (allowDisposition) {
+            tools.add(dmNpcTools);
+        }
+
         ToolCallingChatOptions toolOpts = ToolCallingChatOptions.builder()
-                .toolCallbacks(ToolCallbacks.from(dmRollTools, dmCampaignTools))
+                .toolCallbacks(ToolCallbacks.from(tools.toArray()))
                 .toolContext(promptBuilder.buildToolContext(sessionId, session, spendInspiration))
                 .internalToolExecutionEnabled(false)
                 .build();
@@ -101,7 +116,10 @@ public class DmAiService {
         boolean rolled = false;
         if (resp != null && resp.hasToolCalls()) {
             ToolExecutionResult exec = toolCallingManager.executeToolCalls(decisionPrompt, resp);
-            rolled = true;
+            // A disposition tweak isn't a "roll" — only real rolls/milestones suppress the downstream
+            // encounter tag, so a soured NPC can still escalate to combat in the same turn.
+            rolled = resp.getResult().getOutput().getToolCalls().stream()
+                    .anyMatch(tc -> !"adjustDisposition".equals(tc.name()));
             // Narration round: tools disabled so it can only narrate the results, never roll again.
             ToolCallingChatOptions narrationOpts = ToolCallingChatOptions.builder()
                     .internalToolExecutionEnabled(false)

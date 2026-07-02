@@ -20,8 +20,10 @@ import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
 import com.dungeon.master.repository.GameSessionRepository;
 import com.dungeon.master.repository.PlayerRepository;
+import com.dungeon.master.model.dto.NpcStateDto;
 import com.dungeon.master.service.game.CheckModifierService;
 import com.dungeon.master.service.game.MonsterCatalog;
+import com.dungeon.master.service.game.NpcStateService;
 import com.dungeon.master.service.game.PlayerStateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +55,7 @@ public class DmPromptBuilder {
     private final EnemyRepository enemyRepository;
     private final CombatEncounterRepository encounterRepository;
     private final PlayerStateService playerStateService;
+    private final NpcStateService npcStateService;
     private final SrdContent srdContent;
     private final MonsterCatalog monsterCatalog;
 
@@ -266,8 +269,36 @@ public class DmPromptBuilder {
                 b.append("\n");
             }
         }
+        appendNpcRelationships(b, session);
+
         b.append("---\n\n");
         return b.toString();
+    }
+
+    /**
+     * When relationship tracking is on, list each NPC's current attitude toward the party and how it
+     * should colour their voice and what they'll do, plus how to change it. Gives the DM a consistent,
+     * evolving signal so an NPC who likes or hates the party reads that way turn to turn.
+     */
+    private void appendNpcRelationships(StringBuilder b, GameSession session) {
+        if (!session.isAllowAiDisposition()) {
+            return;
+        }
+        List<NpcStateDto> npcs = npcStateService.getStates(session.getId());
+        if (npcs.isEmpty()) {
+            return;
+        }
+        b.append("- NPC relationships: each NPC has an attitude toward the party. Let it drive their ")
+                .append("voice AND what they'll do — Hostile: cold, hostile or threatening; may refuse, ")
+                .append("deceive, or (if it comes to violence, and combat is allowed) attack. Unfriendly: ")
+                .append("curt, guarded, unhelpful; drives a hard bargain. Neutral: matter-of-fact. ")
+                .append("Friendly: warm, cooperative, shares rumours, offers fair deals. Devoted: loyal ")
+                .append("and generous — volunteers help, secrets, or resources. When the party's conduct ")
+                .append("GENUINELY changes how an NPC feels, call the adjustDisposition tool with their ")
+                .append("exact name and a signed delta, then narrate the shifted tone. Current attitudes:\n");
+        for (NpcStateDto n : npcs) {
+            b.append("    • ").append(n.name()).append(" — ").append(n.band()).append("\n");
+        }
     }
 
     private String toneGuidance(DmStyle style) {

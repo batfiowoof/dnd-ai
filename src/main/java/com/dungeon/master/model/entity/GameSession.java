@@ -108,6 +108,10 @@ public class GameSession {
     @Builder.Default
     private boolean allowAiRolls = true;
 
+    @Column(name = "allow_ai_disposition", nullable = false)
+    @Builder.Default
+    private boolean allowAiDisposition = true;
+
     @Column(name = "collab_window_seconds", nullable = false)
     @Builder.Default
     private int collabWindowSeconds = 10;

@@ -1,4 +1,4 @@
-import type { GameStateDto } from "./session";
+import type { GameStateDto, NpcState } from "./session";
 import type { PlayerStateEvent } from "./player";
 import type { CombatActionEvent, CombatLifecycleEvent } from "./combat";
 
@@ -107,6 +107,13 @@ export interface SystemMessageEvent {
   text: string;
 }
 
+/** Broadcast when an NPC's attitude toward the party changes (drives the relationship panel). */
+export interface NpcStateEvent {
+  type: "NPC_STATE";
+  sessionId: string;
+  state: NpcState;
+}
+
 export type WebSocketMessage =
   | DmResponseDto
   | SessionEvent
@@ -119,4 +126,5 @@ export type WebSocketMessage =
   | CombatActionEvent
   | CombatLifecycleEvent
   | RoundStatusEvent
-  | SystemMessageEvent;
+  | SystemMessageEvent
+  | NpcStateEvent;

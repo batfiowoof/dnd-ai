@@ -89,9 +89,12 @@ public class TravelMapService {
                     || r.subregions().isEmpty()) {
                 continue;
             }
+            // Subregion positions are never user-authored (the wizard edits only name/type/description),
+            // so ignore any coordinates and always auto-lay-out the local graph on the ring — this keeps
+            // the mini-map readable even when the AI clustered its coordinates.
             subsByRegion.putIfAbsent(canonical(r.name()), resolveGraph(toSpatials(r.subregions(),
                     WorldSubregion::name, WorldSubregion::type, WorldSubregion::description,
-                    WorldSubregion::x, WorldSubregion::y, WorldSubregion::connections)));
+                    s -> null, s -> null, WorldSubregion::connections)));
         }
 
         return overland.stream()

@@ -36,6 +36,8 @@ export interface GameStateDto {
   dmLength: DmLength;
   allowAiCombat: boolean;
   allowAiRolls: boolean;
+  /** Whether the AI DM may change how NPCs feel about the party during play. */
+  allowAiDisposition: boolean;
   collabWindowSeconds: number;
   /** End-of-session chronicle; null until the session is ended. */
   recap: string | null;
@@ -47,6 +49,17 @@ export interface GameStateDto {
   inGameMinutes: number;
   /** Travel — the last overland pace chosen. */
   travelPace: TravelPace;
+  /** Each NPC's current attitude toward the party (empty for free-text worlds). */
+  npcs: NpcState[];
+}
+
+/** An NPC's current attitude toward the party. Mirrors the backend NpcStateDto. */
+export interface NpcState {
+  name: string;
+  /** Signed attitude score in [-100, 100]; the band is derived for display. */
+  disposition: number;
+  /** Human-readable band label (e.g. "Friendly"). */
+  band: string;
 }
 
 /** An authored campaign milestone the DM can award once to level the whole party. */
@@ -69,6 +82,7 @@ export interface CreateSessionRequest {
   dmLength?: DmLength;
   allowAiCombat?: boolean;
   allowAiRolls?: boolean;
+  allowAiDisposition?: boolean;
   collabWindowSeconds?: number;
   milestones?: Milestone[];
   /** When set, this session continues a finished one — its recap is carried forward. */

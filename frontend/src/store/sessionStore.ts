@@ -6,6 +6,7 @@ import type {
   DiceRollEvent,
   DmResponseDto,
   GameStateDto,
+  NpcState,
   PlayerDto,
   PlayerRuntimeState,
   RoundStatusEvent,
@@ -110,6 +111,10 @@ interface SessionState {
   /** True between sending a travel action and the DM narration resolving (gates the map). */
   traveling: boolean;
 
+  /* ── NPC relationships ──────────────────────────────────────── */
+  /** Each NPC's current attitude toward the party (empty for free-text worlds). */
+  npcStates: NpcState[];
+
   /* server-state seeding (React Query → store) */
   hydrateFromGameState: (gs: GameStateDto) => void;
   seedLogsFromHistory: (history: TurnEventDto[]) => void;
@@ -169,6 +174,9 @@ interface SessionState {
     pace: TravelPace;
   }) => void;
 
+  /** NPC_STATE — an NPC's attitude toward the party changed; upsert it by name. */
+  applyNpcState: (state: NpcState) => void;
+
   /* collaborative round */
   applyRoundStatus: (evt: RoundStatusEvent) => void;
 
@@ -202,6 +210,7 @@ const initialState = {
   inGameMinutes: 0,
   travelPace: "NORMAL" as TravelPace,
   traveling: false,
+  npcStates: [] as NpcState[],
 };
 
 /** Sentinel playerId the backend uses for streamed combat-beat narration. */
@@ -223,6 +232,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       currentSubregion: gs.currentSubregion ?? null,
       inGameMinutes: gs.inGameMinutes ?? 0,
       travelPace: gs.travelPace ?? "NORMAL",
+      npcStates: gs.npcs ?? [],
     }),
 
   seedLogsFromHistory: (history) =>
@@ -578,6 +588,16 @@ export const useSessionStore = create<SessionState>((set) => ({
       inGameMinutes,
       travelPace: pace,
       traveling: false,
+    }),
+
+  applyNpcState: (state) =>
+    set((s) => {
+      const norm = (n: string) => n.trim().toLowerCase();
+      const idx = s.npcStates.findIndex((n) => norm(n.name) === norm(state.name));
+      if (idx === -1) return { npcStates: [...s.npcStates, state] };
+      const next = s.npcStates.slice();
+      next[idx] = state;
+      return { npcStates: next };
     }),
 
   /* ROUND_STATUS — live collaborative collection indicator. */

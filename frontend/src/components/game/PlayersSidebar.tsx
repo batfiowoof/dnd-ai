@@ -5,6 +5,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { D20Mark, HpBar, cn } from "@/components/ui";
 import AvatarTrigger from "@/components/game/AvatarTrigger";
 import InitiativeChip from "@/components/game/InitiativeChip";
+import NpcRelationsPanel from "@/components/game/NpcRelationsPanel";
 
 interface PlayersSidebarProps {
   /** Open a player's character sheet. */
@@ -100,6 +101,9 @@ export default function PlayersSidebar({ onOpenSheet }: PlayersSidebarProps) {
       <p className="mt-4 text-[10px] leading-relaxed text-text-muted">
         Hover a portrait for HP &amp; AC · click for the full sheet.
       </p>
+
+      {/* NPC relationships (hidden when the campaign tracks none) */}
+      <NpcRelationsPanel />
 
       {/* AI DM indicator in sidebar */}
       <div className="mt-auto border-t border-border pt-3">

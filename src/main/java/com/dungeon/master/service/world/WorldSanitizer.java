@@ -8,6 +8,7 @@ import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
 import com.dungeon.master.model.dto.WorldSubregion;
+import com.dungeon.master.model.enums.DispositionBand;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -91,8 +92,10 @@ public class WorldSanitizer {
             if (s == null || isBlank(s.name())) {
                 continue;
             }
+            // Subregion positions are never user-authored, so drop any coordinates (including clustered
+            // ones the AI may have invented) — the travel map always auto-lays-out the local mini-map.
             out.add(new WorldSubregion(s.name().trim(), trimOrEmpty(s.type()), trimOrEmpty(s.description()),
-                    clampCoord(s.x()), clampCoord(s.y()), cleanConnections(s.connections())));
+                    null, null, cleanConnections(s.connections())));
         }
         return out;
     }
@@ -156,7 +159,8 @@ public class WorldSanitizer {
             }
             out.add(new WorldNpc(n.name().trim(), trimOrEmpty(n.race()), trimOrEmpty(n.role()),
                     trimOrEmpty(n.region()), trimOrEmpty(n.subregion()), trimOrEmpty(n.location()),
-                    trimOrEmpty(n.bond()), trimOrEmpty(n.description())));
+                    trimOrEmpty(n.bond()), trimOrEmpty(n.description()),
+                    DispositionBand.clamp(n.disposition() == null ? 0 : n.disposition())));
         }
         return out;
     }

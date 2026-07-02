@@ -50,6 +50,8 @@ export interface WorldNpc {
   location: string;
   bond: string;
   description: string;
+  /** Authored starting attitude toward the party as a signed score in [-100, 100] (0 = Neutral). */
+  disposition?: number;
 }
 
 /** One weapon-style attack on a custom monster (mirrors the backend MonsterAttack). */

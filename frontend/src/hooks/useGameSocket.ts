@@ -176,6 +176,11 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
     case "ROUND_STATUS":
       s.applyRoundStatus(data as unknown as RoundStatusEvent);
       break;
+    case "NPC_STATE":
+      s.applyNpcState(
+        (data as unknown as import("@/types").NpcStateEvent).state
+      );
+      break;
     case "LOCATION_CHANGED":
       s.applyLocationChanged({
         currentRegion: String(data.currentRegion),

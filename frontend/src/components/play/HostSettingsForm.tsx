@@ -25,6 +25,8 @@ interface HostSettingsFormProps {
   setAllowAiCombat: (v: boolean) => void;
   allowAiRolls: boolean;
   setAllowAiRolls: (v: boolean) => void;
+  allowAiDisposition: boolean;
+  setAllowAiDisposition: (v: boolean) => void;
 }
 
 /**
@@ -48,6 +50,8 @@ export default function HostSettingsForm({
   setAllowAiCombat,
   allowAiRolls,
   setAllowAiRolls,
+  allowAiDisposition,
+  setAllowAiDisposition,
 }: HostSettingsFormProps) {
   return (
     <>
@@ -180,6 +184,12 @@ export default function HostSettingsForm({
           hint="Lets the DM call for ability checks on uncertain actions."
           checked={allowAiRolls}
           onChange={setAllowAiRolls}
+        />
+        <Switch
+          label="DM can adjust NPC relationships"
+          hint="Lets the DM change how NPCs feel about the party as the story unfolds."
+          checked={allowAiDisposition}
+          onChange={setAllowAiDisposition}
         />
       </div>
     </>

@@ -82,6 +82,7 @@ function PlayContent() {
   const [dmLength, setDmLength] = useState<DmLength>("STANDARD");
   const [allowAiCombat, setAllowAiCombat] = useState(true);
   const [allowAiRolls, setAllowAiRolls] = useState(true);
+  const [allowAiDisposition, setAllowAiDisposition] = useState(true);
   const [collabWindowSeconds, setCollabWindowSeconds] = useState(10);
 
   // Default-select the first character once the list loads.
@@ -140,6 +141,7 @@ function PlayContent() {
         dmLength,
         allowAiCombat,
         allowAiRolls,
+        allowAiDisposition,
         collabWindowSeconds,
         milestones: getMilestones(),
         continuedFromSessionId,
@@ -301,6 +303,8 @@ function PlayContent() {
               setAllowAiCombat={setAllowAiCombat}
               allowAiRolls={allowAiRolls}
               setAllowAiRolls={setAllowAiRolls}
+              allowAiDisposition={allowAiDisposition}
+              setAllowAiDisposition={setAllowAiDisposition}
             />
 
             <Button

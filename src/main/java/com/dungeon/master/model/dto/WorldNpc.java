@@ -14,7 +14,9 @@ package com.dungeon.master.model.dto;
  * @param location    an optional finer "specific spot" free-text note (kept for back-compat)
  * @param bond        their hook/relationship to the party or central conflict
  * @param description optional extra flavour
+ * @param disposition the authored starting attitude toward the party as a signed score in [-100, 100]
+ *                    (null/absent → 0 = Neutral); seeds the per-session runtime disposition
  */
 public record WorldNpc(String name, String race, String role, String region, String subregion,
-                       String location, String bond, String description) {
+                       String location, String bond, String description, Integer disposition) {
 }

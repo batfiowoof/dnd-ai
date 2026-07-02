@@ -63,6 +63,7 @@ public class GameSessionService {
     private final WorldSanitizer worldSanitizer;
     private final WorldService worldService;
     private final WorldRagIndexer worldRagIndexer;
+    private final NpcStateService npcStateService;
 
     @Transactional
     public CreateSessionResponse createSession(CreateSessionRequest request, String username) {
@@ -104,6 +105,7 @@ public class GameSessionService {
                 .dmLength(request.dmLength() == null ? DmLength.STANDARD : request.dmLength())
                 .allowAiCombat(request.allowAiCombat() == null || request.allowAiCombat())
                 .allowAiRolls(request.allowAiRolls() == null || request.allowAiRolls())
+                .allowAiDisposition(request.allowAiDisposition() == null || request.allowAiDisposition())
                 .collabWindowSeconds(clamp(request.collabWindowSeconds() == null ? 10
                         : request.collabWindowSeconds(), MIN_COLLAB_WINDOW, MAX_COLLAB_WINDOW))
                 .milestones(milestones)
@@ -118,6 +120,8 @@ public class GameSessionService {
         // consistent via RAG. Best-effort — never blocks session creation.
         if (world != null) {
             worldRagIndexer.indexWorldForSession(session.getId(), world);
+            // Seed each NPC's starting disposition toward the party from its authored baseline.
+            npcStateService.seedForSession(session.getId(), world);
         }
 
         Character character = characterRepository.findByIdAndOwnerUsername(request.characterId(), username)
@@ -282,12 +286,14 @@ public class GameSessionService {
                 session.getDmLength(),
                 session.isAllowAiCombat(),
                 session.isAllowAiRolls(),
+                session.isAllowAiDisposition(),
                 session.getCollabWindowSeconds(),
                 session.getRecap(),
                 session.getCurrentRegion(),
                 session.getCurrentSubregion(),
                 session.getInGameMinutes(),
-                session.getTravelPace());
+                session.getTravelPace(),
+                npcStateService.getStates(sessionId));
     }
 
     public List<PlayerDto> getPlayers(UUID sessionId) {

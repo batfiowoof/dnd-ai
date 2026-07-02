@@ -93,6 +93,7 @@ export const emptyNpc = (): WorldNpc => ({
   location: "",
   bond: "",
   description: "",
+  disposition: 0,
 });
 
 export const emptyAttack = (): MonsterAttack => ({
@@ -147,12 +148,13 @@ export function worldToDraft(world: WorldDto): WorldDraftData {
     magicLevel: world.magicLevel ?? "",
     regions: (world.regions ?? []).map((r) => ({ ...r, subregions: r.subregions ?? [] })),
     factions: world.factions ?? [],
-    // Back-fill structured location fields for worlds authored before subregions existed.
+    // Back-fill structured location + disposition fields for worlds authored before they existed.
     npcs: (world.npcs ?? []).map((n) => ({
       ...n,
       region: n.region ?? "",
       subregion: n.subregion ?? "",
       location: n.location ?? "",
+      disposition: n.disposition ?? 0,
     })),
     customMonsters: (world.customMonsters ?? []).map((m) => ({
       ...m,

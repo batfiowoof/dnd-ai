@@ -32,6 +32,7 @@ public record CreateSessionRequest(
         DmLength dmLength,
         Boolean allowAiCombat,
         Boolean allowAiRolls,
+        Boolean allowAiDisposition,
         Integer collabWindowSeconds,
         List<Milestone> milestones,
         /**

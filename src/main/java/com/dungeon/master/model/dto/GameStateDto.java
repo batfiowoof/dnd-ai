@@ -26,6 +26,8 @@ public record GameStateDto(
         DmLength dmLength,
         boolean allowAiCombat,
         boolean allowAiRolls,
+        /** Whether the AI DM may change how NPCs feel about the party during play. */
+        boolean allowAiDisposition,
         int collabWindowSeconds,
         /** End-of-session chronicle; null until the session is ended. Rendered on the post-game screen. */
         String recap,
@@ -36,6 +38,8 @@ public record GameStateDto(
         /** Travel — elapsed in-game time in minutes (Day N • HH:MM). */
         long inGameMinutes,
         /** Travel — the last overland pace chosen. */
-        TravelPace travelPace
+        TravelPace travelPace,
+        /** Each NPC's current attitude toward the party (empty for free-text worlds). */
+        List<NpcStateDto> npcs
 ) {
 }
