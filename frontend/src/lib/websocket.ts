@@ -91,11 +91,14 @@ export function sendAction(
   });
 }
 
-/** Set out to a route-connected location at the given pace (out-of-combat travel). */
+/**
+ * Set out to a route-connected location at the given pace (out-of-combat travel). Pass
+ * {@code destinationSubregion} for a local hop between subregions within the current region.
+ */
 export function sendTravel(
   client: Client,
   sessionId: string,
-  payload: { destinationRegion: string; pace: TravelPace }
+  payload: { destinationRegion?: string; destinationSubregion?: string; pace: TravelPace }
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/travel`,

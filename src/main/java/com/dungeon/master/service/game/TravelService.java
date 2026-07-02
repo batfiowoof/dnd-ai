@@ -45,6 +45,10 @@ public class TravelService {
     /** Base chance of a hostile encounter per leg, before pace and trip-length scaling. */
     private static final double BASE_ENCOUNTER_CHANCE = 0.12;
     private static final double MAX_ENCOUNTER_CHANCE = 0.6;
+    /** In-game minutes per unit of local (within-region) map distance — a subregion hop is a quick trip. */
+    private static final double LOCAL_MINUTES_PER_UNIT = 2.0;
+    /** Floor for any local move so even neighbouring subregions cost a little time. */
+    private static final long LOCAL_MIN_MINUTES = 15;
 
     private final GameSessionRepository sessionRepository;
     private final PlayerRepository playerRepository;
@@ -53,8 +57,14 @@ public class TravelService {
     private final TurnService turnService;
     private final SimpMessagingTemplate messagingTemplate;
 
+    /**
+     * Move the party. When {@code destinationSubregion} is set this is a <em>local</em> hop between
+     * subregions within the current region (quick, no encounter); otherwise it's an overland
+     * region-to-region journey (5e travel time + possible encounter, clearing any subregion on arrival).
+     */
     @Transactional
-    public void travel(UUID sessionId, String username, String destinationRegion, TravelPace requestedPace) {
+    public void travel(UUID sessionId, String username, String destinationRegion,
+                       String destinationSubregion, TravelPace requestedPace) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session not found: " + sessionId));
 
@@ -63,9 +73,6 @@ public class TravelService {
         }
         if (combatEncounterRepository.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE).isPresent()) {
             throw new IllegalStateException("You can't travel in the middle of combat.");
-        }
-        if (destinationRegion == null || destinationRegion.isBlank()) {
-            throw new IllegalArgumentException("Choose a destination to travel to.");
         }
 
         Player player = playerRepository.findBySessionIdAndUsername(sessionId, username)
@@ -77,11 +84,26 @@ public class TravelService {
             throw new IllegalStateException("This adventure has no travel map.");
         }
 
+        if (destinationSubregion != null && !destinationSubregion.isBlank()) {
+            travelLocal(session, player, nodes, destinationSubregion);
+        } else {
+            travelOverland(session, player, nodes, destinationRegion, requestedPace);
+        }
+    }
+
+    /** Overland region-to-region travel: advances the clock, may spring an encounter, resets subregion. */
+    private void travelOverland(GameSession session, Player player, List<RegionNode> nodes,
+                                String destinationRegion, TravelPace requestedPace) {
+        if (destinationRegion == null || destinationRegion.isBlank()) {
+            throw new IllegalArgumentException("Choose a destination to travel to.");
+        }
+
         RegionNode destination = findNode(nodes, destinationRegion)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "There's no location called \"" + destinationRegion + "\" on the map."));
 
         String fromName = session.getCurrentRegion();
+        String fromSubregion = session.getCurrentSubregion();
         RegionNode from = fromName == null ? null : findNode(nodes, fromName).orElse(null);
 
         if (destination.name().equalsIgnoreCase(fromName)) {
@@ -102,29 +124,88 @@ public class TravelService {
 
         boolean encounter = session.isAllowAiCombat() && rollEncounter(pace, travelDays);
 
-        // Persist the new location, pace, and advanced clock.
+        // Persist the new location, pace, and advanced clock. Arriving in a region drops any subregion.
         session.setCurrentRegion(destination.name());
+        session.setCurrentSubregion(null);
         session.setTravelPace(pace);
         session.setInGameMinutes(session.getInGameMinutes() + elapsedMinutes);
         sessionRepository.save(session);
 
         log.info("Travel: session={}, {} -> {}, pace={}, days={}, encounter={}",
-                sessionId, fromName, destination.name(), pace, String.format(Locale.ROOT, "%.1f", travelDays),
-                encounter);
+                session.getId(), fromName, destination.name(), pace,
+                String.format(Locale.ROOT, "%.1f", travelDays), encounter);
 
-        // Tell every client where the party now is (updates the map pin + in-game clock immediately).
-        messagingTemplate.convertAndSend("/topic/game/" + sessionId, (Object) Map.of(
-                "type", "LOCATION_CHANGED",
-                "sessionId", sessionId.toString(),
-                "currentRegion", destination.name(),
-                "fromRegion", fromName == null ? "" : fromName,
-                "inGameMinutes", (Object) session.getInGameMinutes(),
-                "pace", pace.name()));
+        broadcastLocation(session, destination.name(), "", fromName, fromSubregion, pace);
 
         // Dispatch the DM narration of the journey (and combat, if the leg was ambushed).
         String action = travelAction(from, destination, pace, durationText);
-        TravelContext travel = new TravelContext(fromName, destination.name(), durationText, encounter);
-        turnService.dispatchTravelTurn(sessionId, player.getId(), player.getCharacterName(), action, travel);
+        TravelContext travel = new TravelContext(fromName, destination.name(), null, null, false,
+                durationText, encounter);
+        turnService.dispatchTravelTurn(session.getId(), player.getId(), player.getCharacterName(), action, travel);
+    }
+
+    /** Local within-region travel between subregions: a quick hop, minutes not days, never an encounter. */
+    private void travelLocal(GameSession session, Player player, List<RegionNode> nodes,
+                             String destinationSubregion) {
+        String regionName = session.getCurrentRegion();
+        if (regionName == null || regionName.isBlank()) {
+            throw new IllegalStateException("The party has to arrive in a region before exploring within it.");
+        }
+        RegionNode region = findNode(nodes, regionName)
+                .orElseThrow(() -> new IllegalStateException("The party's current region isn't on the map."));
+        List<RegionNode> subs = region.subregions();
+        if (subs == null || subs.isEmpty()) {
+            throw new IllegalStateException(region.name() + " has no places to explore within it.");
+        }
+
+        RegionNode destination = findNode(subs, destinationSubregion)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "There's nowhere called \"" + destinationSubregion + "\" in " + region.name() + "."));
+
+        String fromSubName = session.getCurrentSubregion();
+        RegionNode fromSub = fromSubName == null ? null : findNode(subs, fromSubName).orElse(null);
+
+        if (destination.name().equalsIgnoreCase(fromSubName)) {
+            throw new IllegalArgumentException("The party is already at " + destination.name() + ".");
+        }
+        // Within a region a local route must exist (unless the party hasn't picked a spot in it yet).
+        if (fromSub != null && !isConnected(fromSub, destination.name())) {
+            throw new IllegalArgumentException(
+                    "There's no direct way from " + fromSub.name() + " to " + destination.name() + ".");
+        }
+
+        long elapsedMinutes = fromSub == null ? 0
+                : Math.max(LOCAL_MIN_MINUTES, Math.round(distance(fromSub, destination) * LOCAL_MINUTES_PER_UNIT));
+        String durationText = elapsedMinutes <= 0 ? "moments" : "a short while";
+
+        session.setCurrentSubregion(destination.name());
+        session.setInGameMinutes(session.getInGameMinutes() + elapsedMinutes);
+        sessionRepository.save(session);
+
+        log.info("Local travel: session={}, region={}, {} -> {}, minutes={}",
+                session.getId(), region.name(), fromSubName, destination.name(), elapsedMinutes);
+
+        broadcastLocation(session, region.name(), destination.name(), region.name(), fromSubName,
+                session.getTravelPace());
+
+        String action = localAction(region, fromSub, destination);
+        TravelContext travel = new TravelContext(region.name(), region.name(), fromSubName, destination.name(),
+                true, durationText, false);
+        turnService.dispatchTravelTurn(session.getId(), player.getId(), player.getCharacterName(), action, travel);
+    }
+
+    /** Broadcast the party's new position so every client updates its map pin and in-game clock at once. */
+    private void broadcastLocation(GameSession session, String currentRegion, String currentSubregion,
+                                   String fromRegion, String fromSubregion, TravelPace pace) {
+        messagingTemplate.convertAndSend("/topic/game/" + session.getId(), (Object) Map.of(
+                "type", "LOCATION_CHANGED",
+                "sessionId", session.getId().toString(),
+                "currentRegion", currentRegion,
+                "currentSubregion", currentSubregion == null ? "" : currentSubregion,
+                "fromRegion", fromRegion == null ? "" : fromRegion,
+                "fromSubregion", fromSubregion == null ? "" : fromSubregion,
+                "inGameMinutes", (Object) session.getInGameMinutes(),
+                "pace", pace.name()));
     }
 
     /** Straight-line distance between two nodes on the normalized 0–100 canvas. */
@@ -167,5 +248,12 @@ public class TravelService {
         String origin = from == null ? "" : "from " + from.name() + " ";
         return "The party travels " + origin + "to " + to.name()
                 + " at " + pace.label() + " pace (" + durationText + ").";
+    }
+
+    /** The player-facing action line for a short local move between subregions within a region. */
+    private static String localAction(RegionNode region, RegionNode fromSub, RegionNode toSub) {
+        String origin = fromSub == null ? "" : "from " + fromSub.name() + " ";
+        return "The party makes their way " + origin + "to " + toSub.name()
+                + " within " + region.name() + ".";
     }
 }

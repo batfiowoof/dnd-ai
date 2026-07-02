@@ -9,10 +9,12 @@ package com.dungeon.master.model.dto;
  * @param name        the NPC's name
  * @param race        their species/ancestry
  * @param role        what they do (e.g. "Harbourmaster", "Cult leader")
- * @param location    where they are usually found (ideally a region name)
+ * @param region      the region they belong to (should match a {@link WorldRegion} name; may be null)
+ * @param subregion   the subregion within that region they're found in (may be null)
+ * @param location    an optional finer "specific spot" free-text note (kept for back-compat)
  * @param bond        their hook/relationship to the party or central conflict
  * @param description optional extra flavour
  */
-public record WorldNpc(String name, String race, String role, String location, String bond,
-                       String description) {
+public record WorldNpc(String name, String race, String role, String region, String subregion,
+                       String location, String bond, String description) {
 }

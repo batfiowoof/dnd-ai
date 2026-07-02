@@ -179,6 +179,7 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
     case "LOCATION_CHANGED":
       s.applyLocationChanged({
         currentRegion: String(data.currentRegion),
+        currentSubregion: String(data.currentSubregion ?? ""),
         inGameMinutes: Number(data.inGameMinutes),
         pace: (data.pace as import("@/types").TravelPace) ?? "NORMAL",
       });

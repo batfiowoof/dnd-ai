@@ -285,6 +285,7 @@ public class GameSessionService {
                 session.getCollabWindowSeconds(),
                 session.getRecap(),
                 session.getCurrentRegion(),
+                session.getCurrentSubregion(),
                 session.getInGameMinutes(),
                 session.getTravelPace());
     }

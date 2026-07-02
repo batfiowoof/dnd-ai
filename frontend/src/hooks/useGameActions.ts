@@ -59,6 +59,9 @@ export function useGameActions(
       travel: run((c, destinationRegion: string, pace: TravelPace) =>
         sendTravel(c, sessionId, { destinationRegion, pace })
       ),
+      travelLocal: run((c, destinationSubregion: string, pace: TravelPace) =>
+        sendTravel(c, sessionId, { destinationSubregion, pace })
+      ),
       pass: run((c) => sendPass(c, sessionId)),
       roll: run((c, notation: string, label: string) =>
         sendRoll(c, sessionId, { label, notation })

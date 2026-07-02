@@ -101,6 +101,8 @@ interface SessionState {
   /* ── Travel ─────────────────────────────────────────────────── */
   /** The party's current location name (a World region), or null if unplaced / no map. */
   currentRegion: string | null;
+  /** The subregion within the current region the party is at, or null when at the region generally. */
+  currentSubregion: string | null;
   /** Elapsed in-game time in minutes (Day N • HH:MM). */
   inGameMinutes: number;
   /** The last overland pace chosen. */
@@ -162,6 +164,7 @@ interface SessionState {
   /** LOCATION_CHANGED — the party has arrived somewhere new; move the pin + advance the clock. */
   applyLocationChanged: (args: {
     currentRegion: string;
+    currentSubregion: string;
     inGameMinutes: number;
     pace: TravelPace;
   }) => void;
@@ -195,6 +198,7 @@ const initialState = {
   recap: null as string | null,
   recapPending: false,
   currentRegion: null as string | null,
+  currentSubregion: null as string | null,
   inGameMinutes: 0,
   travelPace: "NORMAL" as TravelPace,
   traveling: false,
@@ -216,6 +220,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       turnMode: gs.turnMode ?? "COLLABORATIVE",
       recap: gs.recap ?? null,
       currentRegion: gs.currentRegion ?? null,
+      currentSubregion: gs.currentSubregion ?? null,
       inGameMinutes: gs.inGameMinutes ?? 0,
       travelPace: gs.travelPace ?? "NORMAL",
     }),
@@ -566,8 +571,14 @@ export const useSessionStore = create<SessionState>((set) => ({
   /* ── Travel ─────────────────────────────────────────────────── */
   beginTravel: () => set({ traveling: true }),
 
-  applyLocationChanged: ({ currentRegion, inGameMinutes, pace }) =>
-    set({ currentRegion, inGameMinutes, travelPace: pace, traveling: false }),
+  applyLocationChanged: ({ currentRegion, currentSubregion, inGameMinutes, pace }) =>
+    set({
+      currentRegion,
+      currentSubregion: currentSubregion || null,
+      inGameMinutes,
+      travelPace: pace,
+      traveling: false,
+    }),
 
   /* ROUND_STATUS — live collaborative collection indicator. */
   applyRoundStatus: (evt) =>

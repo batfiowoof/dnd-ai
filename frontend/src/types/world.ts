@@ -1,5 +1,18 @@
 import type { Milestone } from "./session";
 
+/** A location inside a region the party can move between locally (mirrors the backend WorldSubregion). */
+export interface WorldSubregion {
+  name: string;
+  type: string;
+  description: string;
+  /** Local mini-map — normalized x in [0, 100]; null/undefined → auto-laid-out. */
+  x?: number | null;
+  /** Local mini-map — normalized y in [0, 100]; null/undefined → auto-laid-out. */
+  y?: number | null;
+  /** Local mini-map — names of sibling subregions this one has a direct local path to (undirected). */
+  connections?: string[];
+}
+
 /** A notable location that matters to the campaign. */
 export interface WorldRegion {
   name: string;
@@ -11,6 +24,8 @@ export interface WorldRegion {
   y?: number | null;
   /** Travel map — names of regions this one has a direct route to (undirected). */
   connections?: string[];
+  /** Finer locations inside this region the party can move between locally. */
+  subregions?: WorldSubregion[];
 }
 
 /** A faction with the three 5E levers: a goal, a resource, and a pressure to act. */
@@ -27,6 +42,11 @@ export interface WorldNpc {
   name: string;
   race: string;
   role: string;
+  /** The region this NPC belongs to (matches a WorldRegion name), or "" if none. */
+  region: string;
+  /** The subregion within that region they're found in, or "" if none. */
+  subregion: string;
+  /** Optional finer "specific spot" free-text note (kept for back-compat). */
   location: string;
   bond: string;
   description: string;
@@ -109,6 +129,8 @@ export interface WorldGenerateRequest {
   tone?: string;
   magicLevel?: string;
   instruction?: string;
+  /** Already-authored geography (with subregions) so NPC/subregion generation matches real names. */
+  regions?: WorldRegion[];
 }
 
 /** AI-generated draft of the Overview step. */

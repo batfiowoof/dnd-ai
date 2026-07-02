@@ -76,7 +76,8 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
         log.info("WebSocket travel received: session={}, player={}, to={}",
                 sessionId, username, request.destinationRegion());
         try {
-            travelService.travel(sessionId, username, request.destinationRegion(), request.pace());
+            travelService.travel(sessionId, username, request.destinationRegion(),
+                    request.destinationSubregion(), request.pace());
         } catch (Exception e) {
             log.error("Error processing travel: session={}, player={}", sessionId, username, e);
             sendError(username, e);

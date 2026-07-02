@@ -7,6 +7,7 @@ import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
+import com.dungeon.master.model.dto.WorldSubregion;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -70,7 +71,28 @@ public class WorldSanitizer {
                 continue;
             }
             out.add(new WorldRegion(r.name().trim(), trimOrEmpty(r.type()), trimOrEmpty(r.description()),
-                    clampCoord(r.x()), clampCoord(r.y()), cleanConnections(r.connections())));
+                    clampCoord(r.x()), clampCoord(r.y()), cleanConnections(r.connections()),
+                    cleanSubregions(r.subregions())));
+        }
+        return out;
+    }
+
+    /**
+     * Drop subregions without a name; trim, clamp coords, and de-dup local route names — the same
+     * treatment as regions, scoped within a parent. Local connections are likewise left un-validated
+     * against the sibling set (resolved when the region's mini-map is built).
+     */
+    public List<WorldSubregion> cleanSubregions(List<WorldSubregion> subregions) {
+        List<WorldSubregion> out = new ArrayList<>();
+        if (subregions == null) {
+            return out;
+        }
+        for (WorldSubregion s : subregions) {
+            if (s == null || isBlank(s.name())) {
+                continue;
+            }
+            out.add(new WorldSubregion(s.name().trim(), trimOrEmpty(s.type()), trimOrEmpty(s.description()),
+                    clampCoord(s.x()), clampCoord(s.y()), cleanConnections(s.connections())));
         }
         return out;
     }
@@ -118,7 +140,11 @@ public class WorldSanitizer {
         return out;
     }
 
-    /** Drop NPCs without a name; trim the rest. */
+    /**
+     * Drop NPCs without a name; trim the rest. The structured {@code region}/{@code subregion} tags are
+     * trimmed but NOT validated against the world's region set here (same rationale as region
+     * connections — an NPC may reference a region added in the same save).
+     */
     public List<WorldNpc> cleanNpcs(List<WorldNpc> npcs) {
         List<WorldNpc> out = new ArrayList<>();
         if (npcs == null) {
@@ -129,7 +155,8 @@ public class WorldSanitizer {
                 continue;
             }
             out.add(new WorldNpc(n.name().trim(), trimOrEmpty(n.race()), trimOrEmpty(n.role()),
-                    trimOrEmpty(n.location()), trimOrEmpty(n.bond()), trimOrEmpty(n.description())));
+                    trimOrEmpty(n.region()), trimOrEmpty(n.subregion()), trimOrEmpty(n.location()),
+                    trimOrEmpty(n.bond()), trimOrEmpty(n.description())));
         }
         return out;
     }

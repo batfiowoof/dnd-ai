@@ -150,6 +150,11 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     actions.travel(destinationRegion, pace);
   }
 
+  function handleTravelLocal(destinationSubregion: string, pace: TravelPace) {
+    useSessionStore.getState().beginTravel();
+    actions.travelLocal(destinationSubregion, pace);
+  }
+
   /* ── lobby actions ──────────────────────────────────────────── */
   async function handleStart() {
     if (!username) return;
@@ -398,6 +403,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                   map={travelMap}
                   connected={connected}
                   onTravel={handleTravel}
+                  onTravelLocal={handleTravelLocal}
                 />
               )
             }

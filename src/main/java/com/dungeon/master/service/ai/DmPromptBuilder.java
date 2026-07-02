@@ -124,6 +124,9 @@ public class DmPromptBuilder {
         if (travel == null) {
             return "";
         }
+        if (travel.local()) {
+            return localTravelDirective(travel);
+        }
         StringBuilder b = new StringBuilder("\n\n=== Overland travel ===\n");
         b.append("The party is undertaking overland travel");
         if (travel.fromRegion() != null && !travel.fromRegion().isBlank()) {
@@ -143,6 +146,24 @@ public class DmPromptBuilder {
         } else {
             b.append("The journey passes without a fight — do not start combat and do not request rolls.");
         }
+        return b.toString();
+    }
+
+    /**
+     * A local-move directive: the party crosses between spots within a single region (a short hop, not a
+     * journey). Narrate the brief transition and arrival at the new spot; never start combat or request
+     * rolls for a local move.
+     */
+    private String localTravelDirective(com.dungeon.master.model.dto.TravelContext travel) {
+        StringBuilder b = new StringBuilder("\n\n=== Local move ===\n");
+        b.append("Within ").append(travel.toRegion()).append(", the party heads");
+        if (travel.fromSubregion() != null && !travel.fromSubregion().isBlank()) {
+            b.append(" from ").append(travel.fromSubregion());
+        }
+        b.append(" to ").append(travel.toSubregion())
+                .append(". Narrate this short local move and their arrival — keep it brief, refer to ")
+                .append("characters only by their exact names, take no actions on their behalf, and end by ")
+                .append("inviting them to act. Do not start combat and do not request any rolls this turn.");
         return b.toString();
     }
 
@@ -181,8 +202,14 @@ public class DmPromptBuilder {
         b.append("- Length: ").append(lengthGuidance(session.getDmLength())).append("\n");
         b.append("- Difficulty: ").append(difficultyGuidance(session.getDifficulty())).append("\n");
         if (session.getCurrentRegion() != null && !session.getCurrentRegion().isBlank()) {
-            b.append("- Current location: the party is at ").append(session.getCurrentRegion().trim())
-                    .append(". Keep the scene consistent with where they are.\n");
+            b.append("- Current location: the party is at ");
+            if (session.getCurrentSubregion() != null && !session.getCurrentSubregion().isBlank()) {
+                b.append(session.getCurrentSubregion().trim()).append(", in ")
+                        .append(session.getCurrentRegion().trim());
+            } else {
+                b.append(session.getCurrentRegion().trim());
+            }
+            b.append(". Keep the scene consistent with where they are.\n");
         }
         if (session.isAllowAiRolls()) {
             b.append("- Ability checks: when a narrative action's outcome is genuinely uncertain ")

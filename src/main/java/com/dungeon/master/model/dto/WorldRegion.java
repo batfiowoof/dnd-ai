@@ -19,12 +19,20 @@ import java.util.List;
  * @param x           normalized map x-coordinate in [0, 100] (null when unplaced)
  * @param y           normalized map y-coordinate in [0, 100] (null when unplaced)
  * @param connections names of regions directly reachable from here by a travel route
+ * @param subregions  finer locations inside this region the party can move between locally (may be null)
  */
 public record WorldRegion(String name, String type, String description,
-                          Double x, Double y, List<String> connections) {
+                          Double x, Double y, List<String> connections,
+                          List<WorldSubregion> subregions) {
 
     /** Back-compat convenience for callers that don't carry map data (tests, legacy construction). */
     public WorldRegion(String name, String type, String description) {
-        this(name, type, description, null, null, null);
+        this(name, type, description, null, null, null, null);
+    }
+
+    /** Back-compat convenience for callers that carry the overland graph but no subregions. */
+    public WorldRegion(String name, String type, String description,
+                       Double x, Double y, List<String> connections) {
+        this(name, type, description, x, y, connections, null);
     }
 }

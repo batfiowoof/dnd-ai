@@ -138,6 +138,11 @@ public class GameSession {
     @Column(name = "current_region")
     private String currentRegion;
 
+    /** Travel — the subregion within {@link #currentRegion} the party is at; null when at the region
+     * generally. Cleared on overland travel to a new region; set by local (intra-region) moves. */
+    @Column(name = "current_subregion")
+    private String currentSubregion;
+
     /** Travel — elapsed in-game time in minutes, advanced by each travel leg (Day N • HH:MM). */
     @Column(name = "in_game_minutes", nullable = false)
     @Builder.Default

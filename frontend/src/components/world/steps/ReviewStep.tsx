@@ -7,8 +7,14 @@ import SectionIntro from "@/components/world/shared/SectionIntro";
 export default function ReviewStep() {
   const draft = useWorldDraftStore();
 
+  const subregionCount = draft.regions.reduce(
+    (sum, r) => sum + (r.subregions?.length ?? 0),
+    0
+  );
+
   const counts: { label: string; value: number }[] = [
     { label: "Regions", value: draft.regions.length },
+    { label: "Subregions", value: subregionCount },
     { label: "Factions", value: draft.factions.length },
     { label: "NPCs", value: draft.npcs.length },
     { label: "Monsters", value: draft.customMonsters.length },
@@ -51,7 +57,7 @@ export default function ReviewStep() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {counts.map((c) => (
             <div
               key={c.label}

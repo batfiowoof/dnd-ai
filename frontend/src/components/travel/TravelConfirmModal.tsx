@@ -2,7 +2,7 @@
 
 import type { RegionNode, TravelPace } from "@/types";
 import { Button, Modal, SegmentedControl } from "@/components/ui";
-import { PACE_BLURB, PACE_OPTIONS, estimateTravel } from "@/lib/travel";
+import { PACE_BLURB, PACE_OPTIONS, estimateTravel, estimateLocalTravel } from "@/lib/travel";
 
 interface TravelConfirmModalProps {
   open: boolean;
@@ -16,6 +16,8 @@ interface TravelConfirmModalProps {
   onClose: () => void;
   /** WebSocket connectivity — the confirm is disabled while offline. */
   connected: boolean;
+  /** True when this is a local hop between subregions (minutes, no encounter, no pace tradeoff). */
+  local?: boolean;
 }
 
 /** Confirms a travel leg: shows the destination, route, computed time, and a pace picker. */
@@ -28,17 +30,20 @@ export default function TravelConfirmModal({
   onConfirm,
   onClose,
   connected,
+  local = false,
 }: TravelConfirmModalProps) {
   if (!destination) return null;
 
-  const estimate = estimateTravel(from, destination, pace);
+  const estimate = local
+    ? estimateLocalTravel(from, destination)
+    : estimateTravel(from, destination, pace);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       size="sm"
-      title={`Travel to ${destination.name}`}
+      title={local ? `Head to ${destination.name}` : `Travel to ${destination.name}`}
     >
       <div className="space-y-4">
         {destination.type && (
@@ -69,18 +74,24 @@ export default function TravelConfirmModal({
           <span className="tabular text-gold">{estimate.durationText}</span>
         </div>
 
-        {/* Pace */}
-        <div>
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Pace
+        {/* Pace (overland only — a local hop has no march pace or ambush risk) */}
+        {local ? (
+          <p className="text-xs italic text-text-muted">
+            A short move within the area — no wilderness encounter.
           </p>
-          <SegmentedControl<TravelPace>
-            value={pace}
-            onChange={onPaceChange}
-            options={PACE_OPTIONS}
-          />
-          <p className="mt-1.5 text-xs italic text-text-muted">{PACE_BLURB[pace]}</p>
-        </div>
+        ) : (
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Pace
+            </p>
+            <SegmentedControl<TravelPace>
+              value={pace}
+              onChange={onPaceChange}
+              options={PACE_OPTIONS}
+            />
+            <p className="mt-1.5 text-xs italic text-text-muted">{PACE_BLURB[pace]}</p>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>

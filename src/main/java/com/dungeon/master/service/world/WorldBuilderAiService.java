@@ -7,6 +7,7 @@ import com.dungeon.master.model.dto.WorldGenerateRequest;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldOverviewSuggestion;
 import com.dungeon.master.model.dto.WorldRegion;
+import com.dungeon.master.model.dto.WorldSubregion;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -83,8 +84,27 @@ public class WorldBuilderAiService {
                 Propose 4 to 6 key NPCs for this world. Each should sit somewhere in the world and,
                 ideally, have a bond that ties them to the party or the central conflict.
                 %s
-                Return a JSON array of objects: name, race, role, location, bond, description.""".formatted(context(req));
+                Return a JSON array of objects: name, race, role, region (the EXACT name of one of the
+                regions listed above, or "" if none fit), subregion (the EXACT name of one of that
+                region's subregions listed above, or "" if none), location (an optional finer "specific
+                spot" note like "the back room of the tavern"), bond, description.""".formatted(context(req));
         return sanitizer.cleanNpcs(callList(user, new ParameterizedTypeReference<List<WorldNpc>>() {}));
+    }
+
+    public List<WorldSubregion> suggestSubregions(String regionName, WorldGenerateRequest req) {
+        if (regionName == null || regionName.isBlank()) {
+            throw new IllegalArgumentException("Name the region before generating places within it.");
+        }
+        String user = """
+                Propose 3 to 5 subregions (districts, landmarks, or sites) INSIDE the region "%s" —
+                the finer places a party moves between once they've arrived there.
+                %s
+                Return a JSON array of objects: name, type (e.g. District, Landmark, Site), description
+                (one or two sentences), and connections (a JSON array of the names of 1 to 3 OTHER
+                subregions in THIS list it has a direct local path to). The connections together must
+                form ONE fully-connected local network so the party can move between every spot.""".formatted(regionName.trim(), context(req));
+        return sanitizer.cleanSubregions(
+                callList(user, new ParameterizedTypeReference<List<WorldSubregion>>() {}));
     }
 
     public CustomMonster suggestMonster(WorldGenerateRequest req) {
@@ -133,7 +153,32 @@ public class WorldBuilderAiService {
         appendIf(b, "Magic level", req.magicLevel());
         appendIf(b, "Overview", trim(req.overview(), 1200));
         appendIf(b, "Extra instruction", req.instruction());
+        appendGeography(b, req.regions());
         return b.toString();
+    }
+
+    /** List the authored regions (and their subregions) so geography-aware sections can match real names. */
+    private static void appendGeography(StringBuilder b, List<WorldRegion> regions) {
+        if (regions == null || regions.isEmpty()) {
+            return;
+        }
+        b.append("Existing regions (use these EXACT names):\n");
+        for (WorldRegion r : regions) {
+            if (r == null || r.name() == null || r.name().isBlank()) {
+                continue;
+            }
+            b.append("- ").append(r.name().trim());
+            if (r.subregions() != null && !r.subregions().isEmpty()) {
+                StringBuilder subs = new StringBuilder();
+                for (WorldSubregion s : r.subregions()) {
+                    if (s == null || s.name() == null || s.name().isBlank()) continue;
+                    if (subs.length() > 0) subs.append(", ");
+                    subs.append(s.name().trim());
+                }
+                if (subs.length() > 0) b.append(" (subregions: ").append(subs).append(")");
+            }
+            b.append("\n");
+        }
     }
 
     private static void appendIf(StringBuilder b, String label, String value) {

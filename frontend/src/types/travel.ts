@@ -11,6 +11,8 @@ export interface RegionNode {
   y: number;
   /** Names of regions directly reachable from here by a route. */
   connections: string[];
+  /** Resolved local mini-map for this region; nested subregion nodes carry an empty array. */
+  subregions?: RegionNode[];
 }
 
 /** Travel-map read model for a session (empty `regions` → the session has no authored world). */
@@ -18,6 +20,8 @@ export interface TravelMapDto {
   regions: RegionNode[];
   /** The party's current location name, or null if not yet placed. */
   currentRegion: string | null;
+  /** The subregion within the current region the party is at, or null. */
+  currentSubregion: string | null;
   /** Elapsed in-game time in minutes (Day N • HH:MM). */
   inGameMinutes: number;
   /** The last overland pace chosen. */
@@ -29,7 +33,11 @@ export interface LocationChangedEvent {
   type: "LOCATION_CHANGED";
   sessionId: string;
   currentRegion: string;
+  /** The subregion arrived at, or "" when the move was overland (region-level). */
+  currentSubregion: string;
   fromRegion: string;
+  /** The subregion departed from on a local move, or "". */
+  fromSubregion: string;
   inGameMinutes: number;
   pace: TravelPace;
 }

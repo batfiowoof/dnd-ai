@@ -14,6 +14,10 @@ const MILES_PER_DAY: Record<TravelPace, number> = { FAST: 30, NORMAL: 24, SLOW: 
 const HOURS_PER_TRAVEL_DAY = 8;
 /** The campaign clock starts at dawn (08:00) so "Day 1" doesn't read as midnight. */
 const CLOCK_START_MINUTES = 8 * 60;
+/** In-game minutes per unit of local (within-region) map distance — mirrors `TravelService`. */
+const LOCAL_MINUTES_PER_UNIT = 2.0;
+/** Floor for any local move so even neighbouring subregions cost a little time. */
+const LOCAL_MIN_MINUTES = 15;
 
 export const PACE_OPTIONS: { value: TravelPace; label: string }[] = [
   { value: "SLOW", label: "Slow" },
@@ -49,6 +53,30 @@ export function estimateTravel(
   const miles = from ? nodeDistance(from, to) * MILES_PER_UNIT : 0;
   const days = miles / MILES_PER_DAY[pace];
   return { miles, days, durationText: durationText(miles, days) };
+}
+
+/**
+ * Estimate a local (within-region) hop between subregions — minutes, not days, and never an
+ * encounter. Mirrors the server's local-move math in `TravelService.travelLocal`.
+ */
+export function estimateLocalTravel(from: RegionNode | null, to: RegionNode): TravelEstimate {
+  const minutes = from
+    ? Math.max(LOCAL_MIN_MINUTES, Math.round(nodeDistance(from, to) * LOCAL_MINUTES_PER_UNIT))
+    : 0;
+  return { miles: 0, days: minutes / (HOURS_PER_TRAVEL_DAY * 60), durationText: localDurationText(minutes) };
+}
+
+function localDurationText(minutes: number): string {
+  if (minutes <= 0) return "a few moments";
+  if (minutes < 60) return `about ${minutes} min`;
+  const h = Math.round(minutes / 60);
+  return `about ${h} ${h === 1 ? "hour" : "hours"}`;
+}
+
+/** "Region ▸ Subregion" (or just the region) for the header location chip. */
+export function formatLocation(region: string | null, subregion: string | null): string {
+  if (!region) return "";
+  return subregion ? `${region} ▸ ${subregion}` : region;
 }
 
 function durationText(miles: number, days: number): string {

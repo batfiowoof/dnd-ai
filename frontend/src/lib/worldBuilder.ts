@@ -8,6 +8,7 @@ import type {
   WorldGenerateRequest,
   WorldNpc,
   WorldRegion,
+  WorldSubregion,
 } from "@/types";
 
 /** Ordered wizard steps. Kept in one place so the progress bar and navigation stay in sync. */
@@ -66,7 +67,14 @@ export const INITIAL_DRAFT: WorldDraftData = {
 
 /* ── Empty-item factories (used by "Add" buttons) ────────────── */
 
-export const emptyRegion = (): WorldRegion => ({ name: "", type: "", description: "" });
+export const emptyRegion = (): WorldRegion => ({
+  name: "",
+  type: "",
+  description: "",
+  subregions: [],
+});
+
+export const emptySubregion = (): WorldSubregion => ({ name: "", type: "", description: "" });
 
 export const emptyFaction = (): WorldFaction => ({
   name: "",
@@ -80,6 +88,8 @@ export const emptyNpc = (): WorldNpc => ({
   name: "",
   race: "",
   role: "",
+  region: "",
+  subregion: "",
   location: "",
   bond: "",
   description: "",
@@ -135,9 +145,15 @@ export function worldToDraft(world: WorldDto): WorldDraftData {
     overview: world.overview ?? "",
     tone: world.tone ?? "",
     magicLevel: world.magicLevel ?? "",
-    regions: world.regions ?? [],
+    regions: (world.regions ?? []).map((r) => ({ ...r, subregions: r.subregions ?? [] })),
     factions: world.factions ?? [],
-    npcs: world.npcs ?? [],
+    // Back-fill structured location fields for worlds authored before subregions existed.
+    npcs: (world.npcs ?? []).map((n) => ({
+      ...n,
+      region: n.region ?? "",
+      subregion: n.subregion ?? "",
+      location: n.location ?? "",
+    })),
     customMonsters: (world.customMonsters ?? []).map((m) => ({
       ...m,
       abilities: { ...DEFAULT_ABILITIES, ...(m.abilities ?? {}) },
@@ -184,6 +200,8 @@ export function draftToContext(
     tone: draft.tone.trim() || undefined,
     magicLevel: draft.magicLevel.trim() || undefined,
     instruction: instruction?.trim() || undefined,
+    // Ground geography-aware sections (NPCs, subregions) on the regions authored so far.
+    regions: draft.regions.length > 0 ? draft.regions : undefined,
   };
 }
 

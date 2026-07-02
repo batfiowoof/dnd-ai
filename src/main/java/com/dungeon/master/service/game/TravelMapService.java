@@ -4,6 +4,7 @@ import com.dungeon.master.exception.SessionNotFoundException;
 import com.dungeon.master.model.dto.RegionNode;
 import com.dungeon.master.model.dto.TravelMapDto;
 import com.dungeon.master.model.dto.WorldRegion;
+import com.dungeon.master.model.dto.WorldSubregion;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.World;
 import com.dungeon.master.repository.GameSessionRepository;
@@ -44,7 +45,7 @@ public class TravelMapService {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session not found: " + sessionId));
         return new TravelMapDto(nodesForSession(session), session.getCurrentRegion(),
-                session.getInGameMinutes(), session.getTravelPace());
+                session.getCurrentSubregion(), session.getInGameMinutes(), session.getTravelPace());
     }
 
     /** The resolved location graph for a session, or an empty list when it has no authored world. */
@@ -65,23 +66,77 @@ public class TravelMapService {
         return resolveNodes(world.getRegions());
     }
 
+    /** The six spatial fields shared by regions and subregions, so one resolver serves both levels. */
+    private record Spatial(String name, String type, String description,
+                           Double x, Double y, List<String> connections) {
+    }
+
     /**
-     * Turn authored regions into positioned, route-connected nodes: drop nameless entries, fill in a
-     * deterministic ring position for any region missing coordinates, and make connections undirected
-     * (an edge A→B implies B→A) using case-insensitive name matching against the real region set. When
-     * a world defines no routes at all, a minimum-spanning-tree road network is synthesized over the
-     * positions so travel is always possible (every location reachable) even before the map is authored.
+     * Turn authored regions into positioned, route-connected nodes, with each region's subregions
+     * resolved into its own nested local mini-map. The overland graph and every region's local graph
+     * are built by the same {@link #resolveGraph} routine (positioning + symmetrized routes + MST
+     * fallback); subregion names are only de-duplicated within their parent region, so the same
+     * subregion name may appear under different regions.
      */
     static List<RegionNode> resolveNodes(List<WorldRegion> regions) {
-        // Keep only named regions, de-duplicated by canonical (lower-cased) name.
-        Map<String, WorldRegion> byCanonical = new LinkedHashMap<>();
+        List<RegionNode> overland = resolveGraph(toSpatials(regions, WorldRegion::name, WorldRegion::type,
+                WorldRegion::description, WorldRegion::x, WorldRegion::y, WorldRegion::connections));
+
+        // Resolve each region's local subregion graph, keyed by the region's canonical name.
+        Map<String, List<RegionNode>> subsByRegion = new LinkedHashMap<>();
         for (WorldRegion r : regions) {
+            if (r == null || r.name() == null || r.name().isBlank() || r.subregions() == null
+                    || r.subregions().isEmpty()) {
+                continue;
+            }
+            subsByRegion.putIfAbsent(canonical(r.name()), resolveGraph(toSpatials(r.subregions(),
+                    WorldSubregion::name, WorldSubregion::type, WorldSubregion::description,
+                    WorldSubregion::x, WorldSubregion::y, WorldSubregion::connections)));
+        }
+
+        return overland.stream()
+                .map(n -> new RegionNode(n.name(), n.type(), n.description(), n.x(), n.y(), n.connections(),
+                        subsByRegion.getOrDefault(canonical(n.name()), List.of())))
+                .toList();
+    }
+
+    /** Adapt any list of region-like or subregion-like records into the shared {@link Spatial} shape. */
+    private static <T> List<Spatial> toSpatials(List<T> items,
+                                                java.util.function.Function<T, String> name,
+                                                java.util.function.Function<T, String> type,
+                                                java.util.function.Function<T, String> description,
+                                                java.util.function.Function<T, Double> x,
+                                                java.util.function.Function<T, Double> y,
+                                                java.util.function.Function<T, List<String>> connections) {
+        List<Spatial> out = new ArrayList<>(items.size());
+        for (T it : items) {
+            if (it == null) {
+                continue;
+            }
+            out.add(new Spatial(name.apply(it), type.apply(it), description.apply(it),
+                    x.apply(it), y.apply(it), connections.apply(it)));
+        }
+        return out;
+    }
+
+    /**
+     * Positioned, route-connected nodes for one graph level (overland regions or a region's subregions):
+     * drop nameless entries, fill in a deterministic ring position for anything missing coordinates, and
+     * make connections undirected (an edge A→B implies B→A) using case-insensitive name matching against
+     * the real name set. When no routes are authored at all, a minimum-spanning-tree network is
+     * synthesized over the positions so travel is always possible even before the map is authored. The
+     * emitted nodes are leaves (empty {@code subregions}); the caller attaches any nested graph.
+     */
+    private static List<RegionNode> resolveGraph(List<Spatial> items) {
+        // Keep only named entries, de-duplicated by canonical (lower-cased) name.
+        Map<String, Spatial> byCanonical = new LinkedHashMap<>();
+        for (Spatial r : items) {
             if (r == null || r.name() == null || r.name().isBlank()) {
                 continue;
             }
             byCanonical.putIfAbsent(canonical(r.name()), r);
         }
-        List<WorldRegion> kept = new ArrayList<>(byCanonical.values());
+        List<Spatial> kept = new ArrayList<>(byCanonical.values());
         int n = kept.size();
 
         // Resolve positions up front (authored or auto-laid-out) — needed for the MST fallback too.
@@ -90,13 +145,13 @@ public class TravelMapService {
             pos[i] = position(kept.get(i), i, n);
         }
 
-        // Undirected adjacency: resolve each connection name to a real region and mirror the edge.
+        // Undirected adjacency: resolve each connection name to a real node and mirror the edge.
         Map<String, Set<String>> edges = new LinkedHashMap<>();
-        for (WorldRegion r : kept) {
+        for (Spatial r : kept) {
             edges.put(canonical(r.name()), new LinkedHashSet<>());
         }
         int authoredEdges = 0;
-        for (WorldRegion r : kept) {
+        for (Spatial r : kept) {
             if (r.connections() == null) {
                 continue;
             }
@@ -107,7 +162,7 @@ public class TravelMapService {
                 }
                 String to = canonical(conn);
                 if (to.equals(from) || !edges.containsKey(to)) {
-                    continue; // skip self-links and connections to unknown regions
+                    continue; // skip self-links and connections to unknown nodes
                 }
                 if (edges.get(from).add(to)) {
                     edges.get(to).add(from);
@@ -122,7 +177,7 @@ public class TravelMapService {
 
         List<RegionNode> nodes = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            WorldRegion r = kept.get(i);
+            Spatial r = kept.get(i);
             List<String> conns = edges.get(canonical(r.name())).stream()
                     .map(c -> byCanonical.get(c).name())
                     .toList();
@@ -136,7 +191,7 @@ public class TravelMapService {
      * Build a minimum spanning tree (Prim's) over the node positions and add its edges, so a world
      * with no authored routes still gets a fully-connected, natural-looking road network.
      */
-    private static void synthesizeRoads(List<WorldRegion> kept, double[][] pos,
+    private static void synthesizeRoads(List<Spatial> kept, double[][] pos,
                                         Map<String, Set<String>> edges) {
         int n = kept.size();
         boolean[] inTree = new boolean[n];
@@ -179,7 +234,7 @@ public class TravelMapService {
     }
 
     /** Authored coordinates when present and valid, else a deterministic ring slot by index. */
-    private static double[] position(WorldRegion r, int index, int total) {
+    private static double[] position(Spatial r, int index, int total) {
         if (r.x() != null && r.y() != null) {
             return new double[] {clamp(r.x()), clamp(r.y())};
         }

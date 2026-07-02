@@ -4,6 +4,7 @@ import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
+import com.dungeon.master.model.dto.WorldSubregion;
 import com.dungeon.master.model.entity.World;
 import com.dungeon.master.repository.WorldDocumentRepository;
 import com.dungeon.master.service.ai.EmbeddingService;
@@ -37,7 +38,14 @@ public class WorldRagIndexer {
             if (world.getRegions() != null) {
                 for (WorldRegion r : world.getRegions()) {
                     index(sessionId, "Region: " + r.name(),
-                            join(r.name(), r.type(), r.description()));
+                            join(r.name(), r.type(), r.description(), subregionSummary(r)));
+                    if (r.subregions() != null) {
+                        for (WorldSubregion s : r.subregions()) {
+                            if (s == null || s.name() == null || s.name().isBlank()) continue;
+                            index(sessionId, "Location: " + s.name() + " (" + r.name() + ")",
+                                    join(s.name(), s.type(), "In " + r.name(), s.description()));
+                        }
+                    }
                 }
             }
             if (world.getFactions() != null) {
@@ -51,7 +59,7 @@ public class WorldRagIndexer {
             if (world.getNpcs() != null) {
                 for (WorldNpc n : world.getNpcs()) {
                     index(sessionId, "NPC: " + n.name(),
-                            join(n.name(), n.role(), n.race(), "At " + n.location(),
+                            join(n.name(), n.role(), n.race(), "At " + npcPlace(n),
                                     "Bond: " + n.bond(), n.description()));
                 }
             }
@@ -77,6 +85,37 @@ public class WorldRagIndexer {
         worldDocumentRepository.insertWithSession(
                 UUID.randomUUID(), title, content, "LORE", sessionId,
                 embeddingService.embeddingToString(embedding));
+    }
+
+    /** A short "Contains: A, B, C" summary of a region's subregions, or blank when it has none. */
+    private static String subregionSummary(WorldRegion r) {
+        if (r.subregions() == null || r.subregions().isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("Contains: ");
+        boolean first = true;
+        for (WorldSubregion s : r.subregions()) {
+            if (s == null || s.name() == null || s.name().isBlank()) continue;
+            if (!first) sb.append(", ");
+            sb.append(s.name().trim());
+            first = false;
+        }
+        return first ? "" : sb.toString();
+    }
+
+    /** Most-specific NPC placement for retrieval: subregion, region, and/or free-text spot. */
+    private static String npcPlace(WorldNpc n) {
+        StringBuilder sb = new StringBuilder();
+        if (n.subregion() != null && !n.subregion().isBlank()) {
+            sb.append(n.subregion().trim());
+            if (n.region() != null && !n.region().isBlank()) sb.append(", in ").append(n.region().trim());
+        } else if (n.region() != null && !n.region().isBlank()) {
+            sb.append(n.region().trim());
+        }
+        if (n.location() != null && !n.location().isBlank()) {
+            sb.append(sb.length() > 0 ? " (" + n.location().trim() + ")" : n.location().trim());
+        }
+        return sb.toString();
     }
 
     /** Join non-blank parts with sentence separators into one embeddable chunk. */

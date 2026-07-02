@@ -41,6 +41,8 @@ export interface GameStateDto {
   recap: string | null;
   /** Travel — the party's current location name (a World region), or null if not yet placed. */
   currentRegion: string | null;
+  /** Travel — the subregion within the current region, or null when at the region generally. */
+  currentSubregion: string | null;
   /** Travel — elapsed in-game time in minutes (Day N • HH:MM). */
   inGameMinutes: number;
   /** Travel — the last overland pace chosen. */

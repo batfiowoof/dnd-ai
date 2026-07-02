@@ -20,6 +20,7 @@ import type {
   WorldGenerateRequest,
   WorldOverviewSuggestion,
   WorldRegion,
+  WorldSubregion,
   WorldFaction,
   WorldNpc,
   CustomMonster,
@@ -444,6 +445,22 @@ export const generateWorldOverview = (token: string, body: WorldGenerateRequest)
 
 export const generateWorldRegions = (token: string, body: WorldGenerateRequest) =>
   generateWorldSection<WorldRegion[]>(token, "regions", body);
+
+export async function generateWorldSubregions(
+  token: string,
+  region: string,
+  body: WorldGenerateRequest
+): Promise<WorldSubregion[]> {
+  const res = await fetch(
+    `${BASE_URL}/worlds/generate/subregions?region=${encodeURIComponent(region)}`,
+    {
+      method: "POST",
+      headers: getHeaders(token),
+      body: JSON.stringify(body),
+    }
+  );
+  return handleResponse(res);
+}
 
 export const generateWorldFactions = (token: string, body: WorldGenerateRequest) =>
   generateWorldSection<WorldFaction[]>(token, "factions", body);

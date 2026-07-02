@@ -4,6 +4,7 @@ import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
+import com.dungeon.master.model.dto.WorldSubregion;
 import com.dungeon.master.model.entity.World;
 
 /**
@@ -41,6 +42,15 @@ public final class WorldSettingRenderer {
                 if (notBlank(r.type())) sb.append(" (").append(r.type().trim()).append(")");
                 if (notBlank(r.description())) sb.append(" — ").append(r.description().trim());
                 sb.append("\n");
+                if (r.subregions() != null) {
+                    for (WorldSubregion s : r.subregions()) {
+                        if (s == null || !notBlank(s.name())) continue;
+                        sb.append("  - **").append(s.name().trim()).append("**");
+                        if (notBlank(s.type())) sb.append(" (").append(s.type().trim()).append(")");
+                        if (notBlank(s.description())) sb.append(" — ").append(s.description().trim());
+                        sb.append("\n");
+                    }
+                }
             }
         }
 
@@ -62,7 +72,8 @@ public final class WorldSettingRenderer {
                 sb.append("- **").append(safe(n.name())).append("**");
                 if (notBlank(n.role())) sb.append(", ").append(n.role().trim());
                 if (notBlank(n.race())) sb.append(" (").append(n.race().trim()).append(")");
-                if (notBlank(n.location())) sb.append(" — at ").append(n.location().trim());
+                String place = npcPlace(n);
+                if (notBlank(place)) sb.append(" — at ").append(place);
                 if (notBlank(n.bond())) sb.append("; ").append(n.bond().trim());
                 if (notBlank(n.description())) sb.append(". ").append(n.description().trim());
                 sb.append("\n");
@@ -79,6 +90,24 @@ public final class WorldSettingRenderer {
         }
 
         return sb.toString().trim();
+    }
+
+    /**
+     * A human-readable placement for an NPC, most-specific first: "Subregion, in Region (specific spot)".
+     * Falls back to the free-text {@code location} when no structured region is set.
+     */
+    private static String npcPlace(WorldNpc n) {
+        StringBuilder sb = new StringBuilder();
+        if (notBlank(n.subregion())) {
+            sb.append(n.subregion().trim());
+            if (notBlank(n.region())) sb.append(", in ").append(n.region().trim());
+        } else if (notBlank(n.region())) {
+            sb.append(n.region().trim());
+        }
+        if (notBlank(n.location())) {
+            sb.append(sb.length() > 0 ? " (" + n.location().trim() + ")" : n.location().trim());
+        }
+        return sb.toString();
     }
 
     private static void appendLever(StringBuilder sb, String label, String value) {

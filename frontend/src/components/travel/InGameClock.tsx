@@ -1,7 +1,7 @@
 "use client";
 
 import { useSessionStore } from "@/store/sessionStore";
-import { formatGameClock } from "@/lib/travel";
+import { formatGameClock, formatLocation } from "@/lib/travel";
 import { cn } from "@/components/ui";
 
 /**
@@ -11,9 +11,12 @@ import { cn } from "@/components/ui";
  */
 export default function InGameClock({ className }: { className?: string }) {
   const currentRegion = useSessionStore((s) => s.currentRegion);
+  const currentSubregion = useSessionStore((s) => s.currentSubregion);
   const inGameMinutes = useSessionStore((s) => s.inGameMinutes);
 
   if (!currentRegion) return null;
+
+  const location = formatLocation(currentRegion, currentSubregion);
 
   return (
     <span
@@ -27,7 +30,7 @@ export default function InGameClock({ className }: { className?: string }) {
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <span className="max-w-[10rem] truncate font-medium text-text">{currentRegion}</span>
+      <span className="max-w-[14rem] truncate font-medium text-text">{location}</span>
       <span aria-hidden="true" className="text-gold/50">·</span>
       <span className="tabular">{formatGameClock(inGameMinutes)}</span>
     </span>

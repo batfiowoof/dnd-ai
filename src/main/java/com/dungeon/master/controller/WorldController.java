@@ -10,6 +10,7 @@ import com.dungeon.master.model.dto.WorldGenerateRequest;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldOverviewSuggestion;
 import com.dungeon.master.model.dto.WorldRegion;
+import com.dungeon.master.model.dto.WorldSubregion;
 import com.dungeon.master.model.dto.WorldSummaryDto;
 import com.dungeon.master.service.world.WorldBuilderAiService;
 import com.dungeon.master.service.world.WorldService;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -88,6 +90,13 @@ public class WorldController {
     public ResponseEntity<List<WorldRegion>> generateRegions(
             @RequestBody WorldGenerateRequest request) {
         return ResponseEntity.ok(worldBuilderAiService.suggestRegions(request));
+    }
+
+    @PostMapping("/generate/subregions")
+    public ResponseEntity<List<WorldSubregion>> generateSubregions(
+            @RequestParam("region") String region,
+            @RequestBody WorldGenerateRequest request) {
+        return ResponseEntity.ok(worldBuilderAiService.suggestSubregions(region, request));
     }
 
     @PostMapping("/generate/factions")

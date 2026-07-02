@@ -14,7 +14,15 @@ import java.util.List;
  * @param x           resolved map x in [0, 100]
  * @param y           resolved map y in [0, 100]
  * @param connections names of regions directly reachable from here (symmetrized, de-duplicated)
+ * @param subregions  resolved local mini-map for this region (nested nodes carry an empty list)
  */
 public record RegionNode(String name, String type, String description,
-                         double x, double y, List<String> connections) {
+                         double x, double y, List<String> connections,
+                         List<RegionNode> subregions) {
+
+    /** A leaf node (a subregion, or a region with no local mini-map): no nested subregions. */
+    public RegionNode(String name, String type, String description,
+                      double x, double y, List<String> connections) {
+        this(name, type, description, x, y, connections, List.of());
+    }
 }

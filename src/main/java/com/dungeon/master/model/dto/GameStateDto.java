@@ -31,6 +31,8 @@ public record GameStateDto(
         String recap,
         /** Travel — the party's current location name (a World region), or null if not yet placed. */
         String currentRegion,
+        /** Travel — the subregion within the current region, or null when at the region generally. */
+        String currentSubregion,
         /** Travel — elapsed in-game time in minutes (Day N • HH:MM). */
         long inGameMinutes,
         /** Travel — the last overland pace chosen. */

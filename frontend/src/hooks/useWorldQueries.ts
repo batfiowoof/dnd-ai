@@ -11,6 +11,7 @@ import {
   updateWorld,
   generateWorldOverview,
   generateWorldRegions,
+  generateWorldSubregions,
   generateWorldFactions,
   generateWorldNpcs,
   generateWorldMonster,
@@ -96,6 +97,19 @@ export function useGenerateRegions() {
   return useMutation({
     mutationFn: async (body: WorldGenerateRequest) =>
       generateWorldRegions(await requireToken(), body),
+  });
+}
+
+export function useGenerateSubregions() {
+  const requireToken = useRequireToken();
+  return useMutation({
+    mutationFn: async ({
+      region,
+      body,
+    }: {
+      region: string;
+      body: WorldGenerateRequest;
+    }) => generateWorldSubregions(await requireToken(), region, body),
   });
 }
 
