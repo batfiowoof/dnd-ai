@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 import type { RefObject } from "react";
 import type { Client } from "@stomp/stompjs";
-import type { ItemKind } from "@/types";
+import type { ItemKind, TravelPace } from "@/types";
 import {
+  sendTravel,
   sendPass,
   sendRoll,
   sendCast,
@@ -55,6 +56,9 @@ export function useGameActions(
       };
 
     return {
+      travel: run((c, destinationRegion: string, pace: TravelPace) =>
+        sendTravel(c, sessionId, { destinationRegion, pace })
+      ),
       pass: run((c) => sendPass(c, sessionId)),
       roll: run((c, notation: string, label: string) =>
         sendRoll(c, sessionId, { label, notation })

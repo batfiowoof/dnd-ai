@@ -66,7 +66,7 @@ public class PlayerActionConsumer {
             Map<UUID, Boolean> spend = Map.of(event.playerId(), event.spendInspiration());
 
             DmAiService.NarrativeTurnResult result = dmAiService.generateNarrativeTurn(
-                    event.sessionId(), actions, spend,
+                    event.sessionId(), actions, spend, event.travel(),
                     chunk -> messagingTemplate.convertAndSend(destination, (Object) Map.of(
                             "type", "DM_CHUNK",
                             "turnNumber", turnNumber,
@@ -118,7 +118,7 @@ public class PlayerActionConsumer {
             }
 
             DmAiService.NarrativeTurnResult result = dmAiService.generateNarrativeTurn(
-                    event.sessionId(), actions, spend,
+                    event.sessionId(), actions, spend, null,
                     chunk -> messagingTemplate.convertAndSend(destination, (Object) Map.of(
                             "type", "DM_CHUNK",
                             "turnNumber", turnNumber,

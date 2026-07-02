@@ -2,6 +2,8 @@ export type GameStatus = "WAITING" | "ACTIVE" | "FINISHED";
 export type PlayerRole = "PLAYER" | "DM_AI";
 
 /* ── Host session settings ────────────────────────────────────── */
+import type { TravelPace } from "./travel";
+
 export type TurnMode = "COLLABORATIVE" | "INITIATIVE" | "FREEFORM";
 export type Difficulty = "EASY" | "NORMAL" | "DEADLY";
 export type DmStyle = "HEROIC" | "GRIMDARK" | "COMEDIC";
@@ -37,6 +39,12 @@ export interface GameStateDto {
   collabWindowSeconds: number;
   /** End-of-session chronicle; null until the session is ended. */
   recap: string | null;
+  /** Travel — the party's current location name (a World region), or null if not yet placed. */
+  currentRegion: string | null;
+  /** Travel — elapsed in-game time in minutes (Day N • HH:MM). */
+  inGameMinutes: number;
+  /** Travel — the last overland pace chosen. */
+  travelPace: TravelPace;
 }
 
 /** An authored campaign milestone the DM can award once to level the whole party. */

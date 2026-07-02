@@ -5,6 +5,12 @@ export interface WorldRegion {
   name: string;
   type: string;
   description: string;
+  /** Travel map — normalized x in [0, 100]; null/undefined → auto-laid-out. */
+  x?: number | null;
+  /** Travel map — normalized y in [0, 100]; null/undefined → auto-laid-out. */
+  y?: number | null;
+  /** Travel map — names of regions this one has a direct route to (undirected). */
+  connections?: string[];
 }
 
 /** A faction with the three 5E levers: a goal, a resource, and a pressure to act. */

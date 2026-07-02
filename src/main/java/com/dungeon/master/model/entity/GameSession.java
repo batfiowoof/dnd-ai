@@ -6,6 +6,7 @@ import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
 import com.dungeon.master.model.enums.DmStyle;
 import com.dungeon.master.model.enums.GameStatus;
+import com.dungeon.master.model.enums.TravelPace;
 import com.dungeon.master.model.enums.TurnMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -132,4 +133,19 @@ public class GameSession {
     /** Soft link to the finished session this one explicitly continues (null for a fresh campaign). */
     @Column(name = "continued_from_session_id")
     private UUID continuedFromSessionId;
+
+    /** Travel — the party's current location (a {@link World} region name); null until first placed. */
+    @Column(name = "current_region")
+    private String currentRegion;
+
+    /** Travel — elapsed in-game time in minutes, advanced by each travel leg (Day N • HH:MM). */
+    @Column(name = "in_game_minutes", nullable = false)
+    @Builder.Default
+    private long inGameMinutes = 0;
+
+    /** Travel — the last overland pace the party chose. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "travel_pace", nullable = false)
+    @Builder.Default
+    private TravelPace travelPace = TravelPace.NORMAL;
 }

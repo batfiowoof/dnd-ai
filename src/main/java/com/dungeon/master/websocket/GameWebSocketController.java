@@ -14,6 +14,7 @@ import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.RollRequest;
+import com.dungeon.master.model.dto.TravelRequest;
 import com.dungeon.master.model.dto.UseItemRequest;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.enums.RollMode;
@@ -22,6 +23,7 @@ import com.dungeon.master.service.game.GameSessionService;
 import com.dungeon.master.service.game.PlayerService;
 import com.dungeon.master.service.game.SessionMembershipService;
 import com.dungeon.master.service.game.PlayerStateService;
+import com.dungeon.master.service.game.TravelService;
 import com.dungeon.master.service.game.TurnService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +48,7 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
     private final PlayerService playerService;
     private final PlayerStateService playerStateService;
     private final DiceService diceService;
+    private final TravelService travelService;
 
     @MessageMapping("/game/{sessionId}/action")
     public void handlePlayerAction(@DestinationVariable UUID sessionId,
@@ -61,6 +64,21 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
         } catch (Exception e) {
             log.error("Error processing player action: session={}, player={}",
                     sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/travel")
+    public void handleTravel(@DestinationVariable UUID sessionId,
+                             @Payload TravelRequest request,
+                             Principal principal) {
+        String username = principal.getName();
+        log.info("WebSocket travel received: session={}, player={}, to={}",
+                sessionId, username, request.destinationRegion());
+        try {
+            travelService.travel(sessionId, username, request.destinationRegion(), request.pace());
+        } catch (Exception e) {
+            log.error("Error processing travel: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
     }

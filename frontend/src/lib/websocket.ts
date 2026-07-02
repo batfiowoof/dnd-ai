@@ -1,6 +1,6 @@
 import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
-import type { ItemKind, RollMode } from "@/types";
+import type { ItemKind, RollMode, TravelPace } from "@/types";
 
 const WS_URL = "http://localhost:8080/ws";
 
@@ -88,6 +88,18 @@ export function sendAction(
   client.publish({
     destination: `/app/game/${sessionId}/action`,
     body: JSON.stringify({ action, spendInspiration }),
+  });
+}
+
+/** Set out to a route-connected location at the given pace (out-of-combat travel). */
+export function sendTravel(
+  client: Client,
+  sessionId: string,
+  payload: { destinationRegion: string; pace: TravelPace }
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/travel`,
+    body: JSON.stringify(payload),
   });
 }
 

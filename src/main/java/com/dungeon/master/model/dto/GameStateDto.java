@@ -4,6 +4,7 @@ import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
 import com.dungeon.master.model.enums.DmStyle;
 import com.dungeon.master.model.enums.GameStatus;
+import com.dungeon.master.model.enums.TravelPace;
 import com.dungeon.master.model.enums.TurnMode;
 
 import java.util.List;
@@ -27,6 +28,12 @@ public record GameStateDto(
         boolean allowAiRolls,
         int collabWindowSeconds,
         /** End-of-session chronicle; null until the session is ended. Rendered on the post-game screen. */
-        String recap
+        String recap,
+        /** Travel — the party's current location name (a World region), or null if not yet placed. */
+        String currentRegion,
+        /** Travel — elapsed in-game time in minutes (Day N • HH:MM). */
+        long inGameMinutes,
+        /** Travel — the last overland pace chosen. */
+        TravelPace travelPace
 ) {
 }

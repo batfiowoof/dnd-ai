@@ -146,11 +146,42 @@ public class TurnService {
 
         PlayerActionEvent kafkaEvent = new PlayerActionEvent(
                 sessionId, player.getId(), player.getCharacterName(), action, nextTurnNumber,
-                turnEvent.getId(), spendInspiration);
+                turnEvent.getId(), spendInspiration, null);
         eventProducer.sendPlayerAction(kafkaEvent);
 
         log.info("Action submitted: session={}, player={}, turn={}",
                 sessionId, player.getUsername(), nextTurnNumber);
+    }
+
+    /**
+     * Persist and dispatch an overland-travel turn immediately, regardless of turn mode. Travel is a
+     * discrete party-level transition (not a per-player round action), so it bypasses collaborative
+     * round collection and the initiative pointer and streams a single DM narration of the journey.
+     * The {@code travel} context steers that narration and may spring combat via an {@code [[ENCOUNTER]]}
+     * tag. Validation (active session, no combat, route-connected destination) lives in
+     * {@link TravelService}, which is the only caller.
+     */
+    @Transactional
+    public void dispatchTravelTurn(UUID sessionId, UUID playerId, String characterName,
+                                   String action, com.dungeon.master.model.dto.TravelContext travel) {
+        int nextTurnNumber = turnEventRepository.findTopBySessionIdOrderByTurnNumberDesc(sessionId)
+                .map(e -> e.getTurnNumber() + 1)
+                .orElse(1);
+
+        TurnEvent turnEvent = TurnEvent.builder()
+                .sessionId(sessionId)
+                .playerId(playerId)
+                .action(action)
+                .turnNumber(nextTurnNumber)
+                .build();
+        turnEventRepository.save(turnEvent);
+
+        eventProducer.sendPlayerAction(new PlayerActionEvent(
+                sessionId, playerId, characterName, action, nextTurnNumber,
+                turnEvent.getId(), false, travel));
+
+        log.info("Travel turn dispatched: session={}, to={}, turn={}",
+                sessionId, travel == null ? null : travel.toRegion(), nextTurnNumber);
     }
 
     /**

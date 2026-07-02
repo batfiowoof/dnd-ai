@@ -7,10 +7,12 @@ import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.JoinSessionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.SessionSummaryDto;
+import com.dungeon.master.model.dto.TravelMapDto;
 import com.dungeon.master.model.dto.TurnEventDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.service.game.GameSessionService;
 import com.dungeon.master.service.game.SessionMembershipService;
+import com.dungeon.master.service.game.TravelMapService;
 import com.dungeon.master.service.game.TurnService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,7 @@ public class GameSessionController {
     private final GameSessionService gameSessionService;
     private final SessionMembershipService sessionMembershipService;
     private final TurnService turnService;
+    private final TravelMapService travelMapService;
 
     @PostMapping
     public ResponseEntity<CreateSessionResponse> createSession(
@@ -95,6 +98,11 @@ public class GameSessionController {
     public ResponseEntity<GameStateDto> getGameState(@PathVariable UUID sessionId) {
         GameStateDto state = gameSessionService.getGameState(sessionId);
         return ResponseEntity.ok(state);
+    }
+
+    @GetMapping("/{sessionId}/map")
+    public ResponseEntity<TravelMapDto> getTravelMap(@PathVariable UUID sessionId) {
+        return ResponseEntity.ok(travelMapService.buildMap(sessionId));
     }
 
     @GetMapping("/{sessionId}/history")

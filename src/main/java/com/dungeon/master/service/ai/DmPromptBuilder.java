@@ -114,6 +114,38 @@ public class DmPromptBuilder {
         }
     }
 
+    /**
+     * A travel-turn directive appended to the DM user message: narrate the journey and arrival, and —
+     * when the server rolled an encounter — instruct the DM to end with an {@code [[ENCOUNTER: …]]} tag
+     * (the enemy-key list and tag format already come from {@link #sessionDirectives}). Returns a
+     * leading-newline block so it slots after the acting block.
+     */
+    public String travelDirective(com.dungeon.master.model.dto.TravelContext travel) {
+        if (travel == null) {
+            return "";
+        }
+        StringBuilder b = new StringBuilder("\n\n=== Overland travel ===\n");
+        b.append("The party is undertaking overland travel");
+        if (travel.fromRegion() != null && !travel.fromRegion().isBlank()) {
+            b.append(" from ").append(travel.fromRegion());
+        }
+        b.append(" to ").append(travel.toRegion())
+                .append(", a journey of ").append(travel.durationText()).append(". ");
+        b.append("Narrate the trip and their arrival at ").append(travel.toRegion())
+                .append(" — evoke the landscape and the passage of time, refer to characters only by ")
+                .append("their exact names, take no actions on their behalf, and end by inviting them to ")
+                .append("act now that they've arrived. ");
+        if (travel.encounter()) {
+            b.append("IMPORTANT: partway through the journey the party is ambushed. Introduce a fitting, ")
+                    .append("dangerous threat for this route, then END your reply with an ")
+                    .append("[[ENCOUNTER: …]] tag using ONLY the allowed enemy keys above so the fight begins. ")
+                    .append("Do NOT request any ability-check rolls this turn.");
+        } else {
+            b.append("The journey passes without a fight — do not start combat and do not request rolls.");
+        }
+        return b.toString();
+    }
+
     public String buildUserMessage(String context, String characterBlock,
                                    String playerName, String action) {
         StringBuilder message = new StringBuilder();
@@ -148,6 +180,10 @@ public class DmPromptBuilder {
         b.append("- Tone: ").append(toneGuidance(session.getDmStyle())).append("\n");
         b.append("- Length: ").append(lengthGuidance(session.getDmLength())).append("\n");
         b.append("- Difficulty: ").append(difficultyGuidance(session.getDifficulty())).append("\n");
+        if (session.getCurrentRegion() != null && !session.getCurrentRegion().isBlank()) {
+            b.append("- Current location: the party is at ").append(session.getCurrentRegion().trim())
+                    .append(". Keep the scene consistent with where they are.\n");
+        }
         if (session.isAllowAiRolls()) {
             b.append("- Ability checks: when a narrative action's outcome is genuinely uncertain ")
                     .append("(not trivial), CALL the rollCheck tool for the acting character instead of ")

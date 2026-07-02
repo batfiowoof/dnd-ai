@@ -1,6 +1,7 @@
 package com.dungeon.master.service.ai;
 
 import com.dungeon.master.kafka.event.RoundActionEvent.Contribution;
+import com.dungeon.master.model.dto.TravelContext;
 import com.dungeon.master.model.entity.Enemy;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.repository.EnemyRepository;
@@ -59,11 +60,13 @@ public class DmAiService {
     @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackNarrativeTurn")
     public NarrativeTurnResult generateNarrativeTurn(UUID sessionId, List<Contribution> actions,
                                                      Map<UUID, Boolean> spendInspiration,
+                                                     TravelContext travel,
                                                      Consumer<String> onChunk) {
         log.info("Streaming narrative turn for session={}, actions={}", sessionId, actions.size());
 
         GameSession session = sessionRepository.findById(sessionId).orElse(null);
-        boolean allowRolls = session == null || session.isAllowAiRolls();
+        // Travel narration must never roll checks — a check would suppress the encounter tag downstream.
+        boolean allowRolls = (session == null || session.isAllowAiRolls()) && travel == null;
 
         String combinedForContext = actions.stream()
                 .filter(c -> !c.passed())
@@ -72,7 +75,8 @@ public class DmAiService {
         String context = ragService.buildContext(sessionId, combinedForContext);
         String userMessage = promptBuilder.sessionDirectives(sessionId)
                 + promptBuilder.partySituation(sessionId)
-                + promptBuilder.buildTurnUserMessage(actions, context);
+                + promptBuilder.buildTurnUserMessage(actions, context)
+                + promptBuilder.travelDirective(travel);
 
         List<Message> baseMessages = List.of(new SystemMessage(AiConfig.DM_SYSTEM_PROMPT),
                 new UserMessage(userMessage));
@@ -228,6 +232,7 @@ public class DmAiService {
     @SuppressWarnings("unused")
     private NarrativeTurnResult fallbackNarrativeTurn(UUID sessionId, List<Contribution> actions,
                                                       Map<UUID, Boolean> spendInspiration,
+                                                      TravelContext travel,
                                                       Consumer<String> onChunk, Throwable throwable) {
         log.error("AI narrative turn unavailable, using fallback. session={}, error={}",
                 sessionId, throwable.getMessage());

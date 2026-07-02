@@ -4,6 +4,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { Brand, cn } from "@/components/ui";
 import StartEncounterControl from "@/components/combat/StartEncounterControl";
 import AvatarTrigger from "@/components/game/AvatarTrigger";
+import InGameClock from "@/components/travel/InGameClock";
 
 interface GameRoomHeaderProps {
   /** The local player's id (from session storage), or null. */
@@ -81,6 +82,8 @@ export default function GameRoomHeader({
         )}
       </div>
       <div className="flex items-center gap-4">
+        {/* Current location + in-game clock (only for world-based, out-of-combat sessions). */}
+        {!inCombat && <InGameClock />}
         {isCreator && status === "ACTIVE" && !inCombat && (
           <StartEncounterControl
             connected={connected}

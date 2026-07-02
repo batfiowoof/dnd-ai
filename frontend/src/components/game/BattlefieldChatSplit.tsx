@@ -24,13 +24,17 @@ function clampWidth(px: number): number {
 export default function BattlefieldChatSplit({
   map,
   chat,
+  alsoShowMap = false,
 }: {
   map: ReactNode;
   chat: ReactNode;
+  /** Show the left pane even out of combat (e.g. the travel map). */
+  alsoShowMap?: boolean;
 }) {
-  const hasMap = useSessionStore(
+  const hasCombatGrid = useSessionStore(
     (s) => s.combat?.status === "ACTIVE" && !!s.combat?.grid
   );
+  const hasMap = hasCombatGrid || alsoShowMap;
   const [width, setWidth] = useState(() => loadPrefs().mapWidth);
   const drag = useRef<{ startX: number; startW: number } | null>(null);
 

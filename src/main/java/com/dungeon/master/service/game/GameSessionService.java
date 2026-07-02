@@ -74,12 +74,21 @@ public class GameSessionService {
         String worldSetting = request.worldSetting();
         List<Milestone> milestones = worldSanitizer.normalizeMilestones(request.milestones());
         List<CustomMonster> customMonsters = List.of();
+        String startRegion = null;
         World world = null;
         if (request.worldId() != null) {
             world = worldService.requireOwned(request.worldId(), username);
             worldSetting = WorldSettingRenderer.render(world);
             milestones = worldSanitizer.normalizeMilestones(world.getMilestones());
             customMonsters = world.getCustomMonsters() == null ? List.of() : world.getCustomMonsters();
+            // Start the party at the world's first named region so the travel map has a "you are here".
+            if (world.getRegions() != null) {
+                startRegion = world.getRegions().stream()
+                        .filter(r -> r != null && r.name() != null && !r.name().isBlank())
+                        .map(r -> r.name().trim())
+                        .findFirst()
+                        .orElse(null);
+            }
         }
 
         GameSession session = GameSession.builder()
@@ -101,6 +110,7 @@ public class GameSessionService {
                 .customMonsters(customMonsters)
                 .worldId(request.worldId())
                 .continuedFromSessionId(request.continuedFromSessionId())
+                .currentRegion(startRegion)
                 .build();
         session = sessionRepository.save(session);
 
@@ -273,7 +283,10 @@ public class GameSessionService {
                 session.isAllowAiCombat(),
                 session.isAllowAiRolls(),
                 session.getCollabWindowSeconds(),
-                session.getRecap());
+                session.getRecap(),
+                session.getCurrentRegion(),
+                session.getInGameMinutes(),
+                session.getTravelPace());
     }
 
     public List<PlayerDto> getPlayers(UUID sessionId) {

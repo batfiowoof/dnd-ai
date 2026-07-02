@@ -9,6 +9,7 @@ import type {
   PlayerDto,
   PlayerRuntimeState,
   RoundStatusEvent,
+  TravelPace,
   TurnEventDto,
   TurnMode,
 } from "@/types";
@@ -97,6 +98,16 @@ interface SessionState {
   /** True while the recap is being generated after the session ends. */
   recapPending: boolean;
 
+  /* ── Travel ─────────────────────────────────────────────────── */
+  /** The party's current location name (a World region), or null if unplaced / no map. */
+  currentRegion: string | null;
+  /** Elapsed in-game time in minutes (Day N • HH:MM). */
+  inGameMinutes: number;
+  /** The last overland pace chosen. */
+  travelPace: TravelPace;
+  /** True between sending a travel action and the DM narration resolving (gates the map). */
+  traveling: boolean;
+
   /* server-state seeding (React Query → store) */
   hydrateFromGameState: (gs: GameStateDto) => void;
   seedLogsFromHistory: (history: TurnEventDto[]) => void;
@@ -145,6 +156,16 @@ interface SessionState {
   /** The recap finished (RECAP_READY) — store the final text. */
   setRecap: (recap: string) => void;
 
+  /* travel */
+  /** Optimistically mark travel in-flight when the local player sets out. */
+  beginTravel: () => void;
+  /** LOCATION_CHANGED — the party has arrived somewhere new; move the pin + advance the clock. */
+  applyLocationChanged: (args: {
+    currentRegion: string;
+    inGameMinutes: number;
+    pace: TravelPace;
+  }) => void;
+
   /* collaborative round */
   applyRoundStatus: (evt: RoundStatusEvent) => void;
 
@@ -173,6 +194,10 @@ const initialState = {
   round: null as RoundStatus | null,
   recap: null as string | null,
   recapPending: false,
+  currentRegion: null as string | null,
+  inGameMinutes: 0,
+  travelPace: "NORMAL" as TravelPace,
+  traveling: false,
 };
 
 /** Sentinel playerId the backend uses for streamed combat-beat narration. */
@@ -190,6 +215,9 @@ export const useSessionStore = create<SessionState>((set) => ({
       turnNumber: gs.turnNumber,
       turnMode: gs.turnMode ?? "COLLABORATIVE",
       recap: gs.recap ?? null,
+      currentRegion: gs.currentRegion ?? null,
+      inGameMinutes: gs.inGameMinutes ?? 0,
+      travelPace: gs.travelPace ?? "NORMAL",
     }),
 
   seedLogsFromHistory: (history) =>
@@ -534,6 +562,12 @@ export const useSessionStore = create<SessionState>((set) => ({
   beginRecap: () => set({ recapPending: true }),
 
   setRecap: (recap) => set({ recap: recap || null, recapPending: false }),
+
+  /* ── Travel ─────────────────────────────────────────────────── */
+  beginTravel: () => set({ traveling: true }),
+
+  applyLocationChanged: ({ currentRegion, inGameMinutes, pace }) =>
+    set({ currentRegion, inGameMinutes, travelPace: pace, traveling: false }),
 
   /* ROUND_STATUS — live collaborative collection indicator. */
   applyRoundStatus: (evt) =>

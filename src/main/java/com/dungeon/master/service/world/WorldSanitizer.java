@@ -54,7 +54,12 @@ public class WorldSanitizer {
         return out;
     }
 
-    /** Drop regions without a name; trim the rest. */
+    /**
+     * Drop regions without a name; trim the rest. Preserves the travel-map overlay: coordinates are
+     * clamped into the 0–100 canvas (null left as-is for auto-layout) and connection names are trimmed
+     * and de-duplicated (case-insensitive). Connections are NOT validated against the region set here —
+     * that happens when the map is built, since an edited region may reference one added in the same save.
+     */
     public List<WorldRegion> cleanRegions(List<WorldRegion> regions) {
         List<WorldRegion> out = new ArrayList<>();
         if (regions == null) {
@@ -64,7 +69,35 @@ public class WorldSanitizer {
             if (r == null || isBlank(r.name())) {
                 continue;
             }
-            out.add(new WorldRegion(r.name().trim(), trimOrEmpty(r.type()), trimOrEmpty(r.description())));
+            out.add(new WorldRegion(r.name().trim(), trimOrEmpty(r.type()), trimOrEmpty(r.description()),
+                    clampCoord(r.x()), clampCoord(r.y()), cleanConnections(r.connections())));
+        }
+        return out;
+    }
+
+    /** Clamp an optional map coordinate into [0, 100]; null stays null (auto-layout). */
+    private static Double clampCoord(Double v) {
+        if (v == null) {
+            return null;
+        }
+        return Math.max(0.0, Math.min(100.0, v));
+    }
+
+    /** Trim, drop blanks, and de-duplicate (case-insensitive) a region's route connection names. */
+    private static List<String> cleanConnections(List<String> connections) {
+        if (connections == null) {
+            return new ArrayList<>();
+        }
+        List<String> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String c : connections) {
+            if (isBlank(c)) {
+                continue;
+            }
+            String trimmed = c.trim();
+            if (seen.add(trimmed.toLowerCase(Locale.ROOT))) {
+                out.add(trimmed);
+            }
         }
         return out;
     }

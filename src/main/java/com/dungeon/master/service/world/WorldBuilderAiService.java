@@ -59,7 +59,12 @@ public class WorldBuilderAiService {
                 stronghold, a mystery site, a wild zone, and neutral ground.
                 %s
                 Return a JSON array of objects: name, type (e.g. City, Ruin, Wilds), description
-                (one or two sentences on what's there and why adventurers care).""".formatted(context(req));
+                (one or two sentences on what's there and why adventurers care), x and y (its
+                position on a 0-100 overland map — spread the locations out so none overlap and
+                the layout reads like a real map), and connections (a JSON array of the names of
+                1 to 3 OTHER regions in this list it has a direct travel route to). The connections
+                together must form ONE fully-connected road network, so the party can travel between
+                every region by some path.""".formatted(context(req));
         return sanitizer.cleanRegions(callList(user, new ParameterizedTypeReference<List<WorldRegion>>() {}));
     }
 

@@ -176,6 +176,15 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
     case "ROUND_STATUS":
       s.applyRoundStatus(data as unknown as RoundStatusEvent);
       break;
+    case "LOCATION_CHANGED":
+      s.applyLocationChanged({
+        currentRegion: String(data.currentRegion),
+        inGameMinutes: Number(data.inGameMinutes),
+        pace: (data.pace as import("@/types").TravelPace) ?? "NORMAL",
+      });
+      playSound("turn");
+      scrollToBottom();
+      break;
     case "SYSTEM": {
       // Neutral room line (e.g. "X gains Inspiration!").
       const text = data.text as string | undefined;

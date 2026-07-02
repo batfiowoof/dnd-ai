@@ -13,6 +13,8 @@ import { useSessionStore } from "@/store/sessionStore";
 import { sendAction, sendStartEncounter } from "@/lib/websocket";
 import { useGameSocket } from "@/hooks/useGameSocket";
 import { useGameActions } from "@/hooks/useGameActions";
+import { useTravelMap } from "@/hooks/useTravelQueries";
+import type { TravelPace } from "@/types";
 import { getErrorMessage } from "@/lib/errors";
 import {
   getPlayerId,
@@ -33,6 +35,7 @@ import GameRoomHeader from "@/components/game/GameRoomHeader";
 import PlayersSidebar from "@/components/game/PlayersSidebar";
 import CombatRegion from "@/components/game/CombatRegion";
 import BattlefieldChatSplit from "@/components/game/BattlefieldChatSplit";
+import TravelPanel from "@/components/travel/TravelPanel";
 import GameLog from "@/components/game/GameLog";
 import GameInputBar from "@/components/game/GameInputBar";
 
@@ -131,6 +134,21 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     onError: toast.error,
   });
   const actions = useGameActions(clientRef, sessionId, connected);
+
+  /* ── travel map ─────────────────────────────────────────────────
+     The location graph loads once (React Query); the party's live position + clock come from
+     the store. The left pane shows the travel map out of combat, the battle grid in combat. */
+  const inGame = status === "ACTIVE" || status === "FINISHED";
+  const { data: travelMap } = useTravelMap(sessionId, inGame);
+  const hasCombatGrid = useSessionStore(
+    (s) => s.combat?.status === "ACTIVE" && !!s.combat?.grid
+  );
+  const travelAvailable = (travelMap?.regions.length ?? 0) > 0;
+
+  function handleTravel(destinationRegion: string, pace: TravelPace) {
+    useSessionStore.getState().beginTravel();
+    actions.travel(destinationRegion, pace);
+  }
 
   /* ── lobby actions ──────────────────────────────────────────── */
   async function handleStart() {
@@ -371,7 +389,18 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           <CombatRegion part="tracker" {...combatRegionProps} />
 
           <BattlefieldChatSplit
-            map={<CombatRegion part="map" {...combatRegionProps} />}
+            alsoShowMap={travelAvailable && !hasCombatGrid}
+            map={
+              hasCombatGrid ? (
+                <CombatRegion part="map" {...combatRegionProps} />
+              ) : (
+                <TravelPanel
+                  map={travelMap}
+                  connected={connected}
+                  onTravel={handleTravel}
+                />
+              )
+            }
             chat={
               <>
                 <GameLog playerByName={playerByName} scrollRef={scrollRef} />

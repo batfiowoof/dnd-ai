@@ -9,6 +9,7 @@ import type {
   PlayerRuntimeState,
   SessionSummary,
   SpellSummary,
+  TravelMapDto,
   TurnEventDto,
   CharacterDto,
   CharacterCreateUpdateRequest,
@@ -78,6 +79,17 @@ export async function getSessionByCode(
   code: string
 ): Promise<GameStateDto> {
   const res = await fetch(`${BASE_URL}/sessions/${code}`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+/** The travel map for a session (locations, routes, current position, in-game clock). */
+export async function getTravelMap(
+  token: string,
+  sessionId: string
+): Promise<TravelMapDto> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/map`, {
     headers: getAuthHeaders(token),
   });
   return handleResponse(res);

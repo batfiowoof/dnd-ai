@@ -10,6 +10,7 @@ export const queryKeys = {
     players: (sessionId: string) => ["session", sessionId, "players"] as const,
     states: (sessionId: string) => ["session", sessionId, "states"] as const,
     combat: (sessionId: string) => ["session", sessionId, "combat"] as const,
+    map: (sessionId: string) => ["session", sessionId, "map"] as const,
   },
   characters: {
     all: ["characters"] as const,

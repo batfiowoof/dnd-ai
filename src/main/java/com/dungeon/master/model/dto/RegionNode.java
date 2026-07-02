@@ -1,0 +1,20 @@
+package com.dungeon.master.model.dto;
+
+import java.util.List;
+
+/**
+ * One location as it appears on the travel map: the authored region flavour plus its resolved
+ * position on the node-graph canvas. Unlike {@link WorldRegion}, {@code x}/{@code y} here are always
+ * present (the {@code TravelMapService} fills in an auto-layout for regions the author never placed)
+ * and {@code connections} is symmetrized.
+ *
+ * @param name        the location's name
+ * @param type        short kind tag (e.g. "City", "Ruin")
+ * @param description flavour text
+ * @param x           resolved map x in [0, 100]
+ * @param y           resolved map y in [0, 100]
+ * @param connections names of regions directly reachable from here (symmetrized, de-duplicated)
+ */
+public record RegionNode(String name, String type, String description,
+                         double x, double y, List<String> connections) {
+}
