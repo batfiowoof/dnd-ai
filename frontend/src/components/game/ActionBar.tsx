@@ -13,6 +13,7 @@ interface ActionBarProps {
   onUseItem: (itemName: string) => void;
   /** Management actions — available regardless of whose turn it is. */
   onLongRest?: () => void;
+  onShortRest?: (hitDice: number) => void;
   onManage?: () => void;
 }
 
@@ -28,6 +29,7 @@ export default function ActionBar({
   onCast,
   onUseItem,
   onLongRest,
+  onShortRest,
   onManage,
 }: ActionBarProps) {
   const [openMenu, setOpenMenu] = useState<"cast" | "item" | null>(null);
@@ -215,10 +217,30 @@ export default function ActionBar({
           🎒 Manage
         </button>
       )}
+      {onShortRest && (
+        <button
+          type="button"
+          disabled={!connected}
+          title="Take an hour to spend your remaining Hit Dice and recover some HP."
+          onClick={() => {
+            close();
+            onShortRest(state?.hitDiceRemaining ?? 0);
+          }}
+          className={cn(btn, "border-gold/30 text-gold/90 hover:bg-gold hover:text-bg")}
+        >
+          ☀ Short Rest
+          {state && state.hitDiceTotal > 0 && (
+            <span className="ml-1 tabular opacity-80">
+              {state.hitDiceRemaining}/{state.hitDiceTotal} HD
+            </span>
+          )}
+        </button>
+      )}
       {onLongRest && (
         <button
           type="button"
           disabled={!connected}
+          title="Sleep 8 hours to restore HP and spell slots and ease exhaustion."
           onClick={() => {
             close();
             onLongRest();

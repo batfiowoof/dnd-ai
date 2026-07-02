@@ -214,6 +214,9 @@ public class DmPromptBuilder {
             }
             b.append(". Keep the scene consistent with where they are.\n");
         }
+        b.append("- Time of day: it is ").append(timeOfDay(session.getInGameMinutes()))
+                .append(". Keep light, activity, and mood consistent with the hour.\n");
+        appendExhaustion(b, sessionId);
         if (session.isAllowAiRolls()) {
             b.append("- Ability checks: when a narrative action's outcome is genuinely uncertain ")
                     .append("(not trivial), CALL the rollCheck tool for the acting character instead of ")
@@ -298,6 +301,52 @@ public class DmPromptBuilder {
                 .append("exact name and a signed delta, then narrate the shifted tone. Current attitudes:\n");
         for (NpcStateDto n : npcs) {
             b.append("    • ").append(n.name()).append(" — ").append(n.band()).append("\n");
+        }
+    }
+
+    /** Campaign clock starts at 08:00 (dawn) so Day 1 isn't midnight — mirrors {@code lib/travel.ts}. */
+    private static final long CLOCK_START_MINUTES = 8 * 60;
+
+    /** A natural-language time of day from the in-game clock, e.g. "Day 2, around 19:20 (evening)". */
+    private String timeOfDay(long inGameMinutes) {
+        long total = Math.max(0, inGameMinutes) + CLOCK_START_MINUTES;
+        long day = total / 1440 + 1;
+        int minuteOfDay = (int) (total % 1440);
+        int hour = minuteOfDay / 60;
+        String band = hour < 5 ? "night" : hour < 12 ? "morning" : hour < 17 ? "afternoon"
+                : hour < 21 ? "evening" : "night";
+        return String.format(Locale.ROOT, "Day %d, around %02d:%02d (%s)", day, hour, minuteOfDay % 60, band);
+    }
+
+    /**
+     * List any characters currently suffering exhaustion and what it means mechanically, so the DM
+     * narrates their fatigue and honours the penalties (the engine already enforces them on rolls).
+     */
+    private void appendExhaustion(StringBuilder b, UUID sessionId) {
+        List<String> tired = new ArrayList<>();
+        for (Player p : playerRepository.findBySessionId(sessionId)) {
+            if (p.getRole() != PlayerRole.PLAYER) {
+                continue;
+            }
+            int level;
+            try {
+                level = playerStateService.getState(p.getId()).exhaustionLevel();
+            } catch (RuntimeException e) {
+                continue; // no runtime state yet
+            }
+            if (level > 0) {
+                tired.add("    • " + p.getCharacterName() + " — exhaustion level " + level
+                        + " (" + com.dungeon.master.service.game.ExhaustionRules.describe(level) + ")");
+            }
+        }
+        if (tired.isEmpty()) {
+            return;
+        }
+        b.append("- Exhaustion: some characters are worn down from going without a long rest. Show their ")
+                .append("fatigue in the narration; the engine already applies the mechanical penalties. A ")
+                .append("long rest (8h) eases it by one level:\n");
+        for (String line : tired) {
+            b.append(line).append("\n");
         }
     }
 

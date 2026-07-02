@@ -45,6 +45,12 @@ export interface PlayerRuntimeState {
   dead: boolean;
   /** Name of the concentration spell this player is currently sustaining, if any. */
   concentratingSpell?: string | null;
+  /** 5e exhaustion level (0–6); accrues without a long rest, eased one level per long rest. */
+  exhaustionLevel: number;
+  /** Hit Dice available to spend on a short rest. */
+  hitDiceRemaining: number;
+  /** Total Hit Dice pool (character level). */
+  hitDiceTotal: number;
 }
 
 export interface PlayerStateEvent {

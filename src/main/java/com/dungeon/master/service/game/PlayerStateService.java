@@ -314,12 +314,38 @@ public class PlayerStateService {
     }
 
     /**
-     * Long rest: recover all spell slots and clear conditions. A living (or merely dying/stable)
-     * creature heals to full and resets its death-save state; a dead creature stays dead — a long
-     * rest does not raise the dead.
+     * Short rest ({@code diceToSpend} Hit Dice, at least 1 hour of in-game time — the clock is advanced
+     * by the caller): spend up to the requested number of remaining Hit Dice, each healing
+     * {@code roll(1d hitDie) + CON modifier} (minimum 1 per die). Does not touch spell slots, conditions,
+     * or exhaustion. A dead or downed creature can't benefit. Healing is capped at the (exhaustion-aware)
+     * HP maximum.
      */
     @Transactional
-    public PlayerRuntimeStateDto longRest(UUID playerId) {
+    public PlayerRuntimeStateDto shortRest(UUID playerId, int diceToSpend) {
+        PlayerRuntimeState s = require(playerId);
+        int spend = Math.max(0, Math.min(diceToSpend, s.getHitDiceRemaining()));
+        if (spend > 0 && !s.isDead() && s.getCurrentHp() > 0) {
+            int conMod = abilityMod(s, "CON");
+            DiceRollResult roll = diceService.roll(spend + "d" + s.getHitDieSize());
+            int heal = Math.max(spend, roll.total() + spend * conMod); // each die restores at least 1
+            int max = ExhaustionRules.effectiveMaxHp(s.getMaxHp(), s.getExhaustionLevel());
+            s.setCurrentHp(Math.min(max, s.getCurrentHp() + heal));
+            s.setHitDiceRemaining(s.getHitDiceRemaining() - spend);
+            log.info("Short rest: player={} spent {} Hit Dice, healed {} (now {}/{})",
+                    playerId, spend, heal, s.getCurrentHp(), max);
+        }
+        return toDto(repository.save(s));
+    }
+
+    /**
+     * Long rest ({@code nowMinutes} = the in-game clock after the rest's 8 hours): recover all spell
+     * slots, restore half the character's Hit Dice (minimum one), reduce exhaustion by one level, and
+     * reset the awake window so exhaustion re-accrues from now. A living (or merely dying/stable)
+     * creature heals to full and resets its death-save state; a dead creature stays dead — a long rest
+     * does not raise the dead.
+     */
+    @Transactional
+    public PlayerRuntimeStateDto longRest(UUID playerId, long nowMinutes) {
         PlayerRuntimeState s = require(playerId);
         List<SpellSlot> refreshed = new ArrayList<>();
         for (SpellSlot slot : s.getSpellSlots()) {
@@ -328,14 +354,62 @@ public class PlayerStateService {
         s.setSpellSlots(refreshed);
         s.getConditions().clear();
         s.setConcentratingSpell(null);
+        // A long rest reduces exhaustion by one level and starts a fresh awake window.
+        s.setExhaustionLevel(Math.max(0, s.getExhaustionLevel() - 1));
+        s.setExhaustionCheckMinutes(nowMinutes);
+        // Regain spent Hit Dice up to half the pool (minimum one), not exceeding the total.
+        int regain = Math.max(1, s.getHitDiceTotal() / 2);
+        s.setHitDiceRemaining(Math.min(s.getHitDiceTotal(), s.getHitDiceRemaining() + regain));
         if (!s.isDead()) {
-            s.setCurrentHp(s.getMaxHp());
+            s.setCurrentHp(ExhaustionRules.effectiveMaxHp(s.getMaxHp(), s.getExhaustionLevel()));
             s.setTempHp(0);
             s.setStable(false);
             s.setDeathSaveSuccesses(0);
             s.setDeathSaveFailures(0);
         }
         return toDto(repository.save(s));
+    }
+
+    /**
+     * Accrue exhaustion for every player in a session whose awake window has rolled past a full day of
+     * in-game time. Each 1440 minutes since a player's {@code exhaustionCheckMinutes} adds one level
+     * (capped at {@link ExhaustionRules#MAX_LEVEL}); reaching level 6 is death. Current HP is clamped to
+     * the (now possibly halved) maximum. Returns the states that changed so the caller can broadcast them.
+     */
+    @Transactional
+    public List<PlayerRuntimeStateDto> accrueExhaustion(UUID sessionId, long nowMinutes) {
+        List<PlayerRuntimeStateDto> changed = new ArrayList<>();
+        for (PlayerRuntimeState s : repository.findBySessionId(sessionId)) {
+            if (s.isDead()) {
+                continue;
+            }
+            boolean mutated = false;
+            while (s.getExhaustionLevel() < ExhaustionRules.MAX_LEVEL
+                    && nowMinutes - s.getExhaustionCheckMinutes() >= ExhaustionRules.MINUTES_PER_LEVEL) {
+                s.setExhaustionLevel(s.getExhaustionLevel() + 1);
+                s.setExhaustionCheckMinutes(s.getExhaustionCheckMinutes() + ExhaustionRules.MINUTES_PER_LEVEL);
+                mutated = true;
+            }
+            if (mutated) {
+                if (ExhaustionRules.isDeadly(s.getExhaustionLevel())) {
+                    s.setDead(true);
+                    s.setCurrentHp(0);
+                } else {
+                    s.setCurrentHp(Math.min(s.getCurrentHp(),
+                            ExhaustionRules.effectiveMaxHp(s.getMaxHp(), s.getExhaustionLevel())));
+                }
+                log.info("Exhaustion: player={} now level {} (session={})",
+                        s.getPlayerId(), s.getExhaustionLevel(), sessionId);
+                changed.add(toDto(repository.save(s)));
+            }
+        }
+        return changed;
+    }
+
+    /** D&D ability modifier from runtime scores: floor((score - 10) / 2); 0 when absent. */
+    private static int abilityMod(PlayerRuntimeState s, String ability) {
+        Integer score = s.getAbilities() == null ? null : s.getAbilities().get(ability);
+        return score == null ? 0 : Math.floorDiv(score - 10, 2);
     }
 
     /* ── conditions / concentration ──────────────────────────────── */
@@ -434,10 +508,14 @@ public class PlayerStateService {
         Integer dex = s.getAbilities() == null ? null : s.getAbilities().get("DEX");
         int dexMod = dex == null ? 0 : Math.floorDiv(dex - 10, 2);
         int effectiveAc = ConditionRules.acAdjust(s.getConditions(), s.getArmorClass(), dexMod);
+        // Exhaustion level 4+ halves the HP maximum; surface the effective values so the bar and
+        // combat healing caps reflect it (the stored maxHp stays the base and restores when it lifts).
+        int effectiveMaxHp = ExhaustionRules.effectiveMaxHp(s.getMaxHp(), s.getExhaustionLevel());
+        int effectiveCurrentHp = Math.min(s.getCurrentHp(), effectiveMaxHp);
         return new PlayerRuntimeStateDto(
                 s.getPlayerId(),
-                s.getCurrentHp(),
-                s.getMaxHp(),
+                effectiveCurrentHp,
+                effectiveMaxHp,
                 s.getTempHp(),
                 effectiveAc,
                 s.getAbilities(),
@@ -451,6 +529,9 @@ public class PlayerStateService {
                 s.getDeathSaveFailures(),
                 s.isStable(),
                 s.isDead(),
-                s.getConcentratingSpell());
+                s.getConcentratingSpell(),
+                s.getExhaustionLevel(),
+                s.getHitDiceRemaining(),
+                s.getHitDiceTotal());
     }
 }

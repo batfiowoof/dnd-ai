@@ -142,6 +142,26 @@ export function calculateArmorClass(dexterity: number): number {
   return 10 + getAbilityModifier(dexterity);
 }
 
+/**
+ * 5e exhaustion effects by level (0–6), each cumulative on the one before. Mirrors the backend
+ * {@code ExhaustionRules}; used for the character-panel badge tooltip.
+ */
+export const EXHAUSTION_EFFECTS = [
+  "Not exhausted",
+  "Disadvantage on ability checks",
+  "Speed halved",
+  "Disadvantage on attacks & saving throws",
+  "Hit point maximum halved",
+  "Speed reduced to 0",
+  "Death",
+] as const;
+
+/** The marginal 5e effect gained at a given exhaustion level (clamped to 0–6). */
+export function exhaustionEffect(level: number): string {
+  const l = Math.max(0, Math.min(6, Math.floor(level)));
+  return EXHAUSTION_EFFECTS[l];
+}
+
 /* ── Background ability-score increase (2024) ────────────────────── */
 
 /** `two-one` = +2 to one ability and +1 to another; `all-one` = +1 to all three. */

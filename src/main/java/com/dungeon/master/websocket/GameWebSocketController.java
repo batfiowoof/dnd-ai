@@ -14,6 +14,7 @@ import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.RollRequest;
+import com.dungeon.master.model.dto.ShortRestRequest;
 import com.dungeon.master.model.dto.TravelRequest;
 import com.dungeon.master.model.dto.UseItemRequest;
 import com.dungeon.master.model.entity.Player;
@@ -22,6 +23,7 @@ import com.dungeon.master.service.game.DiceService;
 import com.dungeon.master.service.game.GameSessionService;
 import com.dungeon.master.service.game.PlayerService;
 import com.dungeon.master.service.game.SessionMembershipService;
+import com.dungeon.master.service.game.GameClockService;
 import com.dungeon.master.service.game.PlayerStateService;
 import com.dungeon.master.service.game.TravelService;
 import com.dungeon.master.service.game.TurnService;
@@ -49,6 +51,7 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
     private final PlayerStateService playerStateService;
     private final DiceService diceService;
     private final TravelService travelService;
+    private final GameClockService gameClockService;
 
     @MessageMapping("/game/{sessionId}/action")
     public void handlePlayerAction(@DestinationVariable UUID sessionId,
@@ -256,12 +259,37 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
         String username = principal.getName();
         try {
             PlayerDto player = playerService.getPlayerInSession(sessionId, username);
-            PlayerRuntimeStateDto state = playerStateService.longRest(player.id());
+            // A long rest is 8 hours of in-game time; advance the shared clock, then apply the rest
+            // (which resets this player's exhaustion window to now) and accrue for anyone still overdue.
+            long now = gameClockService.advanceClock(sessionId, GameClockService.LONG_REST_MINUTES);
+            PlayerRuntimeStateDto state = playerStateService.longRest(player.id(), now);
             broadcastState(sessionId, state);
+            gameClockService.accrueAndBroadcast(sessionId);
             turnService.submitAction(sessionId, username,
-                    player.characterName() + " takes a long rest, recovering hit points and spell slots.");
+                    player.characterName() + " takes a long rest (8 hours), recovering hit points and spell slots.");
         } catch (Exception e) {
             log.error("Error during long rest: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/short-rest")
+    public void handleShortRest(@DestinationVariable UUID sessionId,
+                                @Payload ShortRestRequest request,
+                                Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            int hitDice = request == null ? 1 : Math.max(0, request.hitDice());
+            // A short rest is at least an hour; advance the clock, spend Hit Dice to heal, then accrue.
+            gameClockService.advanceClock(sessionId, GameClockService.SHORT_REST_MINUTES);
+            PlayerRuntimeStateDto state = playerStateService.shortRest(player.id(), hitDice);
+            broadcastState(sessionId, state);
+            gameClockService.accrueAndBroadcast(sessionId);
+            turnService.submitAction(sessionId, username,
+                    player.characterName() + " takes a short rest (about an hour), tending to wounds.");
+        } catch (Exception e) {
+            log.error("Error during short rest: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
     }

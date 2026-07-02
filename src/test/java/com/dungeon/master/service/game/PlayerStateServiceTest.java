@@ -213,8 +213,85 @@ class PlayerStateServiceTest {
                 .playerId(id).sessionId(UUID.randomUUID())
                 .currentHp(0).maxHp(20).dead(true).deathSaveFailures(3).build();
         when(repository.findById(id)).thenReturn(Optional.of(dead));
-        PlayerRuntimeStateDto dto = service.longRest(id);
+        PlayerRuntimeStateDto dto = service.longRest(id, 0);
         assertTrue(dto.dead(), "a long rest does not raise the dead");
         assertEquals(0, dto.currentHp());
+    }
+
+    @Test
+    void longRestReducesExhaustionByOneAndResetsTheWindow() {
+        PlayerRuntimeState s = PlayerRuntimeState.builder()
+                .playerId(id).sessionId(UUID.randomUUID())
+                .currentHp(5).maxHp(20).exhaustionLevel(3).exhaustionCheckMinutes(0)
+                .hitDiceTotal(4).hitDiceRemaining(0).build();
+        when(repository.findById(id)).thenReturn(Optional.of(s));
+
+        PlayerRuntimeStateDto dto = service.longRest(id, 5000);
+        assertEquals(2, dto.exhaustionLevel(), "a long rest eases exhaustion by one level");
+        assertEquals(5000, s.getExhaustionCheckMinutes(), "the awake window restarts at the rest time");
+        assertEquals(2, dto.hitDiceRemaining(), "regains half the Hit Dice pool (min 1)");
+        assertEquals(20, dto.currentHp(), "heals to full");
+    }
+
+    /* ── short rest ──────────────────────────────────────────────── */
+
+    @Test
+    void shortRestSpendsHitDiceToHeal() {
+        PlayerRuntimeState s = PlayerRuntimeState.builder()
+                .playerId(id).sessionId(UUID.randomUUID())
+                .currentHp(4).maxHp(20).hitDieSize(8).hitDiceTotal(3).hitDiceRemaining(3)
+                .abilities(java.util.Map.of("CON", 14)).build();
+        when(repository.findById(id)).thenReturn(Optional.of(s));
+        DiceService dice = (DiceService) org.mockito.Mockito.mock(DiceService.class);
+        when(dice.roll("2d8")).thenReturn(new DiceRollResult("2d8", 2, 16, 0, RollMode.NORMAL,
+                List.of(5, 5), null, 10, false, false));
+        service = new PlayerStateService(repository, dice, mock(PlayerStateSeeder.class));
+
+        PlayerRuntimeStateDto dto = service.shortRest(id, 2);
+        // 10 rolled + 2 dice × +2 CON = 14 healed → 4 + 14 = 18
+        assertEquals(18, dto.currentHp());
+        assertEquals(1, dto.hitDiceRemaining(), "two of three Hit Dice were spent");
+    }
+
+    @Test
+    void shortRestCannotSpendMoreHitDiceThanRemain() {
+        PlayerRuntimeState s = PlayerRuntimeState.builder()
+                .playerId(id).sessionId(UUID.randomUUID())
+                .currentHp(10).maxHp(20).hitDieSize(8).hitDiceTotal(3).hitDiceRemaining(0)
+                .abilities(java.util.Map.of("CON", 10)).build();
+        when(repository.findById(id)).thenReturn(Optional.of(s));
+
+        PlayerRuntimeStateDto dto = service.shortRest(id, 3);
+        assertEquals(10, dto.currentHp(), "no dice left → no healing");
+        assertEquals(0, dto.hitDiceRemaining());
+    }
+
+    /* ── exhaustion accrual ──────────────────────────────────────── */
+
+    @Test
+    void exhaustionAccruesOneLevelPerDayWithoutALongRest() {
+        UUID sessionId = UUID.randomUUID();
+        PlayerRuntimeState s = PlayerRuntimeState.builder()
+                .playerId(id).sessionId(sessionId)
+                .currentHp(20).maxHp(20).exhaustionLevel(0).exhaustionCheckMinutes(0).build();
+        when(repository.findBySessionId(sessionId)).thenReturn(List.of(s));
+
+        // Just under two full days → two levels.
+        List<PlayerRuntimeStateDto> changed = service.accrueExhaustion(sessionId, 2 * 24 * 60 + 30);
+        assertEquals(1, changed.size());
+        assertEquals(2, changed.get(0).exhaustionLevel());
+    }
+
+    @Test
+    void exhaustionLevelSixIsDeath() {
+        UUID sessionId = UUID.randomUUID();
+        PlayerRuntimeState s = PlayerRuntimeState.builder()
+                .playerId(id).sessionId(sessionId)
+                .currentHp(20).maxHp(20).exhaustionLevel(5).exhaustionCheckMinutes(0).build();
+        when(repository.findBySessionId(sessionId)).thenReturn(List.of(s));
+
+        List<PlayerRuntimeStateDto> changed = service.accrueExhaustion(sessionId, 24 * 60);
+        assertEquals(6, changed.get(0).exhaustionLevel());
+        assertTrue(changed.get(0).dead(), "level 6 exhaustion is death");
     }
 }

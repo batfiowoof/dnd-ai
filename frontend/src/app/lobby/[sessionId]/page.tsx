@@ -426,6 +426,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     onCast={actions.cast}
                     onUseItem={actions.useItem}
                     onLongRest={actions.longRest}
+                    onShortRest={actions.shortRest}
                     onManage={() => setManageOpen(true)}
                   />
                 )}

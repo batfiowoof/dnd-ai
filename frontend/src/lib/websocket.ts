@@ -189,6 +189,13 @@ export function sendLongRest(client: Client, sessionId: string) {
   });
 }
 
+export function sendShortRest(client: Client, sessionId: string, hitDice: number) {
+  client.publish({
+    destination: `/app/game/${sessionId}/short-rest`,
+    body: JSON.stringify({ hitDice }),
+  });
+}
+
 /* ── Combat ───────────────────────────────────────────────────── */
 
 export function sendStartEncounter(

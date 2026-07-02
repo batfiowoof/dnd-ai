@@ -55,6 +55,7 @@ public class TravelService {
     private final CombatEncounterRepository combatEncounterRepository;
     private final TravelMapService travelMapService;
     private final TurnService turnService;
+    private final GameClockService gameClockService;
     private final SimpMessagingTemplate messagingTemplate;
 
     /**
@@ -136,6 +137,8 @@ public class TravelService {
                 String.format(Locale.ROOT, "%.1f", travelDays), encounter);
 
         broadcastLocation(session, destination.name(), "", fromName, fromSubregion, pace);
+        // A long trip can tire the party — accrue exhaustion for the newly-advanced clock.
+        gameClockService.accrueAndBroadcast(session.getId());
 
         // Dispatch the DM narration of the journey (and combat, if the leg was ambushed).
         String action = travelAction(from, destination, pace, durationText);
@@ -187,6 +190,7 @@ public class TravelService {
 
         broadcastLocation(session, region.name(), destination.name(), region.name(), fromSubName,
                 session.getTravelPace());
+        gameClockService.accrueAndBroadcast(session.getId());
 
         String action = localAction(region, fromSub, destination);
         TravelContext travel = new TravelContext(region.name(), region.name(), fromSubName, destination.name(),

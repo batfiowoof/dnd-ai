@@ -531,7 +531,9 @@ public class CombatService {
         }
 
         Character c = character(player);
-        int speed = ConditionRules.effectiveSpeed(c != null ? c.getSpeed() : 30, playerConds(player.getId()));
+        int speed = ExhaustionRules.effectiveSpeed(
+                ConditionRules.effectiveSpeed(c != null ? c.getSpeed() : 30, playerConds(player.getId())),
+                exhaustionLevel(player.getId()));
         int budget = speed + (token.isDashed() ? speed : 0) - token.getMovementUsedFeet();
 
         Integer cost = gridService.pathCostFeet(grid, token.getX(), token.getY(), x, y, refId);
@@ -1318,8 +1320,9 @@ public class CombatService {
             return;
         }
         Character c = character(player);
-        int speed = ConditionRules.effectiveSpeed(c != null ? c.getSpeed() : 30,
-                playerConds(player.getId()));
+        int speed = ExhaustionRules.effectiveSpeed(
+                ConditionRules.effectiveSpeed(c != null ? c.getSpeed() : 30, playerConds(player.getId())),
+                exhaustionLevel(player.getId()));
         int budget = speed + (t.isDashed() ? speed : 0);
         boolean movementLeft = t.getMovementUsedFeet() < budget;
         if (t.isActionUsed() && t.isBonusActionUsed() && !movementLeft) {
@@ -1347,14 +1350,25 @@ public class CombatService {
         return combatLookups.playerConds(playerId);
     }
 
+    /** A player's current exhaustion level (0 when no runtime state), for enforcing 5e exhaustion effects. */
+    private int exhaustionLevel(UUID playerId) {
+        try {
+            return playerStateService.getState(playerId).exhaustionLevel();
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
     /** True when two tokens are within 5 ft (one square); assumes melee when there is no grid. */
     private boolean isMelee(Token a, Token b, GridState grid) {
         return CombatMath.isMelee(gridService, a, b, grid);
     }
 
-    /** Net attack roll mode for a player attacking an enemy (conditions + the target Dodging). */
+    /** Net attack roll mode for a player attacking an enemy (conditions + the target Dodging + exhaustion 3+). */
     private RollMode playerVsEnemyMode(Player attacker, Enemy defender, Token defenderTok, boolean melee) {
-        return CombatMath.playerVsEnemyMode(playerConds(attacker.getId()), defender, defenderTok, melee);
+        return RollMode.combine(
+                CombatMath.playerVsEnemyMode(playerConds(attacker.getId()), defender, defenderTok, melee),
+                ExhaustionRules.attackAndSaveMode(exhaustionLevel(attacker.getId())));
     }
 
     /** Net attack roll mode for an enemy attacking a player (conditions + the target Dodging). */

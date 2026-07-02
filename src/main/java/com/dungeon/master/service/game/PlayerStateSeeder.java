@@ -28,6 +28,17 @@ import java.util.Map;
 public class PlayerStateSeeder {
 
     private final PlayerRuntimeStateRepository repository;
+    private final Dnd5eReferenceService referenceService;
+
+    /** Hit-die size for a class from the SRD corpus (defaults to d8 when the class is unknown). */
+    private int hitDieForClass(String characterClass) {
+        String index = characterClass == null ? "" : characterClass.toLowerCase(Locale.ROOT);
+        return referenceService.getClass(index)
+                .map(rec -> rec.get("hitDie"))
+                .filter(Number.class::isInstance)
+                .map(v -> ((Number) v).intValue())
+                .orElse(8);
+    }
 
     /**
      * Ensure a runtime state row exists for the player, seeding it if missing. Combat reads
@@ -74,6 +85,9 @@ public class PlayerStateSeeder {
                 .conditions(new ArrayList<>())
                 .cantrips(new ArrayList<>())
                 .knownSpells(new ArrayList<>())
+                .hitDieSize(8)
+                .hitDiceTotal(1)
+                .hitDiceRemaining(1)
                 .build();
         repository.save(state);
         log.info("Seeded default runtime state for player={} (no character)", player.getId());
@@ -82,6 +96,8 @@ public class PlayerStateSeeder {
     @Transactional
     public void seedForPlayer(Player player, Character character) {
         int hp = character.getHitPoints();
+        int level = Math.max(1, character.getLevel());
+        int hitDie = hitDieForClass(character.getCharacterClass());
 
         List<InventoryItem> inventory = new ArrayList<>();
         // Prefer the structured starting inventory (real quantities + kinds); fall back to
@@ -118,9 +134,12 @@ public class PlayerStateSeeder {
                 .conditions(new ArrayList<>())
                 .cantrips(character.getCantrips() != null ? new ArrayList<>(character.getCantrips()) : new ArrayList<>())
                 .knownSpells(character.getKnownSpells() != null ? new ArrayList<>(character.getKnownSpells()) : new ArrayList<>())
+                .hitDieSize(hitDie)
+                .hitDiceTotal(level)
+                .hitDiceRemaining(level)
                 .build();
         repository.save(state);
-        log.info("Seeded runtime state for player={} hp={}", player.getId(), hp);
+        log.info("Seeded runtime state for player={} hp={} hitDice={}d{}", player.getId(), hp, level, hitDie);
     }
 
     private ItemKind classify(String name) {

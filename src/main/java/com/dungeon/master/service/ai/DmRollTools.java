@@ -9,6 +9,7 @@ import com.dungeon.master.model.enums.RollMode;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.service.game.CheckModifierService;
 import com.dungeon.master.service.game.DiceService;
+import com.dungeon.master.service.game.ExhaustionRules;
 import com.dungeon.master.service.game.PlayerStateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -80,7 +81,7 @@ public class DmRollTools {
                     RollMode.NORMAL.name(), false, false, false, "no such character: " + playerName);
         }
         int useDc = dc > 0 ? dc : intCtx(ctx, K_DEFAULT_DC, 13);
-        RollMode finalMode = withInspiration(sessionId, player, parseMode(mode), ctx);
+        RollMode finalMode = withExhaustion(player, withInspiration(sessionId, player, parseMode(mode), ctx));
         int modifier = modifiers.computeModifier(player, ability, skill);
         DiceRollResult r = diceService.roll(modifiers.notation(modifier), finalMode);
         broadcastRoll(sessionId, player.getId(), player.getCharacterName(),
@@ -109,7 +110,7 @@ public class DmRollTools {
             if (p.getRole() != PlayerRole.PLAYER) {
                 continue;
             }
-            RollMode finalMode = withInspiration(sessionId, p, RollMode.NORMAL, ctx);
+            RollMode finalMode = withExhaustion(p, withInspiration(sessionId, p, RollMode.NORMAL, ctx));
             int modifier = modifiers.computeModifier(p, ability, skill);
             DiceRollResult r = diceService.roll(modifiers.notation(modifier), finalMode);
             broadcastRoll(sessionId, p.getId(), p.getCharacterName(), modifiers.label(ability, skill), r);
@@ -147,7 +148,7 @@ public class DmRollTools {
         String label = (targetLabel == null || targetLabel.isBlank()) ? "the opposed party" : targetLabel;
         int npcMod = targetMod != 0 ? targetMod : intCtx(ctx, K_DEFAULT_CONTEST_MOD, 4);
 
-        RollMode actorMode = withInspiration(sessionId, actor, RollMode.NORMAL, ctx);
+        RollMode actorMode = withExhaustion(actor, withInspiration(sessionId, actor, RollMode.NORMAL, ctx));
         int actorModifier = modifiers.computeModifier(actor, actorAbility, actorSkill);
         DiceRollResult actorRoll = diceService.roll(modifiers.notation(actorModifier), actorMode);
         broadcastRoll(sessionId, actor.getId(), actor.getCharacterName(),
@@ -205,6 +206,17 @@ public class DmRollTools {
             }
         }
         return RollMode.combine(dmMode, used ? RollMode.ADVANTAGE : null);
+    }
+
+    /** Fold in disadvantage on ability checks when the character has exhaustion (level 1+). */
+    private RollMode withExhaustion(Player player, RollMode mode) {
+        int level;
+        try {
+            level = playerStateService.getState(player.getId()).exhaustionLevel();
+        } catch (RuntimeException e) {
+            return mode; // no runtime state — no exhaustion to apply
+        }
+        return RollMode.combine(mode, ExhaustionRules.checkMode(level));
     }
 
     private void broadcastRoll(UUID sessionId, UUID playerId, String name, String label, DiceRollResult r) {

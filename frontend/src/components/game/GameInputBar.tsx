@@ -21,6 +21,7 @@ interface GameInputBarProps {
   onCast: (spellLevel: number, spellName?: string) => void;
   onUseItem: (itemName: string) => void;
   onLongRest: () => void;
+  onShortRest: (hitDice: number) => void;
   onManage: () => void;
 }
 
@@ -43,6 +44,7 @@ export default function GameInputBar({
   onCast,
   onUseItem,
   onLongRest,
+  onShortRest,
   onManage,
 }: GameInputBarProps) {
   const status = useSessionStore((s) => s.status);
@@ -104,6 +106,7 @@ export default function GameInputBar({
             onCast={onCast}
             onUseItem={onUseItem}
             onLongRest={onLongRest}
+            onShortRest={onShortRest}
             onManage={onManage}
           />
         )}

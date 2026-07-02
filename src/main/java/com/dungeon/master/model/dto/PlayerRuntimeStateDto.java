@@ -22,6 +22,9 @@ public record PlayerRuntimeStateDto(
         int deathSaveFailures,
         boolean stable,
         boolean dead,
-        String concentratingSpell
+        String concentratingSpell,
+        int exhaustionLevel,
+        int hitDiceRemaining,
+        int hitDiceTotal
 ) {
 }

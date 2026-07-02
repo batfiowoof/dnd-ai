@@ -122,4 +122,29 @@ public class PlayerRuntimeState {
     @Column(name = "dead", nullable = false)
     @Builder.Default
     private boolean dead = false;
+
+    /** Class hit die size (d6/d8/d10/d12 → 6/8/10/12), snapshotted from the character's class. */
+    @Column(name = "hit_die_size", nullable = false)
+    @Builder.Default
+    private int hitDieSize = 8;
+
+    /** Total Hit Dice = character level; the size of the short-rest healing pool. */
+    @Column(name = "hit_dice_total", nullable = false)
+    @Builder.Default
+    private int hitDiceTotal = 1;
+
+    /** Hit Dice still available to spend on a short rest (a long rest restores half, min one). */
+    @Column(name = "hit_dice_remaining", nullable = false)
+    @Builder.Default
+    private int hitDiceRemaining = 1;
+
+    /** 5e exhaustion level (0–6). +1 per 24h in-game without a long rest, −1 per long rest; 6 is death. */
+    @Column(name = "exhaustion_level", nullable = false)
+    @Builder.Default
+    private int exhaustionLevel = 0;
+
+    /** The {@code in_game_minutes} marking the start of the current awake window; each full day past it tires. */
+    @Column(name = "exhaustion_check_minutes", nullable = false)
+    @Builder.Default
+    private long exhaustionCheckMinutes = 0;
 }
