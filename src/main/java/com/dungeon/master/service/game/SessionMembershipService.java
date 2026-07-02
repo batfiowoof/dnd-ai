@@ -136,7 +136,7 @@ public class SessionMembershipService {
         GameSession session = gameSessionService.getSession(sessionId);
 
         if (username.equals(session.getCreatedBy())) {
-            throw new IllegalStateException("The session creator must delete the session, not leave it");
+            throw new IllegalStateException("The host must end the adventure, not leave it");
         }
 
         Player player = playerRepository.findBySessionIdAndUsername(sessionId, username)

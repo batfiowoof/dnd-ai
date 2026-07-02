@@ -228,14 +228,32 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     combatCast: gate.gateCast,
   });
 
+  /**
+   * The host can't plainly leave an in-progress adventure — leaving must go through the
+   * End-Adventure recap cycle (so the story is chronicled and can be handed to a follow-up
+   * session). Route the host's Leave to the end confirmation while ACTIVE; everyone else
+   * (and the host once FINISHED) gets the ordinary leave confirmation.
+   */
+  function handleLeaveClick() {
+    if (isCreator && status === "ACTIVE") {
+      setEndConfirm(true);
+    } else {
+      setLeaveConfirm(true);
+    }
+  }
+
   /** Leave the session: best-effort backend leave, clear local keys, return to /play. */
   async function handleLeaveSession() {
     setLeaveConfirm(false);
-    try {
-      const token = await getToken();
-      if (token) await leaveSession(token, sessionId);
-    } catch {
-      // Ignore — navigate away regardless so the user is never stuck.
+    // The backend forbids the creator from leaving (they end the session instead), so skip
+    // the doomed call for the host and just navigate away.
+    if (!isCreator) {
+      try {
+        const token = await getToken();
+        if (token) await leaveSession(token, sessionId);
+      } catch {
+        // Ignore — navigate away regardless so the user is never stuck.
+      }
     }
     forgetSession(sessionId);
     router.push("/play");
@@ -360,7 +378,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         isCreator={isCreator}
         onStartEncounter={handleStartEncounter}
         onEndSession={() => setEndConfirm(true)}
-        onLeave={() => setLeaveConfirm(true)}
+        onLeave={handleLeaveClick}
         onOpenSheet={setSheetPlayerId}
       />
 
