@@ -41,6 +41,15 @@ interface CombatControlsProps {
   onDash: () => void;
   onDisengage: () => void;
   onDodge: () => void;
+  /* ── Bonus actions ── */
+  /** Lowercased class name, to gate Second Wind (fighter) / Cunning Action (rogue). */
+  myClass: string;
+  /** Off-hand attack is "armed" — the next enemy click resolves it as a bonus attack. */
+  offHandMode: boolean;
+  hasOffHandWeapon: boolean;
+  onToggleOffHand: () => void;
+  onSecondWind: () => void;
+  onCunningAction: (action: "dash" | "disengage" | "hide") => void;
   onEndTurn: () => void;
 }
 
@@ -75,10 +84,17 @@ export default function CombatControls({
   onDash,
   onDisengage,
   onDodge,
+  myClass,
+  offHandMode,
+  hasOffHandWeapon,
+  onToggleOffHand,
+  onSecondWind,
+  onCunningAction,
   onEndTurn,
 }: CombatControlsProps) {
   const [itemMenu, setItemMenu] = useState(false);
   const [spellMenu, setSpellMenu] = useState(false);
+  const [cunningMenu, setCunningMenu] = useState(false);
   const [endTurnConfirm, setEndTurnConfirm] = useState(false);
 
   function beginCast(spell: Castable) {
@@ -309,6 +325,82 @@ export default function CombatControls({
                 ✦ Dodge
               </Button>
             </Tooltip>
+
+            {/* ── Bonus actions ── */}
+            <Tooltip
+              placement="top"
+              content={
+                <span className="block max-w-[12rem] text-xs text-text-muted">
+                  <span className="font-semibold text-gold">Off-hand attack</span> —
+                  {hasOffHandWeapon
+                    ? " spend your bonus action to strike with your off-hand weapon, then click an enemy."
+                    : " equip a weapon in your off-hand slot to enable this."}
+                </span>
+              }
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={offHandMode ? "primary" : "ghost"}
+                disabled={!connected || bonusSpent || !hasOffHandWeapon}
+                onClick={onToggleOffHand}
+              >
+                ⚔ Off-hand{offHandMode ? " — pick target" : ""}
+              </Button>
+            </Tooltip>
+
+            {myClass === "fighter" && (
+              <Tooltip
+                placement="top"
+                content={
+                  <span className="block max-w-[12rem] text-xs text-text-muted">
+                    <span className="font-semibold text-gold">Second Wind</span> —
+                    bonus action: regain 1d10 + level hit points.
+                  </span>
+                }
+              >
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!connected || bonusSpent}
+                  onClick={onSecondWind}
+                >
+                  ✚ Second Wind
+                </Button>
+              </Tooltip>
+            )}
+
+            {myClass === "rogue" && (
+              <div className="relative">
+                <button
+                  type="button"
+                  disabled={!connected || bonusSpent}
+                  onClick={() => setCunningMenu((v) => !v)}
+                  title={bonusSpent ? "Bonus action already used" : "Cunning Action"}
+                  className="rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-text-muted transition hover:border-accent/60 hover:text-accent disabled:opacity-40"
+                >
+                  🗡 Cunning ▾
+                </button>
+                {cunningMenu && (
+                  <div className="absolute top-full left-0 z-20 mt-1 min-w-36 overflow-hidden rounded-lg border border-border-accent bg-surface shadow-[0_0_24px_var(--color-accent-glow)]">
+                    {(["dash", "disengage", "hide"] as const).map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        onClick={() => {
+                          setCunningMenu(false);
+                          onCunningAction(a);
+                        }}
+                        className="block w-full border-b border-border/50 px-3 py-2 text-left text-xs capitalize text-text transition last:border-b-0 hover:bg-accent-glow hover:text-accent"
+                      >
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               type="button"

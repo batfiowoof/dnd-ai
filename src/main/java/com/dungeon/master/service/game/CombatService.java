@@ -57,6 +57,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -613,6 +614,147 @@ public class CombatService {
             default -> throw new IllegalArgumentException("Unknown action: " + which);
         }
         token.setActionUsed(true);
+        encounterRepository.save(enc);
+        broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+        List<String> beat = new ArrayList<>();
+        beat.add(player.getCharacterName() + narration);
+        maybeAutoEndTurn(enc, player, beat);
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /* ── bonus actions ───────────────────────────────────────────── */
+
+    /**
+     * Off-hand (two-weapon) attack: swing the weapon equipped in the OFF_HAND slot at an enemy,
+     * spending the <em>bonus</em> action instead of the action. Resolves to-hit and damage in one
+     * shot; two-weapon damage adds no ability modifier (5e default).
+     */
+    @Transactional
+    public void playerOffHandAttack(UUID sessionId, String username, UUID targetEnemyId) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+        requireBonusActionAvailable(enc, player);
+
+        List<InventoryItem> inv = playerStateService.getState(player.getId()).inventory();
+        InventoryItem offHand = CombatMath.offHandWeapon(inv);
+        if (offHand == null) {
+            throw new IllegalStateException(
+                    "You need a weapon equipped in your off hand to make an off-hand attack.");
+        }
+
+        Enemy enemy = enemyRepository.findById(targetEnemyId)
+                .filter(e -> e.getSessionId().equals(sessionId))
+                .orElseThrow(() -> new IllegalArgumentException("Enemy not found"));
+        if (!enemy.isAlive()) {
+            throw new IllegalStateException(enemy.getName() + " is already defeated");
+        }
+
+        Token attackerTok = tokenFor(enc, player.getId().toString());
+        Token defenderTok = tokenFor(enc, enemy.getId().toString());
+        if (enc.getGridState() != null && attackerTok != null && defenderTok != null) {
+            int dist = gridService.distanceFeet(attackerTok.getX(), attackerTok.getY(),
+                    defenderTok.getX(), defenderTok.getY());
+            int range = CombatMath.attackRangeFeet(List.of(offHand));
+            if (dist > range) {
+                throw new IllegalStateException(enemy.getName() + " is out of range ("
+                        + dist + " ft away, your off-hand weapon reaches " + range + " ft)");
+            }
+        }
+
+        boolean melee = isMelee(attackerTok, defenderTok, enc.getGridState());
+        int attackBonus = attackBonus(player) + ConditionRules.attackModifier(playerConds(player.getId()));
+        RollMode mode = playerVsEnemyMode(player, enemy, defenderTok, melee);
+        DiceRollResult atk = rollAttack(attackBonus, mode);
+        int targetAc = effectiveAc(enemy.getArmorClass(), attackerTok, defenderTok, enc.getGridState());
+        boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+
+        markBonusAction(enc, player);
+
+        RollSummary damageSummary = null;
+        int targetHp = enemy.getCurrentHp();
+        int targetMax = enemy.getMaxHp();
+        boolean defeated = false;
+        if (hit) {
+            String dice = CombatMath.offHandDamageDice(offHand);
+            DiceRollResult dmg = diceService.roll(atk.crit() ? CombatMath.critDouble(dice) : dice);
+            enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
+            if (enemy.getCurrentHp() == 0) {
+                enemy.setAlive(false);
+                defeated = true;
+            }
+            enemyRepository.save(enemy);
+            targetHp = enemy.getCurrentHp();
+            damageSummary = RollSummary.of(dmg);
+        }
+
+        broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK",
+                "makes an off-hand attack",
+                List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
+                        RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated)));
+        List<String> beat = new ArrayList<>();
+        beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(), atk,
+                targetAc, hit, damageSummary, targetHp, targetMax, defeated));
+        maybeAutoEndTurn(enc, player, beat);
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /**
+     * Second Wind (Fighter): as a bonus action, regain 1d10 + level hit points. Not yet limited to
+     * once per rest — the mechanical heal lands now; the per-rest gate can be tightened later.
+     */
+    @Transactional
+    public void playerSecondWind(UUID sessionId, String username) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+        requireBonusActionAvailable(enc, player);
+
+        Character c = character(player);
+        if (c == null || !"fighter".equalsIgnoreCase(c.getCharacterClass())) {
+            throw new IllegalStateException("Only Fighters can use Second Wind.");
+        }
+
+        int heal = diceService.roll("1d10").total() + Math.max(1, c.getLevel());
+        PlayerRuntimeStateDto updated = playerStateService.applyHpDelta(player.getId(), heal, false);
+        broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
+
+        markBonusAction(enc, player);
+        broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+        List<String> beat = new ArrayList<>();
+        beat.add(player.getCharacterName() + " uses Second Wind, recovering " + heal + " hit points.");
+        maybeAutoEndTurn(enc, player, beat);
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
+    /**
+     * Cunning Action (Rogue): Dash, Disengage, or Hide as a bonus action. Dash/Disengage set the
+     * matching token flag; Hide is DM-narrated (no hidden state is modelled yet).
+     */
+    @Transactional
+    public void playerCunningAction(UUID sessionId, String username, String which) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+        requireBonusActionAvailable(enc, player);
+
+        Character c = character(player);
+        if (c == null || !"rogue".equalsIgnoreCase(c.getCharacterClass())) {
+            throw new IllegalStateException("Only Rogues can use Cunning Action.");
+        }
+
+        Token token = requireToken(enc, player.getId().toString());
+        String narration;
+        switch (which == null ? "" : which.toLowerCase(Locale.ROOT)) {
+            case "dash" -> {
+                token.setDashed(true);
+                narration = " uses Cunning Action to Dash.";
+            }
+            case "disengage" -> {
+                token.setDisengaged(true);
+                narration = " uses Cunning Action to Disengage.";
+            }
+            case "hide" -> narration = " uses Cunning Action to Hide.";
+            default -> throw new IllegalArgumentException("Unknown cunning action: " + which);
+        }
+        token.setBonusActionUsed(true);
         encounterRepository.save(enc);
         broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
         List<String> beat = new ArrayList<>();
@@ -1482,7 +1624,13 @@ public class CombatService {
     }
 
     private int armorClass(Player player) {
-        return CombatMath.armorClass(character(player), playerConds(player.getId()));
+        List<InventoryItem> inv;
+        try {
+            inv = playerStateService.getState(player.getId()).inventory();
+        } catch (RuntimeException ex) {
+            inv = null;
+        }
+        return CombatMath.armorClass(character(player), inv, playerConds(player.getId()));
     }
 
     /** Attack bonus = best of STR/DEX modifier + proficiency bonus. */

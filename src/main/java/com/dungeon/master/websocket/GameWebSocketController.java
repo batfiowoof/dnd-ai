@@ -221,7 +221,8 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
             PlayerDto player = playerService.getPlayerInSession(sessionId, username);
             int qty = Math.max(1, request.qty());
             PlayerRuntimeStateDto state = playerStateService.addItem(
-                    player.id(), new InventoryItem(request.name(), qty, request.kind()));
+                    player.id(),
+                    new InventoryItem(request.name(), qty, request.kind(), false, null, request.subtype()));
             broadcastState(sessionId, state);
         } catch (Exception e) {
             log.error("Error adding item: session={}, player={}", sessionId, username, e);
@@ -252,7 +253,7 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
         try {
             PlayerDto player = playerService.getPlayerInSession(sessionId, username);
             PlayerRuntimeStateDto state =
-                    playerStateService.equipItem(player.id(), request.name(), request.equipped());
+                    playerStateService.equipItem(player.id(), request.name(), request.slot());
             broadcastState(sessionId, state);
         } catch (Exception e) {
             log.error("Error equipping item: session={}, player={}", sessionId, username, e);

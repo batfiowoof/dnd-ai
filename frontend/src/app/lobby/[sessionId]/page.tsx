@@ -374,6 +374,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     onDash: actions.combatDash,
     onDisengage: actions.combatDisengage,
     onDodge: actions.combatDodge,
+    onOffHandAttack: actions.combatOffHandAttack,
+    onSecondWind: actions.combatSecondWind,
+    onCunningAction: actions.combatCunningAction,
     onMove: actions.combatMove,
     onUploadMap: handleUploadMap,
   };

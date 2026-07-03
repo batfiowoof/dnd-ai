@@ -3,6 +3,7 @@
 import type { PlayerRuntimeState } from "@/types";
 import { Modal, cn } from "@/components/ui";
 import { formatCoins } from "@/lib/money";
+import { SLOT_LABELS } from "@/lib/itemKinds";
 import Portrait from "@/components/Portrait";
 import CharacterStatus from "@/components/game/CharacterStatus";
 import SrdEntryRow from "@/components/game/SrdEntryRow";
@@ -127,9 +128,9 @@ export default function CharacterSheetDialog({
                   accent={item.kind === "POTION_HEALING"}
                   meta={
                     <span className="flex items-center gap-1.5">
-                      {item.equipped && (
+                      {(item.slot || item.equipped) && (
                         <span className="text-[9px] uppercase tracking-wider text-accent-light">
-                          ◆ eq
+                          ◆ {item.slot ? SLOT_LABELS[item.slot] : "eq"}
                         </span>
                       )}
                       {item.qty > 1 && (

@@ -9,7 +9,9 @@ import com.dungeon.master.model.dto.SpellEffect;
 import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.Enemy;
+import com.dungeon.master.model.enums.EquipSlot;
 import com.dungeon.master.model.enums.ItemKind;
+import com.dungeon.master.model.enums.ItemSubtype;
 import com.dungeon.master.model.enums.RollMode;
 import com.dungeon.master.service.game.ConditionRules;
 import com.dungeon.master.service.game.DiceService;
@@ -179,12 +181,85 @@ public final class CombatMath {
         return Math.max(str, dex) + c.getProficiencyBonus();
     }
 
-    /** Armour class including live AC-buff conditions (Mage Armor / Shield of Faith / Barkskin). */
-    public static int armorClass(Character c, List<ActiveCondition> conds) {
-        int base = c == null ? 10 : c.getArmorClass();
-        int dex = c == null ? 0 : Math.floorDiv(c.getDexterity() - 10, 2);
+    /**
+     * Armour class from the character + equipped gear, including live AC-buff conditions
+     * (Mage Armor / Shield of Faith / Barkskin). Recognized body armor in the CHEST slot sets the
+     * base AC (+ DEX capped by armor category), an equipped shield adds +2, and conditions apply on
+     * top. Falls back to the character's stored AC when no recognized armor is equipped.
+     */
+    public static int armorClass(Character c, List<InventoryItem> inv, List<ActiveCondition> conds) {
+        int dex = dexMod(c);
+        int base = armorClassBase(c == null ? 10 : c.getArmorClass(), dex, inv);
         return ConditionRules.acAdjust(conds, base, dex);
     }
+
+    /**
+     * The base armour class from equipped gear, <em>before</em> live conditions. Recognized body
+     * armor in the CHEST slot sets the base (+ DEX capped by category — full for light, +2 for
+     * medium, none for heavy); an equipped shield adds +2. When no recognized body armor is
+     * equipped, {@code fallbackAc} (the character's stored AC) is used as the base.
+     */
+    public static int armorClassBase(int fallbackAc, int dexMod, List<InventoryItem> inv) {
+        InventoryItem body = equippedBodyArmor(inv);
+        ArmorStat stat = body == null ? null : armorStatFor(body.name());
+        int base;
+        if (stat != null) {
+            int dexPart = stat.dexCap() == null ? dexMod : Math.min(dexMod, stat.dexCap());
+            base = stat.base() + dexPart;
+        } else {
+            base = fallbackAc;   // no (recognized) armor equipped — keep the entered AC
+        }
+        return base + (hasEquippedShield(inv) ? 2 : 0);
+    }
+
+    /** The body armor equipped in the CHEST slot, or {@code null} when none is. */
+    public static InventoryItem equippedBodyArmor(List<InventoryItem> inv) {
+        if (inv == null) return null;
+        for (InventoryItem it : inv) {
+            if (it.slot() == EquipSlot.CHEST && it.kind() == ItemKind.ARMOR) return it;
+        }
+        return null;
+    }
+
+    /** Whether a shield is equipped in the OFF_HAND slot. */
+    public static boolean hasEquippedShield(List<InventoryItem> inv) {
+        if (inv == null) return false;
+        for (InventoryItem it : inv) {
+            if (it.slot() == EquipSlot.OFF_HAND && it.subtype() == ItemSubtype.SHIELD) return true;
+        }
+        return false;
+    }
+
+    private static ArmorStat armorStatFor(String name) {
+        if (name == null) return null;
+        String n = name.toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, ArmorStat> e : ARMOR) {
+            if (n.contains(e.getKey())) return e.getValue();
+        }
+        return null;
+    }
+
+    /** Base AC and DEX cap for a recognized armor ({@code dexCap} null = full DEX / light). */
+    private record ArmorStat(int base, Integer dexCap) {}
+
+    /**
+     * Keyword → armor stats (SRD). Ordered most-specific first so {@code contains} matching picks
+     * "studded leather" before "leather" and "breastplate"/"half plate" before "plate".
+     * {@code dexCap}: null = light (full DEX), 2 = medium, 0 = heavy (no DEX).
+     */
+    private static final List<Map.Entry<String, ArmorStat>> ARMOR = List.of(
+            Map.entry("studded leather", new ArmorStat(12, null)),
+            Map.entry("leather", new ArmorStat(11, null)),
+            Map.entry("padded", new ArmorStat(11, null)),
+            Map.entry("hide", new ArmorStat(12, 2)),
+            Map.entry("chain shirt", new ArmorStat(13, 2)),
+            Map.entry("scale mail", new ArmorStat(14, 2)),
+            Map.entry("breastplate", new ArmorStat(14, 2)),
+            Map.entry("half plate", new ArmorStat(15, 2)),
+            Map.entry("ring mail", new ArmorStat(14, 0)),
+            Map.entry("chain mail", new ArmorStat(16, 0)),
+            Map.entry("splint", new ArmorStat(17, 0)),
+            Map.entry("plate", new ArmorStat(18, 0)));
 
     /* ── weapon inference (from an inventory list) ───────────────── */
 
@@ -197,12 +272,36 @@ public final class CombatMath {
             if (chosen == null) chosen = item;        // first weapon as the default
             if (item.equipped()) { chosen = item; break; }  // an equipped weapon wins
         }
-        if (chosen == null) return "1d4";
-        String name = chosen.name().toLowerCase(Locale.ROOT);
+        return chosen == null ? "1d4" : dieForName(chosen.name());
+    }
+
+    /** Map a weapon name to its SRD damage die ("1d4" when unknown/unarmed). */
+    private static String dieForName(String name) {
+        if (name == null) return "1d4";
+        String n = name.toLowerCase(Locale.ROOT);
         for (Map.Entry<String, String> e : WEAPON_DAMAGE) {
-            if (name.contains(e.getKey())) return e.getValue();
+            if (n.contains(e.getKey())) return e.getValue();
         }
         return "1d4";
+    }
+
+    /** The weapon equipped in the OFF_HAND slot, or {@code null} when none is. */
+    public static InventoryItem offHandWeapon(List<InventoryItem> inv) {
+        if (inv == null) return null;
+        for (InventoryItem item : inv) {
+            if (item.kind() == ItemKind.WEAPON && item.slot() == EquipSlot.OFF_HAND) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Two-weapon off-hand damage: the off-hand weapon's die with <em>no</em> ability modifier
+     * (5e default unless a feature grants it). Falls back to 1d4 when the weapon is unknown.
+     */
+    public static String offHandDamageDice(InventoryItem offHand) {
+        return dieForName(offHand == null ? null : offHand.name());
     }
 
     /**

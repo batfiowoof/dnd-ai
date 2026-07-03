@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CombatStateDto, PlayerRuntimeState, SpellSummary } from "@/types";
 import { useSessionStore } from "@/store/sessionStore";
 import { bandMeta } from "@/lib/health";
@@ -60,6 +60,12 @@ interface CombatTrackerProps {
   onDash: () => void;
   onDisengage: () => void;
   onDodge: () => void;
+  /* ── Bonus actions ── */
+  /** Lowercased class name, to gate class bonus actions (fighter / rogue). */
+  myClass: string;
+  onOffHandAttack: (enemyId: string) => void;
+  onSecondWind: () => void;
+  onCunningAction: (action: "dash" | "disengage" | "hide") => void;
 }
 
 /**
@@ -94,10 +100,20 @@ export default function CombatTracker({
   onDash,
   onDisengage,
   onDodge,
+  myClass,
+  onOffHandAttack,
+  onSecondWind,
+  onCunningAction,
 }: CombatTrackerProps) {
   const isMyTurn =
     combat.active?.kind === "PLAYER" && combat.active.refId === myPlayerId;
   const usableItems = myState?.inventory.filter((i) => i.qty > 0) ?? [];
+
+  // Off-hand attack "mode": armed from the controls, then the next enemy click resolves it.
+  const [offHandMode, setOffHandMode] = useState(false);
+  const hasOffHandWeapon = !!myState?.inventory.some(
+    (i) => i.kind === "WEAPON" && i.slot === "OFF_HAND"
+  );
 
   // My token's action-economy flags (drive the toggled Dash/Disengage/Dodge state).
   const myToken = combat.grid?.tokens[myPlayerId] ?? null;
@@ -116,6 +132,11 @@ export default function CombatTracker({
   const moveUsed = myToken?.movementUsedFeet ?? 0;
   const moveBudget = mySpeed + (myToken?.dashed ? mySpeed : 0);
   const myAttackRange = weaponRangeFeet(myState?.inventory);
+
+  // Off-hand mode only makes sense on your turn while a bonus action is available.
+  useEffect(() => {
+    if (!isMyTurn || bonusSpent) setOffHandMode(false);
+  }, [isMyTurn, bonusSpent]);
 
   // Safety net: if the final DM_NARRATION is ever lost, don't strand the controls behind the
   // narration gate forever — release it after a generous timeout.
@@ -178,8 +199,8 @@ export default function CombatTracker({
             e.alive &&
             connected &&
             !casting &&
-            !actionSpent &&
-            inAttackRange;
+            inAttackRange &&
+            (offHandMode ? !bonusSpent && hasOffHandWeapon : !actionSpent);
           const selectable = targetingEnemies && e.alive && connected;
           return (
             <EnemyCard
@@ -190,7 +211,14 @@ export default function CombatTracker({
               attackable={attackable}
               selectable={selectable}
               chosen={picked.includes(e.id)}
-              onAttack={() => onAttack(e.id)}
+              onAttack={() => {
+                if (offHandMode) {
+                  onOffHandAttack(e.id);
+                  setOffHandMode(false);
+                } else {
+                  onAttack(e.id);
+                }
+              }}
               onSelect={() => onSelectTarget(e.id)}
             />
           );
@@ -258,6 +286,12 @@ export default function CombatTracker({
         onDash={onDash}
         onDisengage={onDisengage}
         onDodge={onDodge}
+        myClass={myClass}
+        offHandMode={offHandMode}
+        hasOffHandWeapon={hasOffHandWeapon}
+        onToggleOffHand={() => setOffHandMode((v) => !v)}
+        onSecondWind={onSecondWind}
+        onCunningAction={onCunningAction}
         onEndTurn={onEndTurn}
       />
     </div>

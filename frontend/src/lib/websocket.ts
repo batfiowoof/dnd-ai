@@ -1,6 +1,6 @@
 import { Client, IFrame, IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
-import type { ItemKind, RollMode, TravelPace } from "@/types";
+import type { EquipSlot, ItemKind, ItemSubtype, RollMode, TravelPace } from "@/types";
 
 const WS_URL = "http://localhost:8080/ws";
 
@@ -155,7 +155,7 @@ export function sendHpChange(client: Client, sessionId: string, amount: number) 
 export function sendAddItem(
   client: Client,
   sessionId: string,
-  payload: { name: string; qty: number; kind: ItemKind }
+  payload: { name: string; qty: number; kind: ItemKind; subtype?: ItemSubtype | null }
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/inventory/add`,
@@ -174,11 +174,11 @@ export function sendEquipItem(
   client: Client,
   sessionId: string,
   name: string,
-  equipped: boolean
+  slot: EquipSlot | null
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/inventory/equip`,
-    body: JSON.stringify({ name, equipped }),
+    body: JSON.stringify({ name, slot }),
   });
 }
 
@@ -320,6 +320,40 @@ export function sendCombatEndTurn(client: Client, sessionId: string) {
   client.publish({
     destination: `/app/game/${sessionId}/combat/end-turn`,
     body: JSON.stringify({}),
+  });
+}
+
+/* ── Bonus actions (Phase B): off-hand attack + class abilities ──── */
+
+/** Off-hand (two-weapon) attack — spends the bonus action, resolves in one shot. */
+export function sendCombatOffHandAttack(
+  client: Client,
+  sessionId: string,
+  targetEnemyId: string
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/bonus/off-hand-attack`,
+    body: JSON.stringify({ targetEnemyId }),
+  });
+}
+
+/** Second Wind (Fighter): heal 1d10 + level as a bonus action. */
+export function sendCombatSecondWind(client: Client, sessionId: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/bonus/second-wind`,
+    body: JSON.stringify({}),
+  });
+}
+
+/** Cunning Action (Rogue): dash / disengage / hide as a bonus action. */
+export function sendCombatCunningAction(
+  client: Client,
+  sessionId: string,
+  action: "dash" | "disengage" | "hide"
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/bonus/cunning-action`,
+    body: JSON.stringify({ action }),
   });
 }
 

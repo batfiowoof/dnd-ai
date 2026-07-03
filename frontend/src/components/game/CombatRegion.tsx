@@ -38,6 +38,9 @@ interface CombatRegionProps {
   onDash: () => void;
   onDisengage: () => void;
   onDodge: () => void;
+  onOffHandAttack: (enemyId: string) => void;
+  onSecondWind: () => void;
+  onCunningAction: (action: "dash" | "disengage" | "hide") => void;
   onMove: (x: number, y: number) => void;
   onUploadMap: (file: File) => Promise<void>;
 }
@@ -70,6 +73,9 @@ export default function CombatRegion({
   onDash,
   onDisengage,
   onDodge,
+  onOffHandAttack,
+  onSecondWind,
+  onCunningAction,
   onMove,
   onUploadMap,
 }: CombatRegionProps) {
@@ -91,6 +97,11 @@ export default function CombatRegion({
   // Walk speed for the move preview — from the character sheet, else 30.
   const mySpeed =
     Number((myPlayer?.characterSheet?.speed as number | undefined) ?? 30) || 30;
+
+  // Lowercased class, to gate class bonus actions (Second Wind / Cunning Action).
+  const myClass = String(
+    (myPlayer?.characterSheet?.characterClass as string | undefined) ?? ""
+  ).toLowerCase();
 
   // Spell metadata for the in-combat cast menu (fetched once when a fight starts).
   // Only the tracker part needs it — don't double-fetch from the map instance.
@@ -174,6 +185,10 @@ export default function CombatRegion({
             onDash={onDash}
             onDisengage={onDisengage}
             onDodge={onDodge}
+            myClass={myClass}
+            onOffHandAttack={onOffHandAttack}
+            onSecondWind={onSecondWind}
+            onCunningAction={onCunningAction}
           />
         </div>
       )}

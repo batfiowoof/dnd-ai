@@ -10,7 +10,15 @@ re-discovering the codebase.
 
 ---
 
-## 1. Equipment paper-doll (8-slot, drag-and-drop, type-restricted)
+## 1. Equipment paper-doll (8-slot, drag-and-drop, type-restricted) — ✅ Shipped
+
+> Built: `EquipSlot`/`ItemSubtype` enums + `InventoryItem.slot/subtype`, slot-aware
+> `PlayerStateService.equipItem` (single occupancy + allowed-slot validation), the paper-doll
+> `InventoryManager` (native DnD + tap fallback), and the `CharacterSheetDialog` mirror.
+> **AC is now wired from equipped gear** (`CombatMath.armorClassBase`): recognized body armor in
+> CHEST sets the base (+ DEX capped by category), a shield in OFF_HAND adds +2, falling back to the
+> character's entered AC when unarmored — reflected in both combat defense and the displayed AC.
+> The main-hand weapon still drives the damage die.
 
 **Goal:** Replace the flat inventory list with a paper-doll of equip slots. Items are dragged
 onto slots; a slot only accepts compatible items (no "sword on the head"). Single occupancy per
@@ -64,7 +72,13 @@ stays cosmetic.
 
 ---
 
-## 2. Structured bonus actions
+## 2. Structured bonus actions — ✅ Shipped
+
+> Built: `CombatService.playerOffHandAttack` / `playerSecondWind` / `playerCunningAction` (routed
+> through `requireBonusActionAvailable` → `markBonusAction`), `/combat/bonus/*` WS verbs, off-hand
+> damage without the ability mod (`CombatMath.offHandDamageDice`), and the gated
+> off-hand-toggle / Second Wind / Cunning Action controls in `CombatControls`. Out-of-combat
+> economy remains deferred.
 
 **Goal:** Give players real bonus-action controls in combat. Today the `Bonus` economy pip
 exists but is only consumed by bonus-action *spells* (a spell whose `castingTime == "Bonus

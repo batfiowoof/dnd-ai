@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { RefObject } from "react";
 import type { Client } from "@stomp/stompjs";
-import type { ItemKind, TravelPace } from "@/types";
+import type { EquipSlot, ItemKind, ItemSubtype, TravelPace } from "@/types";
 import {
   sendTravel,
   sendPass,
@@ -26,6 +26,9 @@ import {
   sendCombatDash,
   sendCombatDisengage,
   sendCombatDodge,
+  sendCombatOffHandAttack,
+  sendCombatSecondWind,
+  sendCombatCunningAction,
   sendCombatStabilize,
   sendEndCombat,
 } from "@/lib/websocket";
@@ -78,14 +81,15 @@ export function useGameActions(
       useItem: run((c, itemName: string) =>
         sendUseItem(c, sessionId, itemName)
       ),
-      addItem: run((c, item: { name: string; qty: number; kind: ItemKind }) =>
-        sendAddItem(c, sessionId, item)
+      addItem: run(
+        (c, item: { name: string; qty: number; kind: ItemKind; subtype?: ItemSubtype | null }) =>
+          sendAddItem(c, sessionId, item)
       ),
       dropItem: run((c, itemName: string) =>
         sendDropItem(c, sessionId, itemName)
       ),
-      equipItem: run((c, itemName: string, equipped: boolean) =>
-        sendEquipItem(c, sessionId, itemName, equipped)
+      equipItem: run((c, itemName: string, slot: EquipSlot | null) =>
+        sendEquipItem(c, sessionId, itemName, slot)
       ),
       shopBuy: run((c, payload: { shopKey: string; itemRef: string; qty: number }) =>
         sendShopBuy(c, sessionId, payload)
@@ -112,6 +116,13 @@ export function useGameActions(
       combatDash: run((c) => sendCombatDash(c, sessionId)),
       combatDisengage: run((c) => sendCombatDisengage(c, sessionId)),
       combatDodge: run((c) => sendCombatDodge(c, sessionId)),
+      combatOffHandAttack: run((c, enemyId: string) =>
+        sendCombatOffHandAttack(c, sessionId, enemyId)
+      ),
+      combatSecondWind: run((c) => sendCombatSecondWind(c, sessionId)),
+      combatCunningAction: run((c, action: "dash" | "disengage" | "hide") =>
+        sendCombatCunningAction(c, sessionId, action)
+      ),
       combatStabilize: run((c, targetPlayerId: string) =>
         sendCombatStabilize(c, sessionId, targetPlayerId)
       ),

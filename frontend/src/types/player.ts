@@ -7,12 +7,39 @@ export type ItemKind =
   | "ARMOR"
   | "GEAR";
 
+/** The eight paper-doll equipment slots. */
+export type EquipSlot =
+  | "HEAD"
+  | "NECK"
+  | "CHEST"
+  | "HANDS"
+  | "MAIN_HAND"
+  | "OFF_HAND"
+  | "FEET"
+  | "RING";
+
+/** Fine-grained item type; refines which slots an item may occupy (see lib/itemKinds). */
+export type ItemSubtype =
+  | "HELMET"
+  | "AMULET"
+  | "BODY_ARMOR"
+  | "GLOVES"
+  | "WEAPON"
+  | "SHIELD"
+  | "BOOTS"
+  | "RING"
+  | "OTHER";
+
 export interface InventoryItem {
   name: string;
   qty: number;
   kind: ItemKind;
-  /** Display/context flag for weapons & armor; no mechanical effect. */
+  /** Display/context flag for weapons & armor; no mechanical effect. Kept in sync with `slot`. */
   equipped?: boolean;
+  /** The paper-doll slot this item occupies, or null/undefined when in the backpack. */
+  slot?: EquipSlot | null;
+  /** Optional finer type used to derive allowed slots; falls back to `kind` when absent. */
+  subtype?: ItemSubtype | null;
 }
 
 export interface SpellSlot {

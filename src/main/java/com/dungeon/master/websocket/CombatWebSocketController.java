@@ -1,6 +1,7 @@
 package com.dungeon.master.websocket;
 
 import com.dungeon.master.model.dto.CombatActionRequest;
+import com.dungeon.master.model.dto.CunningActionRequest;
 import com.dungeon.master.model.dto.MoveRequest;
 import com.dungeon.master.model.dto.StabilizeRequest;
 import com.dungeon.master.model.dto.StartEncounterRequest;
@@ -148,6 +149,43 @@ public class CombatWebSocketController extends AbstractGameWebSocketController {
             combatService.playerDodge(sessionId, username);
         } catch (Exception e) {
             log.error("Error in combat dodge: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/bonus/off-hand-attack")
+    public void handleCombatOffHandAttack(@DestinationVariable UUID sessionId,
+                                          @Payload CombatActionRequest request,
+                                          Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerOffHandAttack(sessionId, username, request.targetEnemyId());
+        } catch (Exception e) {
+            log.error("Error in off-hand attack: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/bonus/second-wind")
+    public void handleCombatSecondWind(@DestinationVariable UUID sessionId, Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerSecondWind(sessionId, username);
+        } catch (Exception e) {
+            log.error("Error in Second Wind: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/bonus/cunning-action")
+    public void handleCombatCunningAction(@DestinationVariable UUID sessionId,
+                                          @Payload CunningActionRequest request,
+                                          Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerCunningAction(sessionId, username, request.action());
+        } catch (Exception e) {
+            log.error("Error in Cunning Action: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
     }

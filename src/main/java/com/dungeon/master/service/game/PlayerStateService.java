@@ -9,8 +9,10 @@ import com.dungeon.master.model.dto.SpellSlot;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.PlayerRuntimeState;
+import com.dungeon.master.model.enums.EquipSlot;
 import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.repository.PlayerRuntimeStateRepository;
+import com.dungeon.master.service.game.combat.CombatMath;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -216,7 +219,7 @@ public class PlayerStateService {
         if (item.qty() <= 1) {
             inv.remove(idx);
         } else {
-            inv.set(idx, new InventoryItem(item.name(), item.qty() - 1, item.kind(), item.equipped()));
+            inv.set(idx, item.withQty(item.qty() - 1));
         }
 
         DiceRollResult healRoll = null;
@@ -238,7 +241,7 @@ public class PlayerStateService {
         for (int i = 0; i < inv.size(); i++) {
             InventoryItem it = inv.get(i);
             if (it.name().equalsIgnoreCase(toAdd.name()) && it.kind() == toAdd.kind()) {
-                inv.set(i, new InventoryItem(it.name(), it.qty() + toAdd.qty(), it.kind(), it.equipped()));
+                inv.set(i, it.withQty(it.qty() + toAdd.qty()));
                 return toDto(repository.save(s));
             }
         }
@@ -265,7 +268,7 @@ public class PlayerStateService {
                 if (it.qty() == take) {
                     inv.remove(i);
                 } else {
-                    inv.set(i, new InventoryItem(it.name(), it.qty() - take, it.kind(), it.equipped()));
+                    inv.set(i, it.withQty(it.qty() - take));
                 }
                 return toDto(repository.save(s));
             }
@@ -305,7 +308,7 @@ public class PlayerStateService {
                 if (it.qty() <= 1) {
                     inv.remove(i);
                 } else {
-                    inv.set(i, new InventoryItem(it.name(), it.qty() - 1, it.kind(), it.equipped()));
+                    inv.set(i, it.withQty(it.qty() - 1));
                 }
                 return toDto(repository.save(s));
             }
@@ -313,22 +316,54 @@ public class PlayerStateService {
         throw new IllegalStateException("Item not in inventory: " + itemName);
     }
 
-    /** Toggle the equipped flag on a weapon/armor item. Display/context only — no AC change. */
+    /**
+     * Equip the named item into {@code targetSlot}, or unequip it back to the backpack when
+     * {@code targetSlot} is {@code null}. Enforces the paper-doll rules: the slot must be one the
+     * item's subtype/kind allows, and a slot holds one item at a time (equipping into an occupied
+     * slot returns the previous occupant to the backpack). Display/context only — no AC change.
+     */
     @Transactional
-    public PlayerRuntimeStateDto equipItem(UUID playerId, String itemName, boolean equipped) {
+    public PlayerRuntimeStateDto equipItem(UUID playerId, String itemName, EquipSlot targetSlot) {
         PlayerRuntimeState s = require(playerId);
         List<InventoryItem> inv = s.getInventory();
+
+        int idx = -1;
         for (int i = 0; i < inv.size(); i++) {
-            InventoryItem it = inv.get(i);
-            if (it.name().equalsIgnoreCase(itemName)) {
-                if (it.kind() != ItemKind.WEAPON && it.kind() != ItemKind.ARMOR) {
-                    throw new IllegalStateException("Only weapons and armor can be equipped: " + itemName);
-                }
-                inv.set(i, new InventoryItem(it.name(), it.qty(), it.kind(), equipped));
-                return toDto(repository.save(s));
+            if (inv.get(i).name().equalsIgnoreCase(itemName)) {
+                idx = i;
+                break;
             }
         }
-        throw new IllegalStateException("Item not in inventory: " + itemName);
+        if (idx < 0) {
+            throw new IllegalStateException("Item not in inventory: " + itemName);
+        }
+
+        InventoryItem item = inv.get(idx);
+
+        if (targetSlot == null) {
+            inv.set(idx, item.withSlot(null));
+            return toDto(repository.save(s));
+        }
+
+        if (!item.allowedSlots().contains(targetSlot)) {
+            throw new IllegalStateException(item.name() + " can't be equipped to the "
+                    + slotLabel(targetSlot) + " slot.");
+        }
+
+        // Single occupancy: return the current occupant of this slot to the backpack first.
+        for (int i = 0; i < inv.size(); i++) {
+            if (i != idx && inv.get(i).slot() == targetSlot) {
+                inv.set(i, inv.get(i).withSlot(null));
+            }
+        }
+
+        inv.set(idx, item.withSlot(targetSlot));
+        return toDto(repository.save(s));
+    }
+
+    /** Human-friendly slot name for error copy (e.g. MAIN_HAND -> "main hand"). */
+    private static String slotLabel(EquipSlot slot) {
+        return slot.name().toLowerCase(Locale.ROOT).replace('_', ' ');
     }
 
     /**
@@ -551,11 +586,14 @@ public class PlayerStateService {
     }
 
     private PlayerRuntimeStateDto toDto(PlayerRuntimeState s) {
-        // Effective AC includes any active AC-buff conditions (Mage Armor / Shield of Faith /
-        // Barkskin), derived from the base AC so it reverts automatically when they end.
+        // Effective AC layers three things onto the character's stored (unarmored/base) AC:
+        // equipped armor + shield, then live AC-buff conditions (Mage Armor / Shield of Faith /
+        // Barkskin). Both derive from the stored base so they revert automatically when gear is
+        // unequipped or a condition ends — the stored armorClass column stays the base.
         Integer dex = s.getAbilities() == null ? null : s.getAbilities().get("DEX");
         int dexMod = dex == null ? 0 : Math.floorDiv(dex - 10, 2);
-        int effectiveAc = ConditionRules.acAdjust(s.getConditions(), s.getArmorClass(), dexMod);
+        int baseAc = CombatMath.armorClassBase(s.getArmorClass(), dexMod, s.getInventory());
+        int effectiveAc = ConditionRules.acAdjust(s.getConditions(), baseAc, dexMod);
         // Exhaustion level 4+ halves the HP maximum; surface the effective values so the bar and
         // combat healing caps reflect it (the stored maxHp stays the base and restores when it lifts).
         int effectiveMaxHp = ExhaustionRules.effectiveMaxHp(s.getMaxHp(), s.getExhaustionLevel());
