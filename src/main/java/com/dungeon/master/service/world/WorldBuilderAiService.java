@@ -9,10 +9,15 @@ import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldOverviewSuggestion;
 import com.dungeon.master.model.dto.WorldRegion;
 import com.dungeon.master.model.dto.WorldSubregion;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.ai.util.JacksonUtils;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +45,19 @@ public class WorldBuilderAiService {
 
     private static final String FRIENDLY_FAIL =
             "The AI couldn't generate that just now. Please try again in a moment.";
+
+    /**
+     * Lenient mapper for turning the model's JSON into DTOs. Unlike Spring AI's default strict
+     * converter, an unknown enum value (e.g. a coin reward the model tags {@code kind:"GOLD"} instead
+     * of {@code GEAR}) becomes {@code null} and a stray extra field is ignored, rather than aborting the
+     * whole array. {@link WorldSanitizer} then coerces those nulls to safe defaults ({@code kind→GEAR},
+     * {@code type→SIDE}). Without this, one bad element in the large quest payload discards every quest.
+     */
+    private static final ObjectMapper LENIENT = JsonMapper.builder()
+            .addModules(JacksonUtils.instantiateAvailableModules())
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+            .enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL)
+            .build();
 
     private final ChatModel chatModel;
     private final WorldSanitizer sanitizer;
@@ -276,27 +294,40 @@ public class WorldBuilderAiService {
     }
 
     private <T> T call(String user, Class<T> type) {
-        try {
-            return ChatClient.create(chatModel).prompt()
-                    .system(SYSTEM)
-                    .user(user)
-                    .call()
-                    .entity(type);
-        } catch (Exception e) {
-            log.warn("World builder AI generation failed: {}", e.getMessage());
-            throw new IllegalStateException(FRIENDLY_FAIL);
-        }
+        return callEntity(user, new BeanOutputConverter<>(type, LENIENT));
     }
 
     private <T> T callList(String user, ParameterizedTypeReference<T> type) {
+        return callEntity(user, new BeanOutputConverter<>(type, LENIENT));
+    }
+
+    /**
+     * Package-private for tests: lenient parse of a raw model JSON reply into DTOs, using the same
+     * mapper as {@link #callEntity}. Lets a test reproduce the "bad enum / stray field" case without a
+     * live model.
+     */
+    static <T> T parseLenient(String json, ParameterizedTypeReference<T> type) {
+        return new BeanOutputConverter<>(type, LENIENT).convert(json);
+    }
+
+    /**
+     * Ask the model for structured JSON and map it with the given lenient converter. Appends the
+     * converter's schema instructions to the prompt (exactly as {@code .entity()} would) but fetches the
+     * raw content and converts it by hand, so a parse failure logs the actual model output instead of
+     * hiding it behind {@link #FRIENDLY_FAIL}. {@link BeanOutputConverter#convert} still strips
+     * ```json fences, so fenced replies keep working.
+     */
+    private <T> T callEntity(String user, BeanOutputConverter<T> converter) {
+        String content = null;
         try {
-            return ChatClient.create(chatModel).prompt()
+            content = ChatClient.create(chatModel).prompt()
                     .system(SYSTEM)
-                    .user(user)
+                    .user(user + System.lineSeparator() + converter.getFormat())
                     .call()
-                    .entity(type);
+                    .content();
+            return converter.convert(content);
         } catch (Exception e) {
-            log.warn("World builder AI generation failed: {}", e.getMessage());
+            log.warn("World builder AI generation failed: {}\nRaw model output:\n{}", e.getMessage(), content);
             throw new IllegalStateException(FRIENDLY_FAIL);
         }
     }
