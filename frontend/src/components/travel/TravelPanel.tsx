@@ -113,6 +113,7 @@ export default function TravelPanel({ map, connected, onTravel, onTravelLocal }:
               nodes={nodes}
               currentRegion={currentNodeName}
               traveling={traveling}
+              pace={storedPace}
               onPickDestination={setDestination}
             />
           </div>

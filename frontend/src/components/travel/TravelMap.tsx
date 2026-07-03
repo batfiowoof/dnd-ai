@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { RegionNode } from "@/types";
+import type { RegionNode, TravelPace } from "@/types";
 import { cn } from "@/components/ui";
 
 interface TravelMapProps {
@@ -10,14 +10,23 @@ interface TravelMapProps {
   currentRegion: string | null;
   /** True while a journey is being narrated — pins are locked until arrival. */
   traveling: boolean;
+  /** The party's current travel pace — scales how fast the beacon glides a route. */
+  pace: TravelPace;
   /** Fired when a route-connected pin is chosen (opens the travel confirm). */
   onPickDestination: (node: RegionNode) => void;
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-/** How long the party token glides along a route when a journey resolves. */
-const JOURNEY_MS = 700;
+/** Base glide duration for a NORMAL-pace leg; scaled per pace by {@link PACE_FACTOR}. */
+const JOURNEY_MS = 950;
+
+/** How the glide duration scales with pace — a fast march arrives sooner, a slow one lingers. */
+const PACE_FACTOR: Record<TravelPace, number> = { FAST: 0.6, NORMAL: 1, SLOW: 1.55 };
+
+/** Comet-tail: how many fading ghost dots trail the beacon, and their progress spacing. */
+const TRAIL_SEGMENTS = 6;
+const TRAIL_GAP = 0.05;
 
 /** Honour both the OS setting and the in-app "reduce motion" toggle (globals.css uses both). */
 function prefersReducedMotion(): boolean {
@@ -52,9 +61,13 @@ export default function TravelMap({
   nodes,
   currentRegion,
   traveling,
+  pace,
   onPickDestination,
 }: TravelMapProps) {
   const [focusName, setFocusName] = useState<string | null>(null);
+  // Read the latest pace inside the glide effect without re-triggering it on pace-only changes.
+  const paceRef = useRef(pace);
+  paceRef.current = pace;
 
   const byName = useMemo(() => {
     const m = new Map<string, RegionNode>();
@@ -67,9 +80,18 @@ export default function TravelMap({
   // Animate the party token gliding along the route when the location changes, instead of the
   // beacon teleporting. The previous pin is remembered so a move tweens from where the party
   // actually was; the first placement (no prior pin) and reduced-motion users simply snap.
+  // The glide is driven by requestAnimationFrame rather than SMIL <animateMotion>: SMIL runs
+  // on the SVG *document* timeline, so a motion inserted long after page load with fill="freeze"
+  // renders already-finished (frozen at the destination) — which read as an instant teleport.
   const prevPointRef = useRef<{ name: string; x: number; y: number } | null>(null);
   const journeyIdRef = useRef(0);
   const [journey, setJourney] = useState<Journey | null>(null);
+  // The in-transit beacon: its live head position plus a comet-tail of trailing ghost points
+  // (user-space coords), or null when the party is not travelling.
+  const [glide, setGlide] = useState<{
+    head: { x: number; y: number };
+    trail: { x: number; y: number }[];
+  } | null>(null);
 
   useEffect(() => {
     if (!current) return;
@@ -78,12 +100,35 @@ export default function TravelMap({
     prevPointRef.current = next;
     if (!prev || norm(prev.name) === norm(next.name) || prefersReducedMotion()) return;
     const id = ++journeyIdRef.current;
-    setJourney({ id, from: { x: prev.x, y: prev.y }, to: { x: next.x, y: next.y } });
-    const t = setTimeout(
-      () => setJourney((j) => (j && j.id === id ? null : j)),
-      JOURNEY_MS
-    );
-    return () => clearTimeout(t);
+    const from = { x: prev.x, y: prev.y };
+    const to = { x: next.x, y: next.y };
+    setJourney({ id, from, to });
+
+    // easeOutCubic — a firm ease-out so the party decelerates into the destination. Faster
+    // paces cover the route in less time; slower ones linger (PACE_FACTOR).
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    const at = (p: number) => {
+      const e = ease(Math.max(0, p));
+      return { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+    };
+    const dur = JOURNEY_MS * PACE_FACTOR[paceRef.current];
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      // The comet-tail samples the eased path slightly behind the head, so it stretches while
+      // the party is moving fast (mid-glide) and gathers in as it slows into the destination.
+      const trail = Array.from({ length: TRAIL_SEGMENTS }, (_, i) => at(t - (i + 1) * TRAIL_GAP));
+      setGlide({ head: at(t), trail });
+      if (t < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        setJourney((j) => (j && j.id === id ? null : j));
+        setGlide(null);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [current]);
 
   const reachable = useMemo(() => {
@@ -167,7 +212,11 @@ export default function TravelMap({
       {/* Pins */}
       {nodes.map((n) => {
         const status = statusOf(n);
-        const isCurrent = status === "current";
+        // While a journey is in flight the party rides the moving beacon overlay, so the
+        // destination pin stays "unlit" until the marker arrives (transiting flips false as
+        // the token unmounts, popping the beacon in at the frozen position).
+        const transiting = journey !== null;
+        const isCurrent = status === "current" && !transiting;
         const isReachable = status === "reachable";
         const interactive = isReachable && !traveling;
 
@@ -252,11 +301,12 @@ export default function TravelMap({
         );
       })}
 
-      {/* Party-in-transit overlay: a glowing token glides along the route from the previous pin to
-          the new one (ease-out), leaving a brief dashed trail. Keyed so each journey restarts the
-          SMIL motion; SMIL is exempt from the CSS reduced-motion reset, so motion is gated in JS. */}
-      {journey && (
-        <g key={journey.id} aria-hidden="true">
+      {/* Party-in-transit overlay: the same beacon drawn on a current pin, but rendered at the
+          rAF-tweened position so it glides along the route as one continuous dot instead of
+          teleporting. A comet-tail of fading ghost dots trails the head, over a faint dashed
+          line marking the route just travelled. */}
+      {journey && glide && (
+        <g aria-hidden="true">
           <line
             x1={journey.from.x}
             y1={journey.from.y}
@@ -268,23 +318,39 @@ export default function TravelMap({
             strokeLinecap="round"
             strokeDasharray="1.2 1.2"
           />
-          <circle
-            r="1.6"
-            fill="#dc2626"
-            stroke="#f87171"
-            strokeWidth="0.5"
-            className="drop-shadow-[0_0_4px_rgba(220,38,38,0.7)]"
-          >
-            <animateMotion
-              dur={`${JOURNEY_MS}ms`}
-              fill="freeze"
-              calcMode="spline"
-              keyPoints="0;1"
-              keyTimes="0;1"
-              keySplines="0.22 1 0.36 1"
-              path={`M ${journey.from.x} ${journey.from.y} L ${journey.to.x} ${journey.to.y}`}
+
+          {/* Comet-tail: each ghost dot further back is smaller and fainter. */}
+          {glide.trail.map((p, i) => {
+            const k = 1 - (i + 1) / (TRAIL_SEGMENTS + 1);
+            return (
+              <circle
+                key={i}
+                cx={p.x}
+                cy={p.y}
+                r={2.2 * k}
+                fill="#dc2626"
+                fillOpacity={0.42 * k}
+              />
+            );
+          })}
+
+          <g transform={`translate(${glide.head.x} ${glide.head.y})`}>
+            <circle
+              r="3.4"
+              fill="none"
+              stroke="#dc2626"
+              strokeWidth="0.8"
+              className="animate-location-pulse"
             />
-          </circle>
+            <circle
+              r="2.4"
+              fill="#dc2626"
+              stroke="#f87171"
+              strokeWidth="0.8"
+              className="drop-shadow-[0_0_4px_rgba(220,38,38,0.6)]"
+            />
+            <circle r="0.6" fill="#fff" />
+          </g>
         </g>
       )}
     </svg>
