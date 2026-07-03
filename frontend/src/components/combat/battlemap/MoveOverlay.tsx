@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Token } from "@/types";
-import { cellKey, colLetter, gridDistanceFeet } from "@/lib/grid";
+import { colLetter, gridDistanceFeet } from "@/lib/grid";
 import { CELL } from "./constants";
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
@@ -44,7 +44,7 @@ function PlayContent() {
 
   // Characters (React Query)
   const charactersQuery = useMyCharacters(!!username);
-  const characters = charactersQuery.data ?? [];
+  const characters = useMemo(() => charactersQuery.data ?? [], [charactersQuery.data]);
   const charsLoading = charactersQuery.isLoading;
   const [selectedCharId, setSelectedCharId] = useState<string>("");
 

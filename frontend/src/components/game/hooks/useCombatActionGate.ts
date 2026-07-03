@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { SpellSummary } from "@/types";
 import { useSessionStore } from "@/store/sessionStore";
 import { useCombatSpells } from "@/hooks/useCombatReference";
@@ -64,7 +64,8 @@ export function useCombatActionGate({
   );
 
   const combat = useSessionStore((s) => s.combat);
-  const spells = useCombatSpells(combat?.status === "ACTIVE").data ?? [];
+  const spellsData = useCombatSpells(combat?.status === "ACTIVE").data;
+  const spells = useMemo(() => spellsData ?? [], [spellsData]);
 
   const isMyTurn =
     combat?.status === "ACTIVE" &&

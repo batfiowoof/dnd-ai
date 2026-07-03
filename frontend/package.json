@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@stomp/stompjs": "^7.1.1",
@@ -19,11 +20,14 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4.1.4",
     "@types/node": "^22.15.2",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@types/sockjs-client": "^1.5.4",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^15.5.20",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3"
   }
