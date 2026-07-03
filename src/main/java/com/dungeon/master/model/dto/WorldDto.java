@@ -21,6 +21,7 @@ public record WorldDto(
         List<WorldNpc> npcs,
         List<CustomMonster> customMonsters,
         List<Milestone> milestones,
+        List<Quest> quests,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

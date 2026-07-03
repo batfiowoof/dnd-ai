@@ -133,6 +133,7 @@ function WorldCard({
     { label: "NPCs", value: world.npcCount },
     { label: "Monsters", value: world.monsterCount },
     { label: "Milestones", value: world.milestoneCount },
+    { label: "Quests", value: world.questCount },
   ];
 
   return (
@@ -190,7 +191,7 @@ function WorldCard({
         </div>
       </div>
 
-      <div className="mt-auto grid grid-cols-5 gap-1">
+      <div className="mt-auto grid grid-cols-3 gap-1">
         {counts.map((c) => (
           <div
             key={c.label}

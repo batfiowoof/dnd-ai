@@ -3,6 +3,7 @@ package com.dungeon.master.controller;
 import com.dungeon.master.config.AuthUtils;
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
+import com.dungeon.master.model.dto.Quest;
 import com.dungeon.master.model.dto.WorldCreateUpdateRequest;
 import com.dungeon.master.model.dto.WorldDto;
 import com.dungeon.master.model.dto.WorldFaction;
@@ -121,5 +122,11 @@ public class WorldController {
     public ResponseEntity<List<Milestone>> generateMilestones(
             @RequestBody WorldGenerateRequest request) {
         return ResponseEntity.ok(worldBuilderAiService.suggestMilestones(request));
+    }
+
+    @PostMapping("/generate/quests")
+    public ResponseEntity<List<Quest>> generateQuests(
+            @RequestBody WorldGenerateRequest request) {
+        return ResponseEntity.ok(worldBuilderAiService.suggestQuests(request));
     }
 }

@@ -2,6 +2,7 @@ package com.dungeon.master.service.world;
 
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
+import com.dungeon.master.model.dto.Quest;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldGenerateRequest;
 import com.dungeon.master.model.dto.WorldNpc;
@@ -140,6 +141,36 @@ public class WorldBuilderAiService {
                 callList(user, new ParameterizedTypeReference<List<Milestone>>() {}));
     }
 
+    public List<Quest> suggestQuests(WorldGenerateRequest req) {
+        String user = """
+                Design 3 to 6 quests for this world — a short interconnected arc, not isolated errands.
+                At least one pair must form a CHAIN (a later quest lists an earlier quest's key in its
+                prerequisiteKeys, so it only opens once the first is done). Each quest needs multi-step
+                objectives, a hidden twist the DM springs at the right moment, and real consequences.
+                %s
+                Return a JSON array of objects with these fields:
+                - key: a short stable kebab-case id (unique across the quests)
+                - title: display name
+                - summary: a one or two sentence player-facing hook
+                - type: one of MAIN, SIDE, PERSONAL
+                - prerequisiteKeys: JSON array of the keys of OTHER quests in this list that must finish
+                  first (empty array if it can be taken immediately)
+                - objectives: JSON array of 2 to 4 ordered steps, each an object { key (kebab-case),
+                  description (what the party must do) }
+                - twist: a hidden complication or reversal the DM reveals partway through (DM-only)
+                - twistTrigger: one line on WHEN to reveal the twist
+                - reward: an object { description (flavour), items (JSON array of { name, qty, kind } where
+                  kind is one of WEAPON, ARMOR, POTION, POTION_HEALING, SCROLL, GEAR — represent coin as a
+                  GEAR item named like "150 GP"), milestoneKey (the EXACT key of one milestone listed above
+                  that completing this quest should award, or null) }
+                - completionImpact: what changes in the world if the party succeeds
+                - failureImpact: what changes if they fail or abandon it
+                - dispositionShifts: JSON array of { npcName (the EXACT name of one NPC listed above),
+                  delta (signed -100..100, how their attitude toward the party changes on completion) }
+                Reference the milestones, NPCs, and factions listed above by their real keys/names.""".formatted(context(req));
+        return sanitizer.normalizeQuests(callList(user, new ParameterizedTypeReference<List<Quest>>() {}));
+    }
+
     /* ── internals ───────────────────────────────────────────────── */
 
     /** Render the current draft as grounding context for the model. */
@@ -154,7 +185,64 @@ public class WorldBuilderAiService {
         appendIf(b, "Overview", trim(req.overview(), 1200));
         appendIf(b, "Extra instruction", req.instruction());
         appendGeography(b, req.regions());
+        appendMilestones(b, req.milestones());
+        appendNpcs(b, req.npcs());
+        appendFactions(b, req.factions());
         return b.toString();
+    }
+
+    /** List authored milestones (key — title) so quests can link a real milestone as a reward. */
+    private static void appendMilestones(StringBuilder b, List<Milestone> milestones) {
+        if (milestones == null || milestones.isEmpty()) {
+            return;
+        }
+        b.append("Existing milestones (use these EXACT keys for reward.milestoneKey):\n");
+        for (Milestone m : milestones) {
+            if (m == null || m.key() == null || m.key().isBlank()) {
+                continue;
+            }
+            b.append("- key=").append(m.key().trim());
+            if (m.title() != null && !m.title().isBlank()) {
+                b.append(" — ").append(m.title().trim());
+            }
+            b.append("\n");
+        }
+    }
+
+    /** List authored NPCs by name so quests reference real NPCs for disposition shifts. */
+    private static void appendNpcs(StringBuilder b, List<WorldNpc> npcs) {
+        if (npcs == null || npcs.isEmpty()) {
+            return;
+        }
+        b.append("Existing NPCs (use these EXACT names for dispositionShifts):\n");
+        for (WorldNpc n : npcs) {
+            if (n == null || n.name() == null || n.name().isBlank()) {
+                continue;
+            }
+            b.append("- ").append(n.name().trim());
+            if (n.role() != null && !n.role().isBlank()) {
+                b.append(" (").append(n.role().trim()).append(")");
+            }
+            b.append("\n");
+        }
+    }
+
+    /** List authored factions and their goals so quests can align with the world's pressures. */
+    private static void appendFactions(StringBuilder b, List<WorldFaction> factions) {
+        if (factions == null || factions.isEmpty()) {
+            return;
+        }
+        b.append("Existing factions:\n");
+        for (WorldFaction f : factions) {
+            if (f == null || f.name() == null || f.name().isBlank()) {
+                continue;
+            }
+            b.append("- ").append(f.name().trim());
+            if (f.goal() != null && !f.goal().isBlank()) {
+                b.append(" — wants ").append(f.goal().trim());
+            }
+            b.append("\n");
+        }
     }
 
     /** List the authored regions (and their subregions) so geography-aware sections can match real names. */

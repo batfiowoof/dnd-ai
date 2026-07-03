@@ -4,6 +4,8 @@ import com.dungeon.master.kafka.event.RoundActionEvent.Contribution;
 import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.QuestObjective;
 import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.model.entity.Character;
 import com.dungeon.master.model.entity.CombatEncounter;
@@ -15,6 +17,7 @@ import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
 import com.dungeon.master.model.enums.DmStyle;
 import com.dungeon.master.model.enums.PlayerRole;
+import com.dungeon.master.model.enums.QuestStatus;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
 import com.dungeon.master.repository.EnemyRepository;
@@ -272,10 +275,78 @@ public class DmPromptBuilder {
                 b.append("\n");
             }
         }
+        appendQuests(b, session);
         appendNpcRelationships(b, session);
 
         b.append("---\n\n");
         return b.toString();
+    }
+
+    /**
+     * List the quests the party can act on now (available or active), with objectives, reward, and the
+     * DM-only twist. Tells the DM to drive them through the quest tools — start when taken up, advance as
+     * objectives are cleared, complete for the payoff (the engine pays rewards and levels the party if a
+     * milestone is linked), fail when blown — using only these exact keys. Locked/completed/failed quests
+     * are omitted. Only present when the session has open quests.
+     */
+    private void appendQuests(StringBuilder b, GameSession session) {
+        List<Quest> quests = session.getQuests();
+        if (quests == null || quests.isEmpty()) {
+            return;
+        }
+        List<Quest> open = quests.stream()
+                .filter(q -> q.status() == QuestStatus.AVAILABLE || q.status() == QuestStatus.ACTIVE)
+                .toList();
+        if (open.isEmpty()) {
+            return;
+        }
+        b.append("- Quests: drive these authored quests with the quest tools — call startQuest when the ")
+                .append("party takes one up, advanceQuest with an objective key as each step is genuinely ")
+                .append("cleared, completeQuest when it's finished (the engine pays the rewards and levels ")
+                .append("the party if a milestone is linked), and failQuest if they blow it. Use ONLY these ")
+                .append("exact keys, never invent one. The twist is for your eyes only — reveal it in the ")
+                .append("fiction at the right moment, never state it outright. Open quests:\n");
+        for (Quest q : open) {
+            b.append("    • key=\"").append(q.key()).append("\" [").append(q.status()).append("] ")
+                    .append(q.title());
+            if (q.summary() != null && !q.summary().isBlank()) {
+                b.append(" — ").append(q.summary());
+            }
+            b.append("\n");
+            for (QuestObjective o : q.objectives()) {
+                b.append("        ").append(o.completed() ? "[✓]" : "[ ]")
+                        .append(" objective key=\"").append(o.key()).append("\": ")
+                        .append(o.description()).append("\n");
+            }
+            if (q.reward() != null) {
+                String rewardLine = questRewardSummary(q);
+                if (!rewardLine.isBlank()) {
+                    b.append("        Reward: ").append(rewardLine).append("\n");
+                }
+            }
+            if (q.twist() != null && !q.twist().isBlank()) {
+                b.append("        Twist (DM-only): ").append(q.twist().trim());
+                if (q.twistTrigger() != null && !q.twistTrigger().isBlank()) {
+                    b.append(" — reveal when: ").append(q.twistTrigger().trim());
+                }
+                b.append("\n");
+            }
+        }
+    }
+
+    /** One-line human summary of a quest's reward (loot/coin items, level-up link, flavour). */
+    private static String questRewardSummary(Quest q) {
+        List<String> parts = new ArrayList<>();
+        if (q.reward().items() != null) {
+            q.reward().items().forEach(it -> parts.add(it.qty() + "× " + it.name()));
+        }
+        if (q.reward().milestoneKey() != null && !q.reward().milestoneKey().isBlank()) {
+            parts.add("a level-up (milestone " + q.reward().milestoneKey() + ")");
+        }
+        if (parts.isEmpty() && q.reward().description() != null && !q.reward().description().isBlank()) {
+            return q.reward().description().trim();
+        }
+        return String.join(", ", parts);
     }
 
     /**

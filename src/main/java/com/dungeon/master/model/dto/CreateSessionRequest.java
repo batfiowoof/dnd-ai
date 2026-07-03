@@ -35,6 +35,8 @@ public record CreateSessionRequest(
         Boolean allowAiDisposition,
         Integer collabWindowSeconds,
         List<Milestone> milestones,
+        /** Authored quests compiled onto the session when no {@code worldId} is given (else the world's win). */
+        List<Quest> quests,
         /**
          * When set, this session explicitly continues a finished session: its end-of-session recap is
          * injected into the opening and seeded into RAG so the story carries over.

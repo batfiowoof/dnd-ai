@@ -36,6 +36,7 @@ public class DmAiService {
     private final ToolCallingManager toolCallingManager;
     private final DmRollTools dmRollTools;
     private final DmCampaignTools dmCampaignTools;
+    private final DmQuestTools dmQuestTools;
     private final DmNpcTools dmNpcTools;
     private final RagService ragService;
     private final GameSessionRepository sessionRepository;
@@ -99,6 +100,7 @@ public class DmAiService {
         if (allowRolls) {
             tools.add(dmRollTools);
             tools.add(dmCampaignTools);
+            tools.add(dmQuestTools);
         }
         if (allowDisposition) {
             tools.add(dmNpcTools);

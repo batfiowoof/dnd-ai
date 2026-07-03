@@ -2,6 +2,8 @@ import type {
   CustomMonster,
   Milestone,
   MonsterAttack,
+  Quest,
+  QuestObjective,
   WorldCreateUpdateRequest,
   WorldDto,
   WorldFaction,
@@ -19,6 +21,7 @@ export const WORLD_STEPS = [
   "NPCs",
   "Monsters",
   "Milestones",
+  "Quests",
   "Review",
 ] as const;
 
@@ -49,6 +52,7 @@ export interface WorldDraftData {
   npcs: WorldNpc[];
   customMonsters: CustomMonster[];
   milestones: Milestone[];
+  quests: Quest[];
 }
 
 export const INITIAL_DRAFT: WorldDraftData = {
@@ -63,6 +67,7 @@ export const INITIAL_DRAFT: WorldDraftData = {
   npcs: [],
   customMonsters: [],
   milestones: [],
+  quests: [],
 };
 
 /* ── Empty-item factories (used by "Add" buttons) ────────────── */
@@ -123,6 +128,28 @@ export const emptyMonster = (): CustomMonster => ({
 
 export const emptyMilestone = (): Milestone => ({ key: "", title: "", description: "" });
 
+export const emptyObjective = (): QuestObjective => ({
+  key: "",
+  description: "",
+  completed: false,
+});
+
+export const emptyQuest = (): Quest => ({
+  key: "",
+  title: "",
+  summary: "",
+  type: "SIDE",
+  prerequisiteKeys: [],
+  objectives: [],
+  twist: "",
+  twistTrigger: "",
+  reward: { description: "", items: [], milestoneKey: null },
+  completionImpact: "",
+  failureImpact: "",
+  dispositionShifts: [],
+  status: "AVAILABLE",
+});
+
 /** 5E ability modifier: floor((score − 10) / 2). */
 export function abilityMod(score: number): number {
   return Math.floor((score - 10) / 2);
@@ -162,6 +189,18 @@ export function worldToDraft(world: WorldDto): WorldDraftData {
       attacks: m.attacks ?? [],
     })),
     milestones: world.milestones ?? [],
+    // Back-fill quest sub-structures so older/partial payloads render without crashing the editor.
+    quests: (world.quests ?? []).map((q) => ({
+      ...q,
+      prerequisiteKeys: q.prerequisiteKeys ?? [],
+      objectives: q.objectives ?? [],
+      dispositionShifts: q.dispositionShifts ?? [],
+      reward: {
+        description: q.reward?.description ?? "",
+        items: q.reward?.items ?? [],
+        milestoneKey: q.reward?.milestoneKey ?? null,
+      },
+    })),
   };
 }
 
@@ -188,6 +227,16 @@ export function draftToRequest(draft: WorldDraftData): WorldCreateUpdateRequest 
       ...m,
       key: m.key.trim() || slugify(m.title),
     })),
+    // Backfill quest + objective keys from their titles/descriptions when left blank (server drops
+    // keyless quests). The server does the authoritative cleaning; this just shapes the payload.
+    quests: draft.quests.map((q) => ({
+      ...q,
+      key: q.key.trim() || slugify(q.title),
+      objectives: q.objectives.map((o) => ({
+        ...o,
+        key: o.key.trim() || slugify(o.description),
+      })),
+    })),
   };
 }
 
@@ -204,6 +253,11 @@ export function draftToContext(
     instruction: instruction?.trim() || undefined,
     // Ground geography-aware sections (NPCs, subregions) on the regions authored so far.
     regions: draft.regions.length > 0 ? draft.regions : undefined,
+    // Ground quest generation on the milestones, NPCs, and factions authored so far so the AI links
+    // real keys/names. Harmless for other sections, which ignore these fields.
+    milestones: draft.milestones.length > 0 ? draft.milestones : undefined,
+    npcs: draft.npcs.length > 0 ? draft.npcs : undefined,
+    factions: draft.factions.length > 0 ? draft.factions : undefined,
   };
 }
 

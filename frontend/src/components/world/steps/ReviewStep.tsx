@@ -19,6 +19,7 @@ export default function ReviewStep() {
     { label: "NPCs", value: draft.npcs.length },
     { label: "Monsters", value: draft.customMonsters.length },
     { label: "Milestones", value: draft.milestones.length },
+    { label: "Quests", value: draft.quests.length },
   ];
 
   return (

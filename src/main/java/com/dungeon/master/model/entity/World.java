@@ -2,6 +2,7 @@ package com.dungeon.master.model.entity;
 
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
+import com.dungeon.master.model.dto.Quest;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
@@ -95,6 +96,12 @@ public class World {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<Milestone> milestones = new ArrayList<>();
+
+    /** Authored quests — objectives, chains, twists, and rewards the DM drives during play. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<Quest> quests = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

@@ -2,6 +2,7 @@ package com.dungeon.master.model.entity;
 
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
+import com.dungeon.master.model.dto.Quest;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
 import com.dungeon.master.model.enums.DmStyle;
@@ -70,6 +71,15 @@ public class GameSession {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<Milestone> milestones = new ArrayList<>();
+
+    /**
+     * Authored quests copied from the {@link World} this session was started from. Their {@code status}
+     * and objective progress mutate during play; the DM drives them via {@code DmQuestTools}.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<Quest> quests = new ArrayList<>();
 
     /**
      * Homebrew monster stat blocks copied from the {@link World} this session was started from. They

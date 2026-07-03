@@ -87,6 +87,7 @@ public class WorldService {
         world.setNpcs(sanitizer.cleanNpcs(request.npcs()));
         world.setCustomMonsters(sanitizer.sanitizeMonsters(request.customMonsters()));
         world.setMilestones(sanitizer.normalizeMilestones(request.milestones()));
+        world.setQuests(sanitizer.normalizeQuests(request.quests()));
     }
 
     private static String trimOrNull(String s) {

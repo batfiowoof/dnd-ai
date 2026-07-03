@@ -9,6 +9,7 @@ import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.PlayerDto;
+import com.dungeon.master.model.dto.Quest;
 import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
@@ -74,6 +75,7 @@ public class GameSessionService {
         // monsters take precedence over the free-text fields. Otherwise use the request as-is.
         String worldSetting = request.worldSetting();
         List<Milestone> milestones = worldSanitizer.normalizeMilestones(request.milestones());
+        List<Quest> quests = worldSanitizer.normalizeQuests(request.quests());
         List<CustomMonster> customMonsters = List.of();
         String startRegion = null;
         World world = null;
@@ -81,6 +83,7 @@ public class GameSessionService {
             world = worldService.requireOwned(request.worldId(), username);
             worldSetting = WorldSettingRenderer.render(world);
             milestones = worldSanitizer.normalizeMilestones(world.getMilestones());
+            quests = worldSanitizer.normalizeQuests(world.getQuests());
             customMonsters = world.getCustomMonsters() == null ? List.of() : world.getCustomMonsters();
             // Start the party at the world's first named region so the travel map has a "you are here".
             if (world.getRegions() != null) {
@@ -109,6 +112,7 @@ public class GameSessionService {
                 .collabWindowSeconds(clamp(request.collabWindowSeconds() == null ? 10
                         : request.collabWindowSeconds(), MIN_COLLAB_WINDOW, MAX_COLLAB_WINDOW))
                 .milestones(milestones)
+                .quests(quests)
                 .customMonsters(customMonsters)
                 .worldId(request.worldId())
                 .continuedFromSessionId(request.continuedFromSessionId())

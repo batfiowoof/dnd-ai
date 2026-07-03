@@ -1,4 +1,5 @@
 import type { Milestone } from "./session";
+import type { InventoryItem } from "./player";
 
 /** A location inside a region the party can move between locally (mirrors the backend WorldSubregion). */
 export interface WorldSubregion {
@@ -93,6 +94,56 @@ export interface CustomMonster {
   multiattack: Multiattack | null;
 }
 
+/** Broad quest category (mirrors the backend QuestType). */
+export type QuestType = "MAIN" | "SIDE" | "PERSONAL";
+
+/**
+ * Engine-owned quest lifecycle (mirrors the backend QuestStatus). Authored quests start AVAILABLE, or
+ * LOCKED when they have prerequisites; the rest is driven by the DM tools during play.
+ */
+export type QuestStatus = "LOCKED" | "AVAILABLE" | "ACTIVE" | "COMPLETED" | "FAILED";
+
+/** One ordered step of a quest; {@code completed} is engine-owned. */
+export interface QuestObjective {
+  key: string;
+  description: string;
+  completed: boolean;
+}
+
+/** A real impact applied on completion: nudge a named NPC's disposition by {@code delta} (-100..100). */
+export interface QuestDispositionShift {
+  npcName: string;
+  delta: number;
+}
+
+/** What a quest pays out. Coin is just an inventory item (e.g. a GEAR "150 GP"). */
+export interface QuestReward {
+  description: string;
+  items: InventoryItem[];
+  /** Key of a milestone to award on completion (levels the party), or null. */
+  milestoneKey: string | null;
+}
+
+/** An authored quest — objectives, chains, a twist, impacts, and rewards. Mirrors the backend Quest. */
+export interface Quest {
+  key: string;
+  title: string;
+  summary: string;
+  type: QuestType;
+  /** Keys of other quests that must be completed before this one unlocks. */
+  prerequisiteKeys: string[];
+  objectives: QuestObjective[];
+  /** DM-only hidden complication and when to reveal it. */
+  twist: string;
+  twistTrigger: string;
+  reward: QuestReward;
+  completionImpact: string;
+  failureImpact: string;
+  dispositionShifts: QuestDispositionShift[];
+  /** Engine-owned; authored quests default to AVAILABLE (or LOCKED with prerequisites). */
+  status: QuestStatus;
+}
+
 /** Full read model for a single authored world. */
 export interface WorldDto {
   id: string;
@@ -106,6 +157,7 @@ export interface WorldDto {
   npcs: WorldNpc[];
   customMonsters: CustomMonster[];
   milestones: Milestone[];
+  quests: Quest[];
   createdAt: string;
   updatedAt: string;
 }
@@ -121,6 +173,7 @@ export interface WorldSummaryDto {
   npcCount: number;
   monsterCount: number;
   milestoneCount: number;
+  questCount: number;
   updatedAt: string;
 }
 
@@ -133,6 +186,10 @@ export interface WorldGenerateRequest {
   instruction?: string;
   /** Already-authored geography (with subregions) so NPC/subregion generation matches real names. */
   regions?: WorldRegion[];
+  /** Already-authored milestones/NPCs/factions so quest generation references real keys and names. */
+  milestones?: Milestone[];
+  npcs?: WorldNpc[];
+  factions?: WorldFaction[];
 }
 
 /** AI-generated draft of the Overview step. */
@@ -155,4 +212,5 @@ export interface WorldCreateUpdateRequest {
   npcs: WorldNpc[];
   customMonsters: CustomMonster[];
   milestones: Milestone[];
+  quests: Quest[];
 }

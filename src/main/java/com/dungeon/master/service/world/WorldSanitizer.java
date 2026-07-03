@@ -1,14 +1,22 @@
 package com.dungeon.master.service.world;
 
 import com.dungeon.master.model.dto.CustomMonster;
+import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
+import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.QuestDispositionShift;
+import com.dungeon.master.model.dto.QuestObjective;
+import com.dungeon.master.model.dto.QuestReward;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
 import com.dungeon.master.model.dto.WorldSubregion;
 import com.dungeon.master.model.enums.DispositionBand;
+import com.dungeon.master.model.enums.ItemKind;
+import com.dungeon.master.model.enums.QuestStatus;
+import com.dungeon.master.model.enums.QuestType;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -54,6 +62,125 @@ public class WorldSanitizer {
             }
         }
         return out;
+    }
+
+    /**
+     * Keep only quests with a non-blank key and title, dedup keys (case-insensitive), and force every
+     * engine-owned field back to its authored baseline — objectives {@code completed=false}, and the
+     * initial {@code status} derived from whether the quest has prerequisites ({@code LOCKED} if so, else
+     * {@code AVAILABLE}). Cleans nested objectives, reward, and disposition shifts. The single source of
+     * truth for quest normalization across worlds and sessions, mirroring {@link #normalizeMilestones}.
+     * Prerequisite / milestone / NPC references are not validated against the world set here — they are
+     * resolved by name/key at runtime (same rationale as region connections).
+     */
+    public List<Quest> normalizeQuests(List<Quest> requested) {
+        List<Quest> out = new ArrayList<>();
+        if (requested == null) {
+            return out;
+        }
+        Set<String> seenKeys = new HashSet<>();
+        for (Quest q : requested) {
+            if (q == null || isBlank(q.key()) || isBlank(q.title())) {
+                continue;
+            }
+            String key = q.key().trim();
+            if (!seenKeys.add(key.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            List<String> prereqs = cleanQuestKeyRefs(q.prerequisiteKeys(), key);
+            QuestType type = q.type() == null ? QuestType.SIDE : q.type();
+            QuestStatus status = prereqs.isEmpty() ? QuestStatus.AVAILABLE : QuestStatus.LOCKED;
+            out.add(new Quest(key, q.title().trim(), trimOrEmpty(q.summary()), type, prereqs,
+                    cleanObjectives(q.objectives()), trimOrEmpty(q.twist()), trimOrEmpty(q.twistTrigger()),
+                    cleanReward(q.reward()), trimOrEmpty(q.completionImpact()), trimOrEmpty(q.failureImpact()),
+                    cleanDispositionShifts(q.dispositionShifts()), status));
+        }
+        return out;
+    }
+
+    /** Trim, drop blanks, drop the quest's own key, and de-duplicate a list of quest-key references. */
+    private static List<String> cleanQuestKeyRefs(List<String> keys, String selfKey) {
+        List<String> out = new ArrayList<>();
+        if (keys == null) {
+            return out;
+        }
+        Set<String> seen = new HashSet<>();
+        String self = selfKey.toLowerCase(Locale.ROOT);
+        for (String k : keys) {
+            if (isBlank(k)) {
+                continue;
+            }
+            String trimmed = k.trim();
+            String lower = trimmed.toLowerCase(Locale.ROOT);
+            if (!lower.equals(self) && seen.add(lower)) {
+                out.add(trimmed);
+            }
+        }
+        return out;
+    }
+
+    /** Keep objectives with a description; force {@code completed=false}; backfill a stable kebab key. */
+    private static List<QuestObjective> cleanObjectives(List<QuestObjective> objectives) {
+        List<QuestObjective> out = new ArrayList<>();
+        if (objectives == null) {
+            return out;
+        }
+        Set<String> seen = new HashSet<>();
+        for (QuestObjective o : objectives) {
+            if (o == null || isBlank(o.description())) {
+                continue;
+            }
+            String key = isBlank(o.key()) ? kebab(o.description()) : kebab(o.key());
+            if (isBlank(key)) {
+                key = "objective-" + (out.size() + 1);
+            }
+            if (!seen.add(key.toLowerCase(Locale.ROOT))) {
+                key = key + "-" + (out.size() + 1);
+                seen.add(key.toLowerCase(Locale.ROOT));
+            }
+            out.add(new QuestObjective(key, o.description().trim(), false));
+        }
+        return out;
+    }
+
+    /** Clean a reward: trim its flavour text, keep grantable items, trim the milestone link. Never null. */
+    private static QuestReward cleanReward(QuestReward reward) {
+        if (reward == null) {
+            return new QuestReward("", new ArrayList<>(), null);
+        }
+        List<InventoryItem> items = new ArrayList<>();
+        if (reward.items() != null) {
+            for (InventoryItem it : reward.items()) {
+                if (it == null || isBlank(it.name())) {
+                    continue;
+                }
+                ItemKind kind = it.kind() == null ? ItemKind.GEAR : it.kind();
+                items.add(new InventoryItem(it.name().trim(), Math.max(1, it.qty()), kind, it.equipped()));
+            }
+        }
+        return new QuestReward(trimOrEmpty(reward.description()), items, trimOrNull(reward.milestoneKey()));
+    }
+
+    /** Keep disposition shifts naming an NPC; trim the name and clamp the delta into the score range. */
+    private static List<QuestDispositionShift> cleanDispositionShifts(List<QuestDispositionShift> shifts) {
+        List<QuestDispositionShift> out = new ArrayList<>();
+        if (shifts == null) {
+            return out;
+        }
+        for (QuestDispositionShift s : shifts) {
+            if (s == null || isBlank(s.npcName())) {
+                continue;
+            }
+            out.add(new QuestDispositionShift(s.npcName().trim(), DispositionBand.clamp(s.delta())));
+        }
+        return out;
+    }
+
+    /** Lower-case kebab-case slug (letters/digits, dash-separated); empty when nothing usable remains. */
+    private static String kebab(String raw) {
+        return raw.trim().toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+|-+$", "");
     }
 
     /**

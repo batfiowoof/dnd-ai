@@ -27,6 +27,7 @@ public class WorldMapper {
                 w.getNpcs(),
                 w.getCustomMonsters(),
                 w.getMilestones(),
+                w.getQuests(),
                 w.getCreatedAt(),
                 w.getUpdatedAt());
     }
@@ -42,6 +43,7 @@ public class WorldMapper {
                 size(w.getNpcs()),
                 size(w.getCustomMonsters()),
                 size(w.getMilestones()),
+                size(w.getQuests()),
                 w.getUpdatedAt());
     }
 

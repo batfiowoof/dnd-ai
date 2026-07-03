@@ -221,5 +221,20 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       }
       break;
     }
+    case "QUEST": {
+      // A quest changed state (started / objective ticked / completed / failed). Any loot, coin, or
+      // level-up from a completion arrives separately via PLAYER_STATE — this is the log announcement.
+      const text = data.text as string | undefined;
+      if (text) {
+        s.addLog({
+          id: `quest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: "system",
+          text,
+          turnNumber: s.turnNumber,
+        });
+        scrollToBottom();
+      }
+      break;
+    }
   }
 }

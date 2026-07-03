@@ -20,6 +20,7 @@ public record WorldCreateUpdateRequest(
         List<WorldFaction> factions,
         List<WorldNpc> npcs,
         List<CustomMonster> customMonsters,
-        List<Milestone> milestones
+        List<Milestone> milestones,
+        List<Quest> quests
 ) {
 }

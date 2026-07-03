@@ -25,6 +25,7 @@ import type {
   WorldNpc,
   CustomMonster,
   Milestone,
+  Quest,
 } from "@/types";
 import { ApiError } from "./errors";
 
@@ -473,3 +474,6 @@ export const generateWorldMonster = (token: string, body: WorldGenerateRequest) 
 
 export const generateWorldMilestones = (token: string, body: WorldGenerateRequest) =>
   generateWorldSection<Milestone[]>(token, "milestones", body);
+
+export const generateWorldQuests = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<Quest[]>(token, "quests", body);

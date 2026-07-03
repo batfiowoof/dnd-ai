@@ -10,7 +10,8 @@ import java.util.List;
  *
  * <p>{@code regions} carries the already-authored geography (with any subregions) so sections that must
  * agree with the map — generating NPCs that live in a real place, or subregions for a named region —
- * can be grounded on it.
+ * can be grounded on it. {@code milestones}, {@code npcs}, and {@code factions} ground quest generation
+ * so the AI references real milestone keys, NPC names, and faction levers.
  */
 public record WorldGenerateRequest(
         String name,
@@ -18,6 +19,9 @@ public record WorldGenerateRequest(
         String tone,
         String magicLevel,
         String instruction,
-        List<WorldRegion> regions
+        List<WorldRegion> regions,
+        List<Milestone> milestones,
+        List<WorldNpc> npcs,
+        List<WorldFaction> factions
 ) {
 }
