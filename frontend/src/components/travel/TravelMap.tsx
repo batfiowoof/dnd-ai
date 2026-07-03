@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RegionNode } from "@/types";
 import { cn } from "@/components/ui";
 
@@ -16,12 +16,30 @@ interface TravelMapProps {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
+/** How long the party token glides along a route when a journey resolves. */
+const JOURNEY_MS = 700;
+
+/** Honour both the OS setting and the in-app "reduce motion" toggle (globals.css uses both). */
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  const optedOut = document.documentElement.dataset.reduceMotion === "true";
+  const os = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  return optedOut || os;
+}
+
 /** A single undirected route between two nodes. */
 interface Edge {
   a: RegionNode;
   b: RegionNode;
   /** True when this route leads out of the party's current location. */
   fromCurrent: boolean;
+}
+
+/** An in-flight beacon journey between two pins (user-space coords). */
+interface Journey {
+  id: number;
+  from: { x: number; y: number };
+  to: { x: number; y: number };
 }
 
 /**
@@ -45,6 +63,28 @@ export default function TravelMap({
   }, [nodes]);
 
   const current = currentRegion ? byName.get(norm(currentRegion)) ?? null : null;
+
+  // Animate the party token gliding along the route when the location changes, instead of the
+  // beacon teleporting. The previous pin is remembered so a move tweens from where the party
+  // actually was; the first placement (no prior pin) and reduced-motion users simply snap.
+  const prevPointRef = useRef<{ name: string; x: number; y: number } | null>(null);
+  const journeyIdRef = useRef(0);
+  const [journey, setJourney] = useState<Journey | null>(null);
+
+  useEffect(() => {
+    if (!current) return;
+    const next = { name: current.name, x: current.x, y: current.y };
+    const prev = prevPointRef.current;
+    prevPointRef.current = next;
+    if (!prev || norm(prev.name) === norm(next.name) || prefersReducedMotion()) return;
+    const id = ++journeyIdRef.current;
+    setJourney({ id, from: { x: prev.x, y: prev.y }, to: { x: next.x, y: next.y } });
+    const t = setTimeout(
+      () => setJourney((j) => (j && j.id === id ? null : j)),
+      JOURNEY_MS
+    );
+    return () => clearTimeout(t);
+  }, [current]);
 
   const reachable = useMemo(() => {
     const set = new Set<string>();
@@ -211,6 +251,42 @@ export default function TravelMap({
           </g>
         );
       })}
+
+      {/* Party-in-transit overlay: a glowing token glides along the route from the previous pin to
+          the new one (ease-out), leaving a brief dashed trail. Keyed so each journey restarts the
+          SMIL motion; SMIL is exempt from the CSS reduced-motion reset, so motion is gated in JS. */}
+      {journey && (
+        <g key={journey.id} aria-hidden="true">
+          <line
+            x1={journey.from.x}
+            y1={journey.from.y}
+            x2={journey.to.x}
+            y2={journey.to.y}
+            stroke="#dc2626"
+            strokeOpacity="0.35"
+            strokeWidth="0.6"
+            strokeLinecap="round"
+            strokeDasharray="1.2 1.2"
+          />
+          <circle
+            r="1.6"
+            fill="#dc2626"
+            stroke="#f87171"
+            strokeWidth="0.5"
+            className="drop-shadow-[0_0_4px_rgba(220,38,38,0.7)]"
+          >
+            <animateMotion
+              dur={`${JOURNEY_MS}ms`}
+              fill="freeze"
+              calcMode="spline"
+              keyPoints="0;1"
+              keyTimes="0;1"
+              keySplines="0.22 1 0.36 1"
+              path={`M ${journey.from.x} ${journey.from.y} L ${journey.to.x} ${journey.to.y}`}
+            />
+          </circle>
+        </g>
+      )}
     </svg>
   );
 }

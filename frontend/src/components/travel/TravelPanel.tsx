@@ -103,12 +103,19 @@ export default function TravelPanel({ map, connected, onTravel, onTravelLocal }:
               : "This adventure has no map to travel."}
           </div>
         ) : (
-          <TravelMap
-            nodes={nodes}
-            currentRegion={currentNodeName}
-            traveling={traveling}
-            onPickDestination={setDestination}
-          />
+          // Keyed per view so drilling in/out crossfades (animate-rise) and remounts the map —
+          // resetting its beacon-journey tracker between the region and subregion coordinate spaces.
+          <div
+            key={inLocalView ? `local:${localRegion.name}` : "overland"}
+            className="h-full w-full animate-rise"
+          >
+            <TravelMap
+              nodes={nodes}
+              currentRegion={currentNodeName}
+              traveling={traveling}
+              onPickDestination={setDestination}
+            />
+          </div>
         )}
 
         {/* Drill-in affordance: available only for the region the party is standing in. */}

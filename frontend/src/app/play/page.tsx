@@ -27,7 +27,6 @@ import {
 } from "@/components/ui";
 import { getErrorMessage } from "@/lib/errors";
 import { rememberSession } from "@/lib/sessionStorage";
-import { PRESET_WORLDS } from "@/lib/presetWorlds";
 
 export default function PlayPage() {
   return (
@@ -57,11 +56,9 @@ function PlayContent() {
   const loading = createMutation.isPending || joinMutation.isPending;
 
   // World setting
-  const [worldSource, setWorldSource] = useState<WorldSource>("preset");
-  const [selectedPreset, setSelectedPreset] = useState(PRESET_WORLDS[0].id);
+  const [worldSource, setWorldSource] = useState<WorldSource>("my-worlds");
   const [selectedWorldId, setSelectedWorldId] = useState("");
   const [customWorldText, setCustomWorldText] = useState("");
-  const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
 
   // Continuing a finished adventure (set via /play?continueFrom=<sessionId>): its recap is carried
   // forward server-side. Read from the URL directly to avoid a Suspense boundary for useSearchParams.
@@ -95,20 +92,10 @@ function PlayContent() {
   const selectedChar = characters.find((c) => c.id === selectedCharId);
 
   function getWorldSetting(): string | undefined {
-    if (worldSource === "preset") {
-      return PRESET_WORLDS.find((w) => w.id === selectedPreset)?.setting;
-    }
     if (worldSource === "custom-write" || worldSource === "custom-upload") {
       return customWorldText.trim() || undefined;
     }
     return undefined;
-  }
-
-  // Only preset campaigns ship authored milestones; custom/uploaded worlds carry none.
-  function getMilestones() {
-    return worldSource === "preset"
-      ? PRESET_WORLDS.find((w) => w.id === selectedPreset)?.milestones ?? []
-      : [];
   }
 
   async function handleCreate() {
@@ -143,7 +130,9 @@ function PlayContent() {
         allowAiRolls,
         allowAiDisposition,
         collabWindowSeconds,
-        milestones: getMilestones(),
+        // Authored milestones live on saved worlds (rendered server-side by worldId);
+        // free-text worlds carry none.
+        milestones: [],
         continuedFromSessionId,
       });
       rememberSession(res.sessionId, {
@@ -274,14 +263,10 @@ function PlayContent() {
             <WorldSettingPicker
               worldSource={worldSource}
               setWorldSource={setWorldSource}
-              selectedPreset={selectedPreset}
-              setSelectedPreset={setSelectedPreset}
               selectedWorldId={selectedWorldId}
               setSelectedWorldId={setSelectedWorldId}
               customWorldText={customWorldText}
               setCustomWorldText={setCustomWorldText}
-              expandedPreset={expandedPreset}
-              setExpandedPreset={setExpandedPreset}
             />
 
             <hr className="ornament my-2" />

@@ -1,38 +1,29 @@
 import { useRouter } from "next/navigation";
 import { controlClass, cn, Spinner, useToast } from "@/components/ui";
-import { PRESET_WORLDS } from "@/lib/presetWorlds";
 import { useMyWorlds } from "@/hooks/useWorldQueries";
 
-export type WorldSource = "preset" | "my-worlds" | "custom-write" | "custom-upload";
+export type WorldSource = "my-worlds" | "custom-write" | "custom-upload";
 
 interface WorldSettingPickerProps {
   worldSource: WorldSource;
   setWorldSource: (v: WorldSource) => void;
-  selectedPreset: string;
-  setSelectedPreset: (id: string) => void;
   selectedWorldId: string;
   setSelectedWorldId: (id: string) => void;
   customWorldText: string;
   setCustomWorldText: (text: string) => void;
-  expandedPreset: string | null;
-  setExpandedPreset: (id: string | null) => void;
 }
 
 /**
- * World-setting source picker: source tabs (presets / write / upload), the preset cards,
+ * World-setting source picker: source tabs (my worlds / write / upload), the built-world list,
  * the write-your-own textarea, and the .md/.txt upload (incl. its file-read logic).
  */
 export default function WorldSettingPicker({
   worldSource,
   setWorldSource,
-  selectedPreset,
-  setSelectedPreset,
   selectedWorldId,
   setSelectedWorldId,
   customWorldText,
   setCustomWorldText,
-  expandedPreset,
-  setExpandedPreset,
 }: WorldSettingPickerProps) {
   const toast = useToast();
   const router = useRouter();
@@ -66,7 +57,6 @@ export default function WorldSettingPicker({
         <div className="flex rounded-lg border border-border bg-bg-elevated p-1 text-xs">
           {(
             [
-              ["preset", "Presets"],
               ["my-worlds", "My Worlds"],
               ["custom-write", "Write"],
               ["custom-upload", "Upload"],
@@ -87,62 +77,6 @@ export default function WorldSettingPicker({
           ))}
         </div>
       </div>
-
-      {/* Preset world cards */}
-      {worldSource === "preset" && (
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-          {PRESET_WORLDS.map((world) => (
-            <div key={world.id}>
-              <button
-                onClick={() => setSelectedPreset(world.id)}
-                className={cn(
-                  "w-full cursor-pointer rounded-lg border px-4 py-3 text-left transition",
-                  selectedPreset === world.id
-                    ? "border-accent bg-accent/10"
-                    : "border-border bg-bg-elevated hover:border-accent/50 hover:-translate-y-0.5"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p
-                      className="text-sm font-semibold text-text"
-                      style={{ fontFamily: "var(--font-display)" }}
-                    >
-                      {world.name}
-                    </p>
-                    <p className="text-xs text-text-muted">{world.tagline}</p>
-                  </div>
-                  <span
-                    className={cn(
-                      "h-3.5 w-3.5 flex-shrink-0 rounded-full border-2 transition",
-                      selectedPreset === world.id
-                        ? "border-gold bg-gold"
-                        : "border-border"
-                    )}
-                  />
-                </div>
-              </button>
-              {selectedPreset === world.id && (
-                <button
-                  onClick={() =>
-                    setExpandedPreset(
-                      expandedPreset === world.id ? null : world.id
-                    )
-                  }
-                  className="mt-1 ml-1 cursor-pointer text-xs text-accent transition hover:text-accent-light hover:underline"
-                >
-                  {expandedPreset === world.id ? "Hide details" : "Show details"}
-                </button>
-              )}
-              {expandedPreset === world.id && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-bg-elevated p-3 text-xs leading-relaxed text-text-muted whitespace-pre-wrap">
-                  {world.setting}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* My Worlds (built in the World Builder) */}
       {worldSource === "my-worlds" && (

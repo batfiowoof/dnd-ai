@@ -43,6 +43,9 @@ export default function WorldWizard({ saveLabel, saving, onSave }: WorldWizardPr
   const stepIndex = WORLD_STEPS.indexOf(step);
   const isLast = stepIndex === WORLD_STEPS.length - 1;
   const proceed = canProceed(step, draft);
+  // A named world unlocks free navigation to any step (only Overview gates progress); until then
+  // the user is kept on Overview to supply a name.
+  const named = draft.name.trim().length > 0;
 
   function next() {
     if (!proceed) {
@@ -50,6 +53,17 @@ export default function WorldWizard({ saveLabel, saving, onSave }: WorldWizardPr
       return;
     }
     if (!isLast) setStep(WORLD_STEPS[stepIndex + 1]);
+  }
+
+  /** Jump directly to any step once the world is named; otherwise nudge back to Overview. */
+  function jumpTo(target: WorldStep) {
+    if (target === step) return;
+    if (!named) {
+      toast.error("Give your world a name to continue.");
+      setStep("Overview");
+      return;
+    }
+    setStep(target);
   }
 
   function prev() {
@@ -77,14 +91,16 @@ export default function WorldWizard({ saveLabel, saving, onSave }: WorldWizardPr
           <div key={s} className="flex items-center">
             <button
               type="button"
-              onClick={() => i <= stepIndex && setStep(s as WorldStep)}
+              onClick={() => jumpTo(s as WorldStep)}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-semibold transition",
                 s === step
                   ? "bg-accent text-white shadow-[0_0_16px_var(--color-accent-glow)]"
                   : i < stepIndex
                     ? "cursor-pointer bg-accent-dark/30 text-accent hover:bg-accent-dark/50"
-                    : "bg-surface-light text-text-muted"
+                    : named
+                      ? "cursor-pointer bg-surface-light text-text-muted hover:bg-accent-dark/30 hover:text-accent"
+                      : "bg-surface-light text-text-muted"
               )}
             >
               <span className="tabular">{i + 1}.</span> {s}

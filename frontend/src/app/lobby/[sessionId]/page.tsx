@@ -8,6 +8,7 @@ import {
   useStartSession,
   useKickPlayer,
   useEndSession,
+  useGameState,
 } from "@/hooks/useSessionQueries";
 import { useSessionStore } from "@/store/sessionStore";
 import { sendAction, sendStartEncounter } from "@/lib/websocket";
@@ -19,6 +20,7 @@ import { getErrorMessage } from "@/lib/errors";
 import {
   getPlayerId,
   getJoinCode,
+  rememberSession,
   forgetSession,
 } from "@/lib/sessionStorage";
 import { Button, ConfirmDialog, useToast } from "@/components/ui";
@@ -104,9 +106,31 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     return () => useSessionStore.getState().reset();
   }, [sessionId]);
 
-  const playerId = getPlayerId(sessionId);
-  const joinCode = getJoinCode(sessionId);
   const isCreator = username === createdBy;
+
+  // Canonical game state (React Query cache, shared with useLobbyData) — used to recover the
+  // join code when this device has none saved.
+  const { data: gameState } = useGameState(sessionId);
+
+  /* ── who am I in this session ────────────────────────────────────
+     Prefer this device's saved identity, but self-heal from the loaded roster when it's
+     missing — reaching /lobby/<id> via a shared/bookmarked URL, a new device, or cleared
+     storage would otherwise strand the player, forcing a re-entry of the join code. Matching
+     the authenticated username against the roster (and the join code from the game state)
+     recovers identity transparently. */
+  const storedPlayerId = getPlayerId(sessionId);
+  const storedJoinCode = getJoinCode(sessionId);
+  const playerId =
+    storedPlayerId ||
+    (username ? players.find((p) => p.username === username)?.id ?? "" : "");
+  const joinCode = storedJoinCode || gameState?.joinCode || "";
+
+  // Persist any recovered identity so later loads are instant and copy-code keeps working.
+  useEffect(() => {
+    if (playerId && (playerId !== storedPlayerId || joinCode !== storedJoinCode)) {
+      rememberSession(sessionId, { playerId, joinCode });
+    }
+  }, [sessionId, playerId, joinCode, storedPlayerId, storedJoinCode]);
 
   // Tell the store who "I" am so it routes MY own rolls to the big centre modal
   // while enemy / NPC / other-player rolls go to the compact map-docked feed.

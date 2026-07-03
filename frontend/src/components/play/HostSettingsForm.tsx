@@ -6,7 +6,7 @@ import {
   controlClass,
   cn,
 } from "@/components/ui";
-import { TURN_MODES } from "@/lib/presetWorlds";
+import { TURN_MODES } from "@/lib/turnModes";
 
 interface HostSettingsFormProps {
   turnMode: TurnMode;
