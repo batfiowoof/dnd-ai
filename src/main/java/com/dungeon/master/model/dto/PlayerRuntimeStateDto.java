@@ -25,6 +25,7 @@ public record PlayerRuntimeStateDto(
         String concentratingSpell,
         int exhaustionLevel,
         int hitDiceRemaining,
-        int hitDiceTotal
+        int hitDiceTotal,
+        long copper
 ) {
 }

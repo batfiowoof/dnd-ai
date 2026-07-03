@@ -19,6 +19,7 @@ public record WorldSummaryDto(
         int monsterCount,
         int milestoneCount,
         int questCount,
+        int shopCount,
         LocalDateTime updatedAt
 ) {
 }

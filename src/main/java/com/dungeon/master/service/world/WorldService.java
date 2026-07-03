@@ -88,6 +88,7 @@ public class WorldService {
         world.setCustomMonsters(sanitizer.sanitizeMonsters(request.customMonsters()));
         world.setMilestones(sanitizer.normalizeMilestones(request.milestones()));
         world.setQuests(sanitizer.normalizeQuests(request.quests()));
+        world.setShops(sanitizer.normalizeShops(request.shops()));
     }
 
     private static String trimOrNull(String s) {

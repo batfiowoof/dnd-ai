@@ -2,6 +2,7 @@
 
 import type { PlayerRuntimeState } from "@/types";
 import { Modal, cn } from "@/components/ui";
+import { formatCoins } from "@/lib/money";
 import Portrait from "@/components/Portrait";
 import CharacterStatus from "@/components/game/CharacterStatus";
 import SrdEntryRow from "@/components/game/SrdEntryRow";
@@ -104,6 +105,14 @@ export default function CharacterSheetDialog({
             </div>
           </section>
         )}
+
+        {/* Purse */}
+        <section>
+          <SectionHeading>Purse</SectionHeading>
+          <p className="text-sm font-semibold tabular-nums text-gold">
+            {formatCoins(state.copper)}
+          </p>
+        </section>
 
         {/* Equipment — expand a row for damage / AC / properties / rules text */}
         {state.inventory.length > 0 && (

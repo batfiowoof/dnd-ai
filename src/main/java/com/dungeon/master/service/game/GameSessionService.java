@@ -10,6 +10,7 @@ import com.dungeon.master.model.dto.GameStateDto;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.Shop;
 import com.dungeon.master.model.dto.SessionSummaryDto;
 import com.dungeon.master.model.entity.GameSession;
 import com.dungeon.master.model.entity.Player;
@@ -76,6 +77,8 @@ public class GameSessionService {
         String worldSetting = request.worldSetting();
         List<Milestone> milestones = worldSanitizer.normalizeMilestones(request.milestones());
         List<Quest> quests = worldSanitizer.normalizeQuests(request.quests());
+        // Shops are authored only in the World Builder, so an ad-hoc (no-world) session has none.
+        List<Shop> shops = List.of();
         List<CustomMonster> customMonsters = List.of();
         String startRegion = null;
         World world = null;
@@ -84,6 +87,7 @@ public class GameSessionService {
             worldSetting = WorldSettingRenderer.render(world);
             milestones = worldSanitizer.normalizeMilestones(world.getMilestones());
             quests = worldSanitizer.normalizeQuests(world.getQuests());
+            shops = worldSanitizer.normalizeShops(world.getShops());
             customMonsters = world.getCustomMonsters() == null ? List.of() : world.getCustomMonsters();
             // Start the party at the world's first named region so the travel map has a "you are here".
             if (world.getRegions() != null) {
@@ -113,6 +117,7 @@ public class GameSessionService {
                         : request.collabWindowSeconds(), MIN_COLLAB_WINDOW, MAX_COLLAB_WINDOW))
                 .milestones(milestones)
                 .quests(quests)
+                .shops(shops)
                 .customMonsters(customMonsters)
                 .worldId(request.worldId())
                 .continuedFromSessionId(request.continuedFromSessionId())

@@ -9,6 +9,8 @@ import com.dungeon.master.model.dto.Quest;
 import com.dungeon.master.model.dto.QuestDispositionShift;
 import com.dungeon.master.model.dto.QuestObjective;
 import com.dungeon.master.model.dto.QuestReward;
+import com.dungeon.master.model.dto.Shop;
+import com.dungeon.master.model.dto.ShopStockEntry;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
@@ -17,6 +19,7 @@ import com.dungeon.master.model.enums.DispositionBand;
 import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.model.enums.QuestStatus;
 import com.dungeon.master.model.enums.QuestType;
+import com.dungeon.master.model.enums.ShopType;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -94,6 +97,66 @@ public class WorldSanitizer {
                     cleanObjectives(q.objectives()), trimOrEmpty(q.twist()), trimOrEmpty(q.twistTrigger()),
                     cleanReward(q.reward()), trimOrEmpty(q.completionImpact()), trimOrEmpty(q.failureImpact()),
                     cleanDispositionShifts(q.dispositionShifts()), status));
+        }
+        return out;
+    }
+
+    /** Lowest and highest an authored economy factor may be, so a shop can't give away or extort goods. */
+    private static final double MIN_ECONOMY = 0.5;
+    private static final double MAX_ECONOMY = 2.0;
+
+    /**
+     * Clean authored shops: drop nameless ones, backfill a stable kebab {@code key} (de-duplicated),
+     * default the {@link ShopType}, clamp the economy factor into a sane range, and clean the stock
+     * (drop nameless lines, coerce {@link ItemKind}, floor prices at 0, default unlimited quantity).
+     * Region/subregion tags are trimmed but not validated against the region set — they resolve by
+     * name at runtime, the same convention as NPC location tags.
+     */
+    public List<Shop> normalizeShops(List<Shop> requested) {
+        List<Shop> out = new ArrayList<>();
+        if (requested == null) {
+            return out;
+        }
+        Set<String> seenKeys = new HashSet<>();
+        for (Shop s : requested) {
+            if (s == null || isBlank(s.name())) {
+                continue;
+            }
+            String key = isBlank(s.key()) ? kebab(s.name()) : kebab(s.key());
+            if (isBlank(key)) {
+                key = "shop-" + (out.size() + 1);
+            }
+            if (!seenKeys.add(key.toLowerCase(Locale.ROOT))) {
+                key = key + "-" + (out.size() + 1);
+                seenKeys.add(key.toLowerCase(Locale.ROOT));
+            }
+            ShopType type = s.type() == null ? ShopType.GENERAL : s.type();
+            double economy = Double.isFinite(s.economyFactor()) && s.economyFactor() > 0
+                    ? Math.max(MIN_ECONOMY, Math.min(MAX_ECONOMY, s.economyFactor()))
+                    : 1.0;
+            out.add(new Shop(key, s.name().trim(), type, trimOrEmpty(s.description()),
+                    trimOrNull(s.region()), trimOrNull(s.subregion()), economy,
+                    trimOrNull(s.ownerNpcName()), cleanStock(s.stock())));
+        }
+        return out;
+    }
+
+    /** Keep named stock lines; coerce kind, floor the price at 0, and default an unset quantity to unlimited. */
+    private static List<ShopStockEntry> cleanStock(List<ShopStockEntry> stock) {
+        List<ShopStockEntry> out = new ArrayList<>();
+        if (stock == null) {
+            return out;
+        }
+        for (ShopStockEntry e : stock) {
+            if (e == null || isBlank(e.name())) {
+                continue;
+            }
+            ItemKind kind = e.kind() == null ? ItemKind.GEAR : e.kind();
+            long price = Math.max(0, e.basePriceCopper());
+            // 0 (or negative) quantity from an author who left it blank means "unlimited" (-1); a real
+            // positive count is preserved as limited stock.
+            int qty = e.quantity() <= 0 ? -1 : e.quantity();
+            out.add(new ShopStockEntry(trimOrNull(e.srdIndex()), e.name().trim(), kind, price, qty));
         }
         return out;
     }

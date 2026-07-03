@@ -38,6 +38,34 @@ class WorldSanitizerTest {
     }
 
     @Test
+    void normalizeShopsBackfillsKeyClampsEconomyAndCleansStock() {
+        com.dungeon.master.model.dto.Shop shop = new com.dungeon.master.model.dto.Shop(
+                "", "The Rusty Anvil", com.dungeon.master.model.enums.ShopType.BLACKSMITH,
+                "A dockside forge", "Saltmarsh", "The Docks",
+                9.0, // absurd economy factor → clamped to the max
+                "Grigor",
+                List.of(
+                        new com.dungeon.master.model.dto.ShopStockEntry(
+                                "longsword", "Longsword", ItemKind.WEAPON, 1500, 3),
+                        new com.dungeon.master.model.dto.ShopStockEntry(
+                                null, "", null, -50, 0), // nameless + junk price/qty → dropped
+                        new com.dungeon.master.model.dto.ShopStockEntry(
+                                null, "Torch", null, -5, 0))); // null kind→GEAR, price floored, 0 qty→unlimited
+
+        List<com.dungeon.master.model.dto.Shop> result =
+                sanitizer.normalizeShops(List.of(shop));
+
+        assertEquals(1, result.size());
+        com.dungeon.master.model.dto.Shop s = result.get(0);
+        assertEquals("the-rusty-anvil", s.key(), "key is backfilled from the name");
+        assertEquals(2.0, s.economyFactor(), "economy factor clamped to the max");
+        assertEquals(2, s.stock().size(), "the nameless stock line is dropped");
+        assertEquals(ItemKind.GEAR, s.stock().get(1).kind(), "null kind coerced to GEAR");
+        assertEquals(0, s.stock().get(1).basePriceCopper(), "negative price floored to 0");
+        assertEquals(-1, s.stock().get(1).quantity(), "blank quantity means unlimited (-1)");
+    }
+
+    @Test
     void sanitizeMonstersNamespacesKeyAndKeepsCombatLegalBlocks() {
         CustomMonster valid = new CustomMonster(
                 null, "Ash Wraith", "Medium", "Undead", 2.0, 13, 22, "5d8", 30, 2,

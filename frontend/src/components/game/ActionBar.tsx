@@ -11,6 +11,8 @@ interface ActionBarProps {
   onAttack: () => void;
   onCast: (spellLevel: number, spellName?: string) => void;
   onUseItem: (itemName: string) => void;
+  /** Open the shop panel — only provided when a shop is reachable at the party's current location. */
+  onShop?: () => void;
   /** Management actions — available regardless of whose turn it is. */
   onLongRest?: () => void;
   onShortRest?: (hitDice: number) => void;
@@ -31,6 +33,7 @@ export default function ActionBar({
   onLongRest,
   onShortRest,
   onManage,
+  onShop,
 }: ActionBarProps) {
   const [openMenu, setOpenMenu] = useState<"cast" | "item" | null>(null);
   const disabled = !isMyTurn || !connected;
@@ -215,6 +218,20 @@ export default function ActionBar({
           className={cn(btn, "border-border text-text-muted hover:border-accent/60 hover:text-accent")}
         >
           🎒 Manage
+        </button>
+      )}
+      {onShop && (
+        <button
+          type="button"
+          disabled={!connected}
+          title="Buy and sell with the merchant at your current location."
+          onClick={() => {
+            close();
+            onShop();
+          }}
+          className={cn(btn, "border-gold/40 text-gold hover:bg-gold hover:text-bg")}
+        >
+          🪙 Shop
         </button>
       )}
       {onShortRest && (

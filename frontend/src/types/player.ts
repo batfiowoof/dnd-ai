@@ -51,6 +51,8 @@ export interface PlayerRuntimeState {
   hitDiceRemaining: number;
   /** Total Hit Dice pool (character level). */
   hitDiceTotal: number;
+  /** Coin purse in copper (1 gp = 100 cp, 1 sp = 10 cp). Spent/earned at shops; format via lib/money. */
+  copper: number;
 }
 
 export interface PlayerStateEvent {

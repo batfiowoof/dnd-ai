@@ -3,6 +3,7 @@ package com.dungeon.master.model.entity;
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.Shop;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
@@ -102,6 +103,12 @@ public class World {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<Quest> quests = new ArrayList<>();
+
+    /** Authored shops — location-gated merchants with SRD-priced stock and a per-shop economy factor. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<Shop> shops = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

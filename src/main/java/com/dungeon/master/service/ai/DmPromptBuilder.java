@@ -5,6 +5,8 @@ import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.Shop;
+import com.dungeon.master.model.dto.ShopStockEntry;
 import com.dungeon.master.model.dto.QuestObjective;
 import com.dungeon.master.model.dto.Token;
 import com.dungeon.master.model.entity.Character;
@@ -28,6 +30,7 @@ import com.dungeon.master.service.game.CheckModifierService;
 import com.dungeon.master.service.game.MonsterCatalog;
 import com.dungeon.master.service.game.NpcStateService;
 import com.dungeon.master.service.game.PlayerStateService;
+import com.dungeon.master.service.game.ShopService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -61,6 +64,7 @@ public class DmPromptBuilder {
     private final NpcStateService npcStateService;
     private final SrdContent srdContent;
     private final MonsterCatalog monsterCatalog;
+    private final ShopService shopService;
 
     /** Build the acting block: a single action reads naturally; a round lists every contributor. */
     public String buildTurnUserMessage(List<Contribution> actions, String context) {
@@ -276,10 +280,44 @@ public class DmPromptBuilder {
             }
         }
         appendQuests(b, session);
+        appendShops(b, session);
         appendNpcRelationships(b, session);
 
         b.append("---\n\n");
         return b.toString();
+    }
+
+    /**
+     * List the shops open at the party's current location so the DM can set the scene and roleplay the
+     * merchants — but players trade through the shop panel (the engine moves coin and goods). The DM must
+     * not invent prices, take payment, or hand out items. Only present when a shop is reachable here.
+     */
+    private void appendShops(StringBuilder b, GameSession session) {
+        List<Shop> open = shopService.openShops(session);
+        if (open.isEmpty()) {
+            return;
+        }
+        b.append("- Shops here: the party can trade at these merchants right now. Players buy and sell ")
+                .append("through the shop panel — the engine moves coin and goods, so do NOT invent prices, ")
+                .append("take payment, or grant items yourself; just describe the shop and voice the seller.\n");
+        for (Shop s : open) {
+            b.append("    • ").append(s.name());
+            if (s.type() != null) {
+                b.append(" (").append(s.type().name().toLowerCase(java.util.Locale.ROOT)).append(")");
+            }
+            if (s.ownerNpcName() != null && !s.ownerNpcName().isBlank()) {
+                b.append(", run by ").append(s.ownerNpcName().trim());
+            }
+            String wares = s.stock() == null ? "" : s.stock().stream()
+                    .filter(e -> e != null && e.name() != null && !e.name().isBlank())
+                    .map(ShopStockEntry::name)
+                    .limit(4)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            if (!wares.isBlank()) {
+                b.append(" — sells ").append(wares);
+            }
+            b.append("\n");
+        }
     }
 
     /**

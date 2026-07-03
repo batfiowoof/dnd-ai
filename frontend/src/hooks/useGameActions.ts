@@ -13,6 +13,8 @@ import {
   sendAddItem,
   sendDropItem,
   sendEquipItem,
+  sendShopBuy,
+  sendShopSell,
   sendLongRest,
   sendShortRest,
   sendCombatAttack,
@@ -84,6 +86,12 @@ export function useGameActions(
       ),
       equipItem: run((c, itemName: string, equipped: boolean) =>
         sendEquipItem(c, sessionId, itemName, equipped)
+      ),
+      shopBuy: run((c, payload: { shopKey: string; itemRef: string; qty: number }) =>
+        sendShopBuy(c, sessionId, payload)
+      ),
+      shopSell: run((c, payload: { shopKey: string; name: string; qty: number }) =>
+        sendShopSell(c, sessionId, payload)
       ),
       longRest: run((c) => sendLongRest(c, sessionId)),
       shortRest: run((c, hitDice: number) => sendShortRest(c, sessionId, hitDice)),

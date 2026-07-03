@@ -236,5 +236,20 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       }
       break;
     }
+    case "SHOP": {
+      // A player bought or sold at a shop. Their new purse/inventory arrive via PLAYER_STATE — this
+      // is the room announcement so the whole table sees the trade.
+      const text = data.text as string | undefined;
+      if (text) {
+        s.addLog({
+          id: `shop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: "system",
+          text,
+          turnNumber: s.turnNumber,
+        });
+        scrollToBottom();
+      }
+      break;
+    }
   }
 }

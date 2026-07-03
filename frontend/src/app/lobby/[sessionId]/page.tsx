@@ -25,6 +25,8 @@ import { Button, ConfirmDialog, useToast } from "@/components/ui";
 import DiceRollModal from "@/components/dice/DiceRollModal";
 import CharacterSheetDialog from "@/components/game/CharacterSheetDialog";
 import InventoryManager from "@/components/game/InventoryManager";
+import ShopDialog from "@/components/game/ShopDialog";
+import { useAvailableShops } from "@/hooks/useShopQueries";
 import CombatActionModal from "@/components/combat/CombatActionModal";
 import { uploadCombatMap, leaveSession } from "@/lib/api";
 import { useLobbyData } from "@/components/game/hooks/useLobbyData";
@@ -83,6 +85,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   /** Pre-arm Inspiration for any check the AI DM rolls this turn (auto-rolls happen inline). */
   const [spendInspiration, setSpendInspiration] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [shopOpen, setShopOpen] = useState(false);
   const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
@@ -144,6 +147,35 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     (s) => s.combat?.status === "ACTIVE" && !!s.combat?.grid
   );
   const travelAvailable = (travelMap?.regions.length ?? 0) > 0;
+
+  /* ── shops ──────────────────────────────────────────────────────
+     A shop is only reachable where it sits, so availability is keyed on the party's live location:
+     travelling re-fetches and the "Shop" button appears/disappears accordingly. After a trade we
+     re-fetch to reflect decremented limited stock (the purse updates live via PLAYER_STATE). */
+  const currentRegion = useSessionStore((s) => s.currentRegion);
+  const currentSubregion = useSessionStore((s) => s.currentSubregion);
+  const { data: shopsData, refetch: refetchShops } = useAvailableShops(
+    sessionId,
+    inGame,
+    currentRegion,
+    currentSubregion
+  );
+  const availableShops = shopsData?.shops ?? [];
+
+  const handleShopBuy = useCallback(
+    (shopKey: string, itemRef: string, qty: number) => {
+      actions.shopBuy({ shopKey, itemRef, qty });
+      setTimeout(() => refetchShops(), 500);
+    },
+    [actions, refetchShops]
+  );
+  const handleShopSell = useCallback(
+    (shopKey: string, name: string, qty: number) => {
+      actions.shopSell({ shopKey, name, qty });
+      setTimeout(() => refetchShops(), 500);
+    },
+    [actions, refetchShops]
+  );
 
   function handleTravel(destinationRegion: string, pace: TravelPace) {
     useSessionStore.getState().beginTravel();
@@ -363,6 +395,15 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         onEquip={actions.equipItem}
         onAdd={actions.addItem}
       />
+      <ShopDialog
+        open={shopOpen}
+        onClose={() => setShopOpen(false)}
+        shops={availableShops}
+        purseCopper={myState?.copper ?? 0}
+        connected={connected}
+        onBuy={handleShopBuy}
+        onSell={handleShopSell}
+      />
       {sheetPlayer && sheetState && (
         <CharacterSheetDialog
           open={!!sheetPlayerId}
@@ -446,6 +487,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     onLongRest={actions.longRest}
                     onShortRest={actions.shortRest}
                     onManage={() => setManageOpen(true)}
+                    onShop={availableShops.length > 0 ? () => setShopOpen(true) : undefined}
                   />
                 )}
 

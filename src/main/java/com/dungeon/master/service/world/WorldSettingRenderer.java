@@ -1,6 +1,7 @@
 package com.dungeon.master.service.world;
 
 import com.dungeon.master.model.dto.CustomMonster;
+import com.dungeon.master.model.dto.Shop;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldNpc;
 import com.dungeon.master.model.dto.WorldRegion;
@@ -89,6 +90,20 @@ public final class WorldSettingRenderer {
             }
         }
 
+        if (w.getShops() != null && !w.getShops().isEmpty()) {
+            sb.append("\n## Shops\n");
+            for (Shop s : w.getShops()) {
+                sb.append("- **").append(safe(s.name())).append("**");
+                if (s.type() != null) {
+                    sb.append(" (").append(s.type().name().toLowerCase(java.util.Locale.ROOT)).append(")");
+                }
+                String place = shopPlace(s);
+                if (notBlank(place)) sb.append(" — at ").append(place);
+                if (notBlank(s.description())) sb.append(". ").append(s.description().trim());
+                sb.append("\n");
+            }
+        }
+
         return sb.toString().trim();
     }
 
@@ -106,6 +121,18 @@ public final class WorldSettingRenderer {
         }
         if (notBlank(n.location())) {
             sb.append(sb.length() > 0 ? " (" + n.location().trim() + ")" : n.location().trim());
+        }
+        return sb.toString();
+    }
+
+    /** A human-readable placement for a shop: "Subregion, in Region" (or just the region). */
+    private static String shopPlace(Shop s) {
+        StringBuilder sb = new StringBuilder();
+        if (notBlank(s.subregion())) {
+            sb.append(s.subregion().trim());
+            if (notBlank(s.region())) sb.append(", in ").append(s.region().trim());
+        } else if (notBlank(s.region())) {
+            sb.append(s.region().trim());
         }
         return sb.toString();
     }

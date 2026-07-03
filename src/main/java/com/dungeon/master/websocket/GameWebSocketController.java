@@ -14,6 +14,8 @@ import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.RollRequest;
+import com.dungeon.master.model.dto.ShopBuyRequest;
+import com.dungeon.master.model.dto.ShopSellRequest;
 import com.dungeon.master.model.dto.ShortRestRequest;
 import com.dungeon.master.model.dto.TravelRequest;
 import com.dungeon.master.model.dto.UseItemRequest;
@@ -24,7 +26,10 @@ import com.dungeon.master.service.game.GameSessionService;
 import com.dungeon.master.service.game.PlayerService;
 import com.dungeon.master.service.game.SessionMembershipService;
 import com.dungeon.master.service.game.GameClockService;
+import com.dungeon.master.service.game.MoneyUtil;
 import com.dungeon.master.service.game.PlayerStateService;
+import com.dungeon.master.service.game.ShopService;
+import com.dungeon.master.service.game.ShopService.ShopTxnResult;
 import com.dungeon.master.service.game.TravelService;
 import com.dungeon.master.service.game.TurnService;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +54,7 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
     private final SessionMembershipService sessionMembershipService;
     private final PlayerService playerService;
     private final PlayerStateService playerStateService;
+    private final ShopService shopService;
     private final DiceService diceService;
     private final TravelService travelService;
     private final GameClockService gameClockService;
@@ -252,6 +258,50 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
             log.error("Error equipping item: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
+    }
+
+    @MessageMapping("/game/{sessionId}/shop/buy")
+    public void handleShopBuy(@DestinationVariable UUID sessionId,
+                              @Payload ShopBuyRequest request,
+                              Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            ShopTxnResult r = shopService.buy(
+                    sessionId, player.id(), request.shopKey(), request.itemRef(), request.qty());
+            broadcastState(sessionId, r.state());
+            broadcastShopLog(sessionId, player.characterName() + " bought " + r.qty() + "× "
+                    + r.itemName() + " for " + MoneyUtil.format(-r.copperDelta()) + " at " + r.shopName());
+        } catch (Exception e) {
+            log.error("Error buying: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/shop/sell")
+    public void handleShopSell(@DestinationVariable UUID sessionId,
+                               @Payload ShopSellRequest request,
+                               Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            ShopTxnResult r = shopService.sell(
+                    sessionId, player.id(), request.shopKey(), request.name(), request.qty());
+            broadcastState(sessionId, r.state());
+            broadcastShopLog(sessionId, player.characterName() + " sold " + r.qty() + "× "
+                    + r.itemName() + " for " + MoneyUtil.format(r.copperDelta()) + " at " + r.shopName());
+        } catch (Exception e) {
+            log.error("Error selling: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    /** Announce a completed trade to the whole table as a system-log line (mirrors the QUEST broadcast). */
+    private void broadcastShopLog(UUID sessionId, String text) {
+        messagingTemplate.convertAndSend("/topic/game/" + sessionId, (Object) Map.of(
+                "type", "SHOP",
+                "sessionId", sessionId.toString(),
+                "text", text));
     }
 
     @MessageMapping("/game/{sessionId}/rest")

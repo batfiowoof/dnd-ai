@@ -4,6 +4,7 @@ import com.dungeon.master.config.AuthUtils;
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.Shop;
 import com.dungeon.master.model.dto.WorldCreateUpdateRequest;
 import com.dungeon.master.model.dto.WorldDto;
 import com.dungeon.master.model.dto.WorldFaction;
@@ -128,5 +129,11 @@ public class WorldController {
     public ResponseEntity<List<Quest>> generateQuests(
             @RequestBody WorldGenerateRequest request) {
         return ResponseEntity.ok(worldBuilderAiService.suggestQuests(request));
+    }
+
+    @PostMapping("/generate/shops")
+    public ResponseEntity<List<Shop>> generateShops(
+            @RequestBody WorldGenerateRequest request) {
+        return ResponseEntity.ok(worldBuilderAiService.suggestShops(request));
     }
 }

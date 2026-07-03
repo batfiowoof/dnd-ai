@@ -182,6 +182,28 @@ export function sendEquipItem(
   });
 }
 
+export function sendShopBuy(
+  client: Client,
+  sessionId: string,
+  payload: { shopKey: string; itemRef: string; qty: number }
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/shop/buy`,
+    body: JSON.stringify(payload),
+  });
+}
+
+export function sendShopSell(
+  client: Client,
+  sessionId: string,
+  payload: { shopKey: string; name: string; qty: number }
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/shop/sell`,
+    body: JSON.stringify(payload),
+  });
+}
+
 export function sendLongRest(client: Client, sessionId: string) {
   client.publish({
     destination: `/app/game/${sessionId}/rest`,

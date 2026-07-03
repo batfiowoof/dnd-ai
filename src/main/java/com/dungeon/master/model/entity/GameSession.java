@@ -3,6 +3,7 @@ package com.dungeon.master.model.entity;
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.Shop;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.DmLength;
 import com.dungeon.master.model.enums.DmStyle;
@@ -80,6 +81,16 @@ public class GameSession {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<Quest> quests = new ArrayList<>();
+
+    /**
+     * Authored shops copied from the {@link World} this session started from. Stock quantities mutate
+     * during play (decremented as the party buys); a shop is only usable while the party is at its
+     * {@code region}/{@code subregion}.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<Shop> shops = new ArrayList<>();
 
     /**
      * Homebrew monster stat blocks copied from the {@link World} this session was started from. They

@@ -155,21 +155,27 @@ public class QuestService {
                 .filter(p -> p.getRole() == PlayerRole.PLAYER)
                 .toList();
 
-        // Reward items (coin is a GEAR item) — granted to each active party member's inventory.
+        // Reward items — granted to each active party member. Coin items ("150 GP") are folded into the
+        // numeric purse (copper) so they can be spent at shops; everything else lands in inventory.
         QuestReward reward = q.reward();
         if (reward != null && reward.items() != null) {
             for (InventoryItem item : reward.items()) {
+                long coin = MoneyUtil.coinValueOf(item);
                 int granted = 0;
                 for (Player p : party) {
                     try {
-                        playerStateService.addItem(p.getId(), item);
+                        if (coin > 0) {
+                            playerStateService.addCoins(p.getId(), coin);
+                        } else {
+                            playerStateService.addItem(p.getId(), item);
+                        }
                         granted++;
                     } catch (Exception e) {
-                        log.debug("No runtime state to grant item to player {}: {}", p.getId(), e.getMessage());
+                        log.debug("No runtime state to grant reward to player {}: {}", p.getId(), e.getMessage());
                     }
                 }
                 if (granted > 0) {
-                    effects.add("Reward: " + item.qty() + "× " + item.name());
+                    effects.add("Reward: " + (coin > 0 ? MoneyUtil.format(coin) : item.qty() + "× " + item.name()));
                 }
             }
         }

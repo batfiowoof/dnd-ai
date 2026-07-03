@@ -17,6 +17,7 @@ import {
   generateWorldMonster,
   generateWorldMilestones,
   generateWorldQuests,
+  generateWorldShops,
 } from "@/lib/api";
 import type { WorldCreateUpdateRequest, WorldGenerateRequest } from "@/types";
 
@@ -151,5 +152,13 @@ export function useGenerateQuests() {
   return useMutation({
     mutationFn: async (body: WorldGenerateRequest) =>
       generateWorldQuests(await requireToken(), body),
+  });
+}
+
+export function useGenerateShops() {
+  const requireToken = useRequireToken();
+  return useMutation({
+    mutationFn: async (body: WorldGenerateRequest) =>
+      generateWorldShops(await requireToken(), body),
   });
 }

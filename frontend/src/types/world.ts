@@ -1,5 +1,5 @@
 import type { Milestone } from "./session";
-import type { InventoryItem } from "./player";
+import type { InventoryItem, ItemKind } from "./player";
 
 /** A location inside a region the party can move between locally (mirrors the backend WorldSubregion). */
 export interface WorldSubregion {
@@ -144,6 +144,44 @@ export interface Quest {
   status: QuestStatus;
 }
 
+/** Broad flavour of a shop (mirrors the backend ShopType). */
+export type ShopType =
+  | "GENERAL"
+  | "BLACKSMITH"
+  | "ALCHEMIST"
+  | "ARCANE"
+  | "TRADER"
+  | "TEMPLE";
+
+/** One line of a shop's stock. {@code basePriceCopper} is the list price; the economy factor scales it. */
+export interface ShopStockEntry {
+  /** SRD equipment index (e.g. "longsword") this came from, or null for a custom item. */
+  srdIndex: string | null;
+  name: string;
+  kind: ItemKind;
+  /** List price in copper before the economy factor (1 gp = 100 cp). */
+  basePriceCopper: number;
+  /** Units in stock, or -1 for unlimited. */
+  quantity: number;
+}
+
+/** An authored merchant, anchored to a region/subregion and priced by an economy factor. Mirrors backend Shop. */
+export interface Shop {
+  key: string;
+  name: string;
+  type: ShopType;
+  description: string;
+  /** Region name this shop sits in (matches a WorldRegion name), or "" if none. */
+  region: string;
+  /** Subregion within that region, or "" for a region-level shop. */
+  subregion: string;
+  /** Price multiplier (~0.5–2.0); >1 dearer, <1 cheaper. Applied uniformly to all stock. */
+  economyFactor: number;
+  /** Name of the owning NPC, or "" if none. */
+  ownerNpcName: string;
+  stock: ShopStockEntry[];
+}
+
 /** Full read model for a single authored world. */
 export interface WorldDto {
   id: string;
@@ -158,6 +196,7 @@ export interface WorldDto {
   customMonsters: CustomMonster[];
   milestones: Milestone[];
   quests: Quest[];
+  shops: Shop[];
   createdAt: string;
   updatedAt: string;
 }
@@ -174,6 +213,7 @@ export interface WorldSummaryDto {
   monsterCount: number;
   milestoneCount: number;
   questCount: number;
+  shopCount: number;
   updatedAt: string;
 }
 
@@ -213,4 +253,5 @@ export interface WorldCreateUpdateRequest {
   customMonsters: CustomMonster[];
   milestones: Milestone[];
   quests: Quest[];
+  shops: Shop[];
 }

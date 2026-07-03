@@ -106,7 +106,8 @@ class QuestServiceTest {
         var result = service.completeQuest(sessionId, "find-relic");
 
         assertEquals(QuestStatus.COMPLETED, result.status());
-        verify(playerStateService).addItem(any(), any());               // coin/loot granted
+        // The "150 GP" reward is coin, so it credits the numeric purse (15000 cp) rather than inventory.
+        verify(playerStateService).addCoins(any(), eq(15000L));
         verify(milestoneService).completeMilestone(sessionId, "level-2"); // linked milestone awarded
         verify(npcStateService).adjust(eq(sessionId), eq("Elder"), eq(20)); // real impact applied
 

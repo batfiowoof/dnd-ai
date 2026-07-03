@@ -100,14 +100,29 @@ public class PlayerStateSeeder {
         int hitDie = hitDieForClass(character.getCharacterClass());
 
         List<InventoryItem> inventory = new ArrayList<>();
+        // Coin among the starting gear is folded into the numeric purse (copper) rather than left as a
+        // "150 GP" stack, so it can actually be spent at shops. Everything else is real inventory.
+        long copper = 0;
         // Prefer the structured starting inventory (real quantities + kinds); fall back to
         // the legacy equipment string list with best-effort classification.
         if (character.getStartingInventory() != null && !character.getStartingInventory().isEmpty()) {
             for (InventoryItem item : character.getStartingInventory()) {
+                long coin = MoneyUtil.coinValueOf(item);
+                if (coin > 0) {
+                    copper += coin;
+                    continue;
+                }
                 inventory.add(new InventoryItem(item.name(), Math.max(1, item.qty()), item.kind(), item.equipped()));
             }
         } else if (character.getEquipment() != null) {
             for (String name : character.getEquipment()) {
+                if (MoneyUtil.isCoinName(name)) {
+                    long coin = MoneyUtil.parseCoins(name);
+                    if (coin > 0) {
+                        copper += coin;
+                        continue;
+                    }
+                }
                 inventory.add(new InventoryItem(name, 1, classify(name)));
             }
         }
@@ -137,9 +152,11 @@ public class PlayerStateSeeder {
                 .hitDieSize(hitDie)
                 .hitDiceTotal(level)
                 .hitDiceRemaining(level)
+                .copper(copper)
                 .build();
         repository.save(state);
-        log.info("Seeded runtime state for player={} hp={} hitDice={}d{}", player.getId(), hp, level, hitDie);
+        log.info("Seeded runtime state for player={} hp={} hitDice={}d{} copper={}",
+                player.getId(), hp, level, hitDie, copper);
     }
 
     private ItemKind classify(String name) {

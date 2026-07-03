@@ -11,6 +11,7 @@ export const queryKeys = {
     states: (sessionId: string) => ["session", sessionId, "states"] as const,
     combat: (sessionId: string) => ["session", sessionId, "combat"] as const,
     map: (sessionId: string) => ["session", sessionId, "map"] as const,
+    shops: (sessionId: string) => ["session", sessionId, "shops"] as const,
   },
   characters: {
     all: ["characters"] as const,

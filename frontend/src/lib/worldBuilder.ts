@@ -4,6 +4,8 @@ import type {
   MonsterAttack,
   Quest,
   QuestObjective,
+  Shop,
+  ShopStockEntry,
   WorldCreateUpdateRequest,
   WorldDto,
   WorldFaction,
@@ -22,6 +24,7 @@ export const WORLD_STEPS = [
   "Monsters",
   "Milestones",
   "Quests",
+  "Shops",
   "Review",
 ] as const;
 
@@ -53,6 +56,7 @@ export interface WorldDraftData {
   customMonsters: CustomMonster[];
   milestones: Milestone[];
   quests: Quest[];
+  shops: Shop[];
 }
 
 export const INITIAL_DRAFT: WorldDraftData = {
@@ -68,6 +72,7 @@ export const INITIAL_DRAFT: WorldDraftData = {
   customMonsters: [],
   milestones: [],
   quests: [],
+  shops: [],
 };
 
 /* ── Empty-item factories (used by "Add" buttons) ────────────── */
@@ -127,6 +132,26 @@ export const emptyMonster = (): CustomMonster => ({
 });
 
 export const emptyMilestone = (): Milestone => ({ key: "", title: "", description: "" });
+
+export const emptyStockEntry = (): ShopStockEntry => ({
+  srdIndex: null,
+  name: "",
+  kind: "GEAR",
+  basePriceCopper: 0,
+  quantity: -1,
+});
+
+export const emptyShop = (): Shop => ({
+  key: "",
+  name: "",
+  type: "GENERAL",
+  description: "",
+  region: "",
+  subregion: "",
+  economyFactor: 1.0,
+  ownerNpcName: "",
+  stock: [],
+});
 
 export const emptyObjective = (): QuestObjective => ({
   key: "",
@@ -201,6 +226,15 @@ export function worldToDraft(world: WorldDto): WorldDraftData {
         milestoneKey: q.reward?.milestoneKey ?? null,
       },
     })),
+    // Back-fill shop sub-structures so older/partial payloads render without crashing the editor.
+    shops: (world.shops ?? []).map((s) => ({
+      ...s,
+      region: s.region ?? "",
+      subregion: s.subregion ?? "",
+      ownerNpcName: s.ownerNpcName ?? "",
+      economyFactor: s.economyFactor ?? 1.0,
+      stock: s.stock ?? [],
+    })),
   };
 }
 
@@ -236,6 +270,11 @@ export function draftToRequest(draft: WorldDraftData): WorldCreateUpdateRequest 
         ...o,
         key: o.key.trim() || slugify(o.description),
       })),
+    })),
+    // Backfill shop keys from names when blank (server drops keyless shops).
+    shops: draft.shops.map((s) => ({
+      ...s,
+      key: s.key.trim() || slugify(s.name),
     })),
   };
 }

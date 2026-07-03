@@ -19,6 +19,7 @@ import {
   MonstersStep,
   MilestonesStep,
   QuestsStep,
+  ShopsStep,
   ReviewStep,
 } from "@/components/world/steps";
 
@@ -109,6 +110,7 @@ export default function WorldWizard({ saveLabel, saving, onSave }: WorldWizardPr
         {step === "Monsters" && <MonstersStep />}
         {step === "Milestones" && <MilestonesStep />}
         {step === "Quests" && <QuestsStep />}
+        {step === "Shops" && <ShopsStep />}
         {step === "Review" && <ReviewStep />}
       </div>
 

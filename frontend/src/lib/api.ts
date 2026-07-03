@@ -26,6 +26,8 @@ import type {
   CustomMonster,
   Milestone,
   Quest,
+  Shop,
+  AvailableShopsDto,
 } from "@/types";
 import { ApiError } from "./errors";
 
@@ -232,6 +234,17 @@ export async function getSessionStates(
   sessionId: string
 ): Promise<PlayerRuntimeState[]> {
   const res = await fetch(`${BASE_URL}/sessions/${sessionId}/states`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+/** The calling player's purse and the shops open at the party's current location. */
+export async function getAvailableShops(
+  token: string,
+  sessionId: string
+): Promise<AvailableShopsDto> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/me/shops`, {
     headers: getAuthHeaders(token),
   });
   return handleResponse(res);
@@ -477,3 +490,6 @@ export const generateWorldMilestones = (token: string, body: WorldGenerateReques
 
 export const generateWorldQuests = (token: string, body: WorldGenerateRequest) =>
   generateWorldSection<Quest[]>(token, "quests", body);
+
+export const generateWorldShops = (token: string, body: WorldGenerateRequest) =>
+  generateWorldSection<Shop[]>(token, "shops", body);

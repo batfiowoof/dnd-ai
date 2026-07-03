@@ -23,6 +23,8 @@ interface GameInputBarProps {
   onLongRest: () => void;
   onShortRest: (hitDice: number) => void;
   onManage: () => void;
+  /** Open the shop panel — only provided when a shop is reachable at the party's current location. */
+  onShop?: () => void;
 }
 
 /**
@@ -46,6 +48,7 @@ export default function GameInputBar({
   onLongRest,
   onShortRest,
   onManage,
+  onShop,
 }: GameInputBarProps) {
   const status = useSessionStore((s) => s.status);
   const connected = useSessionStore((s) => s.connected);
@@ -108,6 +111,7 @@ export default function GameInputBar({
             onLongRest={onLongRest}
             onShortRest={onShortRest}
             onManage={onManage}
+            onShop={onShop}
           />
         )}
         <QuickRollBar onRoll={onRoll} disabled={!connected || inCombat} />

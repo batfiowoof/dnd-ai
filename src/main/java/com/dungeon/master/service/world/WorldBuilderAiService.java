@@ -3,6 +3,7 @@ package com.dungeon.master.service.world;
 import com.dungeon.master.model.dto.CustomMonster;
 import com.dungeon.master.model.dto.Milestone;
 import com.dungeon.master.model.dto.Quest;
+import com.dungeon.master.model.dto.Shop;
 import com.dungeon.master.model.dto.WorldFaction;
 import com.dungeon.master.model.dto.WorldGenerateRequest;
 import com.dungeon.master.model.dto.WorldNpc;
@@ -187,6 +188,34 @@ public class WorldBuilderAiService {
                   delta (signed -100..100, how their attitude toward the party changes on completion) }
                 Reference the milestones, NPCs, and factions listed above by their real keys/names.""".formatted(context(req));
         return sanitizer.normalizeQuests(callList(user, new ParameterizedTypeReference<List<Quest>>() {}));
+    }
+
+    public List<Shop> suggestShops(WorldGenerateRequest req) {
+        String user = """
+                Design 2 to 4 shops for this world — merchants the party can buy from and sell to. Anchor
+                each to a specific settlement and SPREAD them across different places so trading means
+                travel, and give them different economies so the same goods cost different amounts.
+                %s
+                Return a JSON array of objects with these fields:
+                - key: a short stable kebab-case id (unique across the shops)
+                - name: the shop's name (e.g. "The Rusty Anvil")
+                - type: one of GENERAL, BLACKSMITH, ALCHEMIST, ARCANE, TRADER, TEMPLE
+                - description: a sentence of flavour
+                - region: the EXACT name of one region listed above where the shop sits
+                - subregion: the EXACT name of a subregion within that region, or null for a region-level shop
+                - economyFactor: a price multiplier between 0.7 and 1.4 — above 1 for a wealthy or isolated
+                  market (goods are dearer), below 1 for a poor or oversupplied one (cheaper). VARY it
+                  between shops so prices differ from town to town.
+                - ownerNpcName: the EXACT name of one NPC listed above who runs it, or null
+                - stock: a JSON array of 3 to 8 items, each { srdIndex (a lower-case SRD id like "longsword"
+                  for a standard item, else null), name, kind (one of WEAPON, ARMOR, POTION, POTION_HEALING,
+                  SCROLL, GEAR), basePriceCopper (the LIST price in COPPER — 1 gp = 100 cp, 1 sp = 10 cp; use
+                  standard 5e prices, e.g. a dagger 200, a longsword 1500, a shield 1000, a potion of healing
+                  5000), quantity (units in stock, or -1 for unlimited) }
+                Match each shop's stock to its type — a blacksmith sells weapons and armour, an alchemist
+                potions, an arcane shop scrolls, a general store adventuring gear. Reference the regions,
+                subregions, and NPCs above by their real names.""".formatted(context(req));
+        return sanitizer.normalizeShops(callList(user, new ParameterizedTypeReference<List<Shop>>() {}));
     }
 
     /* ── internals ───────────────────────────────────────────────── */

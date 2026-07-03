@@ -147,4 +147,13 @@ public class PlayerRuntimeState {
     @Column(name = "exhaustion_check_minutes", nullable = false)
     @Builder.Default
     private long exhaustionCheckMinutes = 0;
+
+    /**
+     * The player's coin purse, in <b>copper</b> (1 gp = 100 cp, 1 sp = 10 cp). The single source of
+     * truth for money — quest coin rewards, starting coin, and shop buy/sell all move this balance.
+     * See {@link com.dungeon.master.service.game.MoneyUtil}.
+     */
+    @Column(name = "copper", nullable = false)
+    @Builder.Default
+    private long copper = 0;
 }

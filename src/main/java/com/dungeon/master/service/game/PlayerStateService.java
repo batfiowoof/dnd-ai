@@ -246,6 +246,54 @@ public class PlayerStateService {
         return toDto(repository.save(s));
     }
 
+    /**
+     * Remove {@code qty} of the named item+kind stack (e.g. selling to a shop). Throws when the stack
+     * is missing or holds fewer than {@code qty}, so a sale never silently under-delivers. Removes the
+     * stack entirely when it hits zero.
+     */
+    @Transactional
+    public PlayerRuntimeStateDto removeItem(UUID playerId, String itemName, ItemKind kind, int qty) {
+        PlayerRuntimeState s = require(playerId);
+        List<InventoryItem> inv = s.getInventory();
+        int take = Math.max(1, qty);
+        for (int i = 0; i < inv.size(); i++) {
+            InventoryItem it = inv.get(i);
+            if (it.name().equalsIgnoreCase(itemName) && it.kind() == kind) {
+                if (it.qty() < take) {
+                    throw new IllegalStateException("Only " + it.qty() + " " + itemName + " to give");
+                }
+                if (it.qty() == take) {
+                    inv.remove(i);
+                } else {
+                    inv.set(i, new InventoryItem(it.name(), it.qty() - take, it.kind(), it.equipped()));
+                }
+                return toDto(repository.save(s));
+            }
+        }
+        throw new IllegalStateException("Item not in inventory: " + itemName);
+    }
+
+    /** Add coins (in copper) to the purse — quest rewards, shop sales. Clamps at zero. Returns new state. */
+    @Transactional
+    public PlayerRuntimeStateDto addCoins(UUID playerId, long copperDelta) {
+        PlayerRuntimeState s = require(playerId);
+        s.setCopper(Math.max(0, s.getCopper() + copperDelta));
+        return toDto(repository.save(s));
+    }
+
+    /** Spend coins (in copper). Throws when the purse can't cover it, so a purchase never overdraws. */
+    @Transactional
+    public PlayerRuntimeStateDto spendCoins(UUID playerId, long copperCost) {
+        PlayerRuntimeState s = require(playerId);
+        long cost = Math.max(0, copperCost);
+        if (s.getCopper() < cost) {
+            throw new IllegalStateException("Not enough coin: have "
+                    + MoneyUtil.format(s.getCopper()) + ", need " + MoneyUtil.format(cost));
+        }
+        s.setCopper(s.getCopper() - cost);
+        return toDto(repository.save(s));
+    }
+
     /** Drop one of the named item (decrement, removing the stack at zero). */
     @Transactional
     public PlayerRuntimeStateDto dropItem(UUID playerId, String itemName) {
@@ -532,6 +580,7 @@ public class PlayerStateService {
                 s.getConcentratingSpell(),
                 s.getExhaustionLevel(),
                 s.getHitDiceRemaining(),
-                s.getHitDiceTotal());
+                s.getHitDiceTotal(),
+                s.getCopper());
     }
 }
