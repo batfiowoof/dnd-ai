@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { Button, Brand, Spinner, useToast } from "@/components/ui";
 import { getErrorMessage } from "@/lib/errors";
-import { useMyWorlds, useDeleteWorld } from "@/hooks/useWorldQueries";
+import { useMyWorlds, useDeleteWorld, useCreateWorld } from "@/hooks/useWorldQueries";
+import { useRequireToken } from "@/hooks/useRequireToken";
+import { getWorld } from "@/lib/api";
+import { downloadWorld, parseWorldImport, WORLD_FILE_SUFFIX } from "@/lib/worldTransfer";
 import type { WorldSummaryDto } from "@/types";
 
 export default function WorldsPage() {
@@ -23,8 +26,12 @@ function WorldsLibrary() {
   const worldsQuery = useMyWorlds(!!username);
   const worlds = worldsQuery.data ?? [];
   const deleteMutation = useDeleteWorld();
+  const createMutation = useCreateWorld();
+  const requireToken = useRequireToken();
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (worldsQuery.isError) toast.error("Failed to load worlds");
@@ -36,6 +43,32 @@ function WorldsLibrary() {
       setConfirmDelete(null);
     } catch (e: unknown) {
       toast.error(getErrorMessage(e, "Failed to delete world"));
+    }
+  }
+
+  // Export fetches the full world (the list only holds summaries) then downloads it as JSON.
+  async function handleExport(id: string, name: string) {
+    try {
+      const world = await getWorld(await requireToken(), id);
+      downloadWorld(world);
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, `Failed to export ${name}`));
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-importing the same file
+    if (!file) return;
+    setImporting(true);
+    try {
+      const request = parseWorldImport(await file.text());
+      const created = await createMutation.mutateAsync(request);
+      toast.success(`Imported “${created.name}”.`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to import world"));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -69,7 +102,23 @@ function WorldsLibrary() {
           >
             My Worlds
           </h2>
-          <Button onClick={() => router.push("/worlds/new")}>+ New World</Button>
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={`${WORLD_FILE_SUFFIX},.json`}
+              onChange={handleImportFile}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              loading={importing}
+            >
+              Import
+            </Button>
+            <Button onClick={() => router.push("/worlds/new")}>+ New World</Button>
+          </div>
         </div>
 
         {worldsQuery.isLoading ? (
@@ -100,6 +149,7 @@ function WorldsLibrary() {
                 world={w}
                 confirming={confirmDelete === w.id}
                 onEdit={() => router.push(`/worlds/${w.id}/edit`)}
+                onExport={() => handleExport(w.id, w.name)}
                 onAskDelete={() => setConfirmDelete(w.id)}
                 onCancelDelete={() => setConfirmDelete(null)}
                 onConfirmDelete={() => handleDelete(w.id)}
@@ -116,6 +166,7 @@ function WorldCard({
   world,
   confirming,
   onEdit,
+  onExport,
   onAskDelete,
   onCancelDelete,
   onConfirmDelete,
@@ -123,6 +174,7 @@ function WorldCard({
   world: WorldSummaryDto;
   confirming: boolean;
   onEdit: () => void;
+  onExport: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
@@ -164,6 +216,13 @@ function WorldCard({
             className="cursor-pointer rounded px-2 py-1 text-xs text-text-muted transition hover:text-accent"
           >
             Edit
+          </button>
+          <button
+            onClick={onExport}
+            title="Download this world as a file"
+            className="cursor-pointer rounded px-2 py-1 text-xs text-text-muted transition hover:text-accent"
+          >
+            Export
           </button>
           {confirming ? (
             <div className="flex gap-1">
