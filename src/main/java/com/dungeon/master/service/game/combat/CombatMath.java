@@ -65,6 +65,46 @@ public final class CombatMath {
             Map.entry("dagger", "1d4"), Map.entry("dart", "1d4"), Map.entry("sling", "1d4"),
             Map.entry("club", "1d4"), Map.entry("sickle", "1d4"), Map.entry("whip", "1d4"));
 
+    /**
+     * Keyword → 2024 weapon-mastery property (SRD 5.2.1). Ordered most-specific first (mirrors
+     * {@link #WEAPON_DAMAGE}) so {@code contains} matching picks "greatsword" before "sword" and
+     * "light crossbow" before "crossbow". Weapons absent here (and ranged firearms) have no mastery.
+     */
+    public static final List<Map.Entry<String, String>> WEAPON_MASTERY = List.of(
+            Map.entry("greataxe", "Cleave"), Map.entry("greatsword", "Graze"), Map.entry("maul", "Topple"),
+            Map.entry("halberd", "Cleave"), Map.entry("glaive", "Graze"), Map.entry("heavy crossbow", "Push"),
+            Map.entry("light crossbow", "Slow"), Map.entry("hand crossbow", "Vex"), Map.entry("pike", "Push"),
+            Map.entry("lance", "Topple"), Map.entry("longsword", "Sap"), Map.entry("battleaxe", "Topple"),
+            Map.entry("warhammer", "Push"), Map.entry("war pick", "Sap"), Map.entry("morningstar", "Sap"),
+            Map.entry("rapier", "Vex"), Map.entry("longbow", "Slow"), Map.entry("flail", "Sap"),
+            Map.entry("trident", "Topple"), Map.entry("shortsword", "Vex"), Map.entry("scimitar", "Nick"),
+            Map.entry("shortbow", "Vex"), Map.entry("mace", "Sap"), Map.entry("spear", "Sap"),
+            Map.entry("handaxe", "Vex"), Map.entry("quarterstaff", "Topple"), Map.entry("javelin", "Slow"),
+            Map.entry("blowgun", "Vex"), Map.entry("greatclub", "Push"), Map.entry("light hammer", "Nick"),
+            Map.entry("dagger", "Nick"), Map.entry("dart", "Vex"), Map.entry("sling", "Slow"),
+            Map.entry("club", "Slow"), Map.entry("sickle", "Nick"), Map.entry("whip", "Slow"));
+
+    /** The mastery of the inventory's best/equipped weapon (SRD string), or {@code null} when none. */
+    public static String masteryFor(List<InventoryItem> inv) {
+        if (inv == null) return null;
+        InventoryItem chosen = null;
+        for (InventoryItem item : inv) {
+            if (item.name() == null || item.kind() != ItemKind.WEAPON) continue;
+            if (chosen == null) chosen = item;               // first weapon as the default
+            if (item.equipped()) { chosen = item; break; }   // an equipped weapon wins
+        }
+        return chosen == null ? null : masteryForName(chosen.name());
+    }
+
+    private static String masteryForName(String name) {
+        if (name == null) return null;
+        String n = name.toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, String> e : WEAPON_MASTERY) {
+            if (n.contains(e.getKey())) return e.getValue();
+        }
+        return null;
+    }
+
     /* ── dice notation ───────────────────────────────────────────── */
 
     public static String notation(int bonus) {

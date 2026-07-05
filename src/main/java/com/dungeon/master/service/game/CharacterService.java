@@ -6,6 +6,7 @@ import com.dungeon.master.model.dto.CharacterCreateUpdateRequest;
 import com.dungeon.master.model.dto.CharacterDto;
 import com.dungeon.master.model.dto.CharacterLevelUpRequest;
 import com.dungeon.master.model.entity.Character;
+import com.dungeon.master.model.enums.ProficiencyLevel;
 import com.dungeon.master.repository.CharacterRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,8 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -62,6 +65,9 @@ public class CharacterService {
                 .proficiencyBonus(LevelingRules.proficiencyBonusForLevel(request.level()))
                 .equipment(request.equipment() != null ? request.equipment() : List.of())
                 .proficiencies(request.proficiencies() != null ? request.proficiencies() : List.of())
+                // Structured skill training from the client (encodes expertise/half); saves derived server-side.
+                .skillProficiencies(resolveSkillProficiencies(request))
+                .savingThrowProficiencies(deriveSaveProficiencies(request.characterClass()))
                 .features(request.features() != null ? request.features() : List.of())
                 .cantrips(request.cantrips() != null ? request.cantrips() : List.of())
                 .knownSpells(request.knownSpells() != null ? request.knownSpells() : List.of())
@@ -99,6 +105,8 @@ public class CharacterService {
         character.setProficiencyBonus(LevelingRules.proficiencyBonusForLevel(request.level()));
         if (request.equipment() != null) character.setEquipment(request.equipment());
         if (request.proficiencies() != null) character.setProficiencies(request.proficiencies());
+        character.setSkillProficiencies(resolveSkillProficiencies(request));
+        character.setSavingThrowProficiencies(deriveSaveProficiencies(request.characterClass()));
         if (request.features() != null) character.setFeatures(request.features());
         if (request.cantrips() != null) character.setCantrips(request.cantrips());
         if (request.knownSpells() != null) character.setKnownSpells(request.knownSpells());
@@ -155,6 +163,50 @@ public class CharacterService {
         log.info("Character leveled up: id={}, name={}, level={}, owner={}",
                 character.getId(), character.getName(), newLevel, username);
         return toDto(character);
+    }
+
+    /**
+     * The structured skill training to store: the client's {@code skillProficiencies} map (which encodes
+     * expertise / half-proficiency) when present, else a best-effort upgrade of the legacy flat
+     * {@code proficiencies} list to all-PROFICIENT so pre-structured clients still get working checks.
+     */
+    private static Map<String, ProficiencyLevel> resolveSkillProficiencies(CharacterCreateUpdateRequest request) {
+        if (request.skillProficiencies() != null && !request.skillProficiencies().isEmpty()) {
+            Map<String, ProficiencyLevel> out = new LinkedHashMap<>();
+            request.skillProficiencies().forEach((skill, level) -> {
+                if (skill != null && !skill.isBlank()) {
+                    out.put(skill.trim(), level != null ? level : ProficiencyLevel.PROFICIENT);
+                }
+            });
+            return out;
+        }
+        Map<String, ProficiencyLevel> out = new LinkedHashMap<>();
+        if (request.proficiencies() != null) {
+            for (String skill : request.proficiencies()) {
+                if (skill != null && !skill.isBlank() && Skills.abilityForSkill(skill) != null) {
+                    out.put(skill.trim(), ProficiencyLevel.PROFICIENT);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Saving-throw ability abbreviations ("STR","CON",…) from the class's SRD {@code savingThrows}. */
+    private List<String> deriveSaveProficiencies(String characterClass) {
+        String index = characterClass == null ? "" : characterClass.toLowerCase(Locale.ROOT);
+        Object raw = referenceService.getClass(index).map(rec -> rec.get("savingThrows")).orElse(null);
+        List<String> saves = new ArrayList<>();
+        if (raw instanceof List<?> list) {
+            for (Object ability : list) {
+                if (ability != null) {
+                    String abbr = Skills.abilityAbbrev(ability.toString());
+                    if (abbr != null && !saves.contains(abbr)) {
+                        saves.add(abbr);
+                    }
+                }
+            }
+        }
+        return saves;
     }
 
     /** Hit-die size for a class from the SRD corpus (defaults to d8 when the class is unknown). */
@@ -332,6 +384,8 @@ public class CharacterService {
                 c.getProficiencyBonus(),
                 c.getEquipment(),
                 c.getProficiencies(),
+                c.getSkillProficiencies(),
+                c.getSavingThrowProficiencies(),
                 c.getFeatures(),
                 c.getCantrips(),
                 c.getKnownSpells(),

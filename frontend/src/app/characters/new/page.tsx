@@ -6,7 +6,11 @@ import { useAuth } from "@/context/AuthContext";
 import RequireAuth from "@/components/RequireAuth";
 import { useCreateCharacter } from "@/hooks/useCharacterQueries";
 import { useEquipmentKindMap } from "@/hooks/useDnd5eData";
-import { equipmentToStrings } from "@/lib/dnd5e";
+import {
+  equipmentToStrings,
+  SKILL_ABILITIES,
+  type ProficiencyLevel,
+} from "@/lib/dnd5e";
 import { Button, cn, useToast } from "@/components/ui";
 import { getErrorMessage } from "@/lib/errors";
 import { useCharacterDraftStore } from "@/store/characterDraftStore";
@@ -90,6 +94,21 @@ function CharacterCreateForm() {
           ...draft.classSkills,
         ])
       ).filter(Boolean);
+      // Structured skill training: every trained skill is PROFICIENT; class-granted picks
+      // are upgraded to EXPERTISE. Non-skill (tool) proficiencies stay out of this map.
+      const trainedSkills = new Set(
+        [...selectedBackground.skillProficiencies, ...draft.classSkills].filter(
+          Boolean
+        )
+      );
+      const skillProficiencies: Record<string, ProficiencyLevel> = {};
+      for (const skill of trainedSkills) {
+        if (skill in SKILL_ABILITIES) {
+          skillProficiencies[skill] = draft.classExpertise.includes(skill)
+            ? "EXPERTISE"
+            : "PROFICIENT";
+        }
+      }
       const features = [
         ...selectedSpecies.traits.map((t) => t.name),
         selectedBackground.feat,
@@ -115,6 +134,7 @@ function CharacterCreateForm() {
         speed: derivedSpeed(draft),
         equipment: equipmentToStrings(items),
         proficiencies,
+        skillProficiencies,
         features,
         cantrips: draft.selectedCantrips,
         knownSpells: draft.selectedSpells,

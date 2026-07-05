@@ -1,6 +1,7 @@
 package com.dungeon.master.model.entity;
 
 import com.dungeon.master.model.dto.InventoryItem;
+import com.dungeon.master.model.enums.ProficiencyLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -17,7 +18,9 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -113,6 +116,22 @@ public class Character {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private List<String> proficiencies = new ArrayList<>();
+
+    /**
+     * Structured skill training keyed by canonical skill name ("Stealth") → {@link ProficiencyLevel}.
+     * The authoritative source for check math (expertise / half-proficiency); the flat
+     * {@link #proficiencies} list is kept for back-compat and human-readable display.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "skill_proficiencies", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, ProficiencyLevel> skillProficiencies = new LinkedHashMap<>();
+
+    /** Ability abbreviations the class is proficient in for saving throws ("STR","CON",…). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "saving_throw_proficiencies", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> savingThrowProficiencies = new ArrayList<>();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")

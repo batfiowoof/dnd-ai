@@ -36,7 +36,17 @@ export default function ReviewStep() {
     backstory,
     selectedCantrips,
     selectedSpells,
+    classSkills,
+    classExpertise,
   } = draft;
+  const trainedSkills = Array.from(
+    new Set(
+      [
+        ...(selectedBackground?.skillProficiencies ?? []),
+        ...classSkills,
+      ].filter(Boolean)
+    )
+  );
   const equipKindMapQuery = useEquipmentKindMap();
 
   const caster = isCasterClass(selectedClass);
@@ -105,6 +115,25 @@ export default function ReviewStep() {
             </div>
           </DetailPanel>
         </div>
+
+        {trainedSkills.length > 0 && (
+          <DetailPanel title="Skills & Expertise">
+            <div className="mb-2">
+              <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
+                Trained
+              </div>
+              <ChipRow items={trainedSkills} />
+            </div>
+            {classExpertise.length > 0 && (
+              <div>
+                <div className="mb-1 text-[10px] uppercase tracking-wider text-gold">
+                  Expertise (double proficiency)
+                </div>
+                <ChipRow items={classExpertise} />
+              </div>
+            )}
+          </DetailPanel>
+        )}
 
         {items.length > 0 && (
           <DetailPanel title="Equipment">

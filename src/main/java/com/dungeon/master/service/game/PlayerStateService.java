@@ -605,6 +605,8 @@ public class PlayerStateService {
                 s.getTempHp(),
                 effectiveAc,
                 s.getAbilities(),
+                s.getSkillProficiencies(),
+                s.getSavingThrowProficiencies(),
                 s.getSpellSlots(),
                 s.getInventory(),
                 s.getConditions().stream().map(ActiveCondition::name).toList(),

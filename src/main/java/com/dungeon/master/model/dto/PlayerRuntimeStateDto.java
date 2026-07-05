@@ -1,5 +1,7 @@
 package com.dungeon.master.model.dto;
 
+import com.dungeon.master.model.enums.ProficiencyLevel;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -12,6 +14,8 @@ public record PlayerRuntimeStateDto(
         int tempHp,
         int armorClass,
         Map<String, Integer> abilities,
+        Map<String, ProficiencyLevel> skillProficiencies,
+        List<String> savingThrowProficiencies,
         List<SpellSlot> spellSlots,
         List<InventoryItem> inventory,
         List<String> conditions,

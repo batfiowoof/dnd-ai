@@ -87,6 +87,67 @@ export function classSkillOptions(cls: ClassInfo | null): string[] {
     : [...ALL_SKILLS];
 }
 
+/**
+ * How strongly a character is trained in a skill or save. Mirrors the backend
+ * {@code ProficiencyLevel} enum — EXPERTISE doubles the proficiency bonus, HALF (Bard's Jack of
+ * All Trades) is half rounded down.
+ */
+export const PROFICIENCY_LEVELS = ["NONE", "HALF", "PROFICIENT", "EXPERTISE"] as const;
+export type ProficiencyLevel = (typeof PROFICIENCY_LEVELS)[number];
+
+/** Governing ability abbreviation ("DEX") for each of the 18 skills — mirrors backend {@code Skills}. */
+export const SKILL_ABILITIES: Record<(typeof ALL_SKILLS)[number], string> = {
+  Acrobatics: "DEX",
+  "Animal Handling": "WIS",
+  Arcana: "INT",
+  Athletics: "STR",
+  Deception: "CHA",
+  History: "INT",
+  Insight: "WIS",
+  Intimidation: "CHA",
+  Investigation: "INT",
+  Medicine: "WIS",
+  Nature: "INT",
+  Perception: "WIS",
+  Performance: "CHA",
+  Persuasion: "CHA",
+  Religion: "INT",
+  "Sleight of Hand": "DEX",
+  Stealth: "DEX",
+  Survival: "WIS",
+};
+
+/** Proficiency bonus for a level (mirrors backend {@code LevelingRules.proficiencyBonusForLevel}). */
+export function proficiencyBonusForLevel(level: number): number {
+  const clamped = Math.max(1, Math.min(level, 20));
+  return 2 + Math.floor((clamped - 1) / 4);
+}
+
+/** Proficiency-bonus contribution at a level (mirrors backend {@code ProficiencyLevel.bonus}). */
+export function proficiencyLevelBonus(level: ProficiencyLevel, pb: number): number {
+  switch (level) {
+    case "EXPERTISE":
+      return pb * 2;
+    case "PROFICIENT":
+      return pb;
+    case "HALF":
+      return Math.floor(pb / 2);
+    default:
+      return 0;
+  }
+}
+
+/** The classes that grant Expertise at level 1, and how many skills they may double. */
+export const LEVEL1_EXPERTISE_GRANTS: Record<string, number> = {
+  rogue: 2,
+};
+
+/** How many level-1 expertise picks a class grants (0 when it grants none). */
+export function level1ExpertiseCount(cls: ClassInfo | null): number {
+  if (!cls) return 0;
+  return LEVEL1_EXPERTISE_GRANTS[cls.index.toLowerCase()] ?? 0;
+}
+
 export const POINT_BUY_COSTS: Record<number, number> = {
   8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9,
 };

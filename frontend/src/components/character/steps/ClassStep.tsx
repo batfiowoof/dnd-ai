@@ -1,7 +1,7 @@
 "use client";
 
 import { useClasses } from "@/hooks/useDnd5eData";
-import { classSkillOptions } from "@/lib/dnd5e";
+import { classSkillOptions, level1ExpertiseCount } from "@/lib/dnd5e";
 import { isCaster } from "@/lib/spells";
 import { DataGate } from "@/components/ui";
 import { useCharacterDraftStore } from "@/store/characterDraftStore";
@@ -16,8 +16,14 @@ export default function ClassStep() {
   const classesQuery = useClasses();
   const selectedClass = useCharacterDraftStore((s) => s.selectedClass);
   const classSkills = useCharacterDraftStore((s) => s.classSkills);
+  const classExpertise = useCharacterDraftStore((s) => s.classExpertise);
   const setSelectedClass = useCharacterDraftStore((s) => s.setSelectedClass);
   const toggleClassSkill = useCharacterDraftStore((s) => s.toggleClassSkill);
+  const toggleClassExpertise = useCharacterDraftStore(
+    (s) => s.toggleClassExpertise
+  );
+
+  const expertiseCount = level1ExpertiseCount(selectedClass);
 
   return (
     <div>
@@ -71,6 +77,26 @@ export default function ClassStep() {
               selected={classSkills}
               onToggle={toggleClassSkill}
             />
+
+            {/* Expertise (2024): classes like the Rogue double their proficiency in a few
+                trained skills. Options are limited to skills already chosen above. */}
+            {expertiseCount > 0 && (
+              <div className="mt-4 border-t border-border pt-4">
+                <ChoicePicker
+                  title={`Expertise — double proficiency in ${expertiseCount}`}
+                  picked={classExpertise.length}
+                  max={expertiseCount}
+                  options={classSkills}
+                  selected={classExpertise}
+                  onToggle={toggleClassExpertise}
+                />
+                {classSkills.length === 0 && (
+                  <p className="mt-1 text-xs text-text-muted">
+                    Choose your trained skills first, then mark which to double.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </DataGate>

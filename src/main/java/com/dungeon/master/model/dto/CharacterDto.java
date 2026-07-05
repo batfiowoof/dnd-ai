@@ -1,7 +1,10 @@
 package com.dungeon.master.model.dto;
 
+import com.dungeon.master.model.enums.ProficiencyLevel;
+
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record CharacterDto(
@@ -24,6 +27,8 @@ public record CharacterDto(
         int proficiencyBonus,
         List<String> equipment,
         List<String> proficiencies,
+        Map<String, ProficiencyLevel> skillProficiencies,
+        List<String> savingThrowProficiencies,
         List<String> features,
         List<String> cantrips,
         List<String> knownSpells,

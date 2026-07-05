@@ -154,6 +154,96 @@ export function weaponRangeFeet(inventory: InventoryItem[] | undefined): number 
   return range;
 }
 
+/* ── Weapon mastery (2024 PHB) — client mirror of CombatMath.WEAPON_MASTERY ── */
+
+/** Keyword → 2024 mastery property; most-specific first (mirrors the backend table). */
+const WEAPON_MASTERY: Array<[string, string]> = [
+  ["greataxe", "Cleave"],
+  ["greatsword", "Graze"],
+  ["maul", "Topple"],
+  ["halberd", "Cleave"],
+  ["glaive", "Graze"],
+  ["heavy crossbow", "Push"],
+  ["light crossbow", "Slow"],
+  ["hand crossbow", "Vex"],
+  ["pike", "Push"],
+  ["lance", "Topple"],
+  ["longsword", "Sap"],
+  ["battleaxe", "Topple"],
+  ["warhammer", "Push"],
+  ["war pick", "Sap"],
+  ["morningstar", "Sap"],
+  ["rapier", "Vex"],
+  ["longbow", "Slow"],
+  ["flail", "Sap"],
+  ["trident", "Topple"],
+  ["shortsword", "Vex"],
+  ["scimitar", "Nick"],
+  ["shortbow", "Vex"],
+  ["mace", "Sap"],
+  ["spear", "Sap"],
+  ["handaxe", "Vex"],
+  ["quarterstaff", "Topple"],
+  ["javelin", "Slow"],
+  ["blowgun", "Vex"],
+  ["greatclub", "Push"],
+  ["light hammer", "Nick"],
+  ["dagger", "Nick"],
+  ["dart", "Vex"],
+  ["sling", "Slow"],
+  ["club", "Slow"],
+  ["sickle", "Nick"],
+  ["whip", "Slow"],
+];
+
+/** One-line effect of each mastery, for the combat tooltip. */
+export const MASTERY_INFO: Record<string, string> = {
+  Cleave: "On a hit, carry the damage to a second creature within 5 ft.",
+  Graze: "On a miss, still deal your ability modifier in damage.",
+  Nick: "Make the off-hand attack without spending your bonus action.",
+  Push: "On a hit, shove a Large-or-smaller target 10 ft away.",
+  Sap: "On a hit, the target has disadvantage on its next attack.",
+  Slow: "On a hit, reduce the target's speed until your next turn.",
+  Topple: "On a hit, force a CON save or knock the target prone.",
+  Vex: "On a hit, your next attack against the target has advantage.",
+};
+
+/** Classes that gain Weapon Mastery in the 2024 rules (mirrors backend MARTIAL_CLASSES). */
+const MARTIAL_CLASSES = new Set([
+  "barbarian",
+  "fighter",
+  "monk",
+  "paladin",
+  "ranger",
+  "rogue",
+]);
+
+/**
+ * The mastery of the player's equipped/best weapon, gated to martial classes — or null when the
+ * class gains no mastery or the weapon has none. Equipped weapon wins, else the first weapon.
+ */
+export function weaponMasteryFor(
+  inventory: InventoryItem[] | undefined,
+  className: string | undefined
+): string | null {
+  if (!className || !MARTIAL_CLASSES.has(className.toLowerCase())) return null;
+  let chosen: InventoryItem | null = null;
+  for (const item of inventory ?? []) {
+    if (item.kind !== "WEAPON") continue;
+    if (!chosen) chosen = item;
+    if (item.equipped) {
+      chosen = item;
+      break;
+    }
+  }
+  if (!chosen) return null;
+  const name = chosen.name.toLowerCase();
+  for (const [kw, mastery] of WEAPON_MASTERY) {
+    if (name.includes(kw)) return mastery;
+  }
+  return null;
+}
+
 /* ── Attack advantage/disadvantage preview (client mirror of ConditionRules.attackMode) ── */
 
 export type AttackMode = "advantage" | "disadvantage" | "normal";

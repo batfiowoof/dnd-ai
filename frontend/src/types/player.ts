@@ -1,3 +1,5 @@
+import type { ProficiencyLevel } from "@/lib/dnd5e";
+
 /* ── Player runtime state (HP / spell slots / inventory) ──────── */
 export type ItemKind =
   | "POTION_HEALING"
@@ -56,6 +58,10 @@ export interface PlayerRuntimeState {
   armorClass: number;
   /** Ability scores keyed by STR/DEX/CON/INT/WIS/CHA. */
   abilities: Record<string, number>;
+  /** Skill training keyed by canonical skill name → level (drives expertise/half-prof math). */
+  skillProficiencies?: Record<string, ProficiencyLevel>;
+  /** Ability abbreviations the character is proficient in for saving throws ("STR","CON",…). */
+  savingThrowProficiencies?: string[];
   spellSlots: SpellSlot[];
   inventory: InventoryItem[];
   conditions: string[];

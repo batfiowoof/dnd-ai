@@ -12,9 +12,10 @@ resolution, exhaustion, rests, quests, shops/currency, NPCs, travel, world-build
 RAG-grounded DM). Each feature **reuses existing infrastructure** rather than adding a new
 subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
-> **Suggested build order (dependency-aware):** 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Feature 1
-> (structured proficiency) is foundational; features 5–8 lean on the combat/roll hooks the
-> earlier ones establish.
+> **Suggested build order (dependency-aware):** ~~1 → 2~~ (shipped) → 3 → 4 → 5 → 6 → 7 → 8.
+> Feature 1 (structured proficiency) was foundational — features 5 (feats) and 7 (spell prep) now
+> plug into its proficiency model; features 5–8 lean on the combat/roll hooks the earlier ones
+> establish.
 
 ---
 
@@ -22,6 +23,18 @@ subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
 Prior batches delivered the core loop. Most recently:
 
+- **Saving Throws, Expertise & Passive Scores (feature 1)** — `ProficiencyLevel` enum
+  {NONE,HALF,PROFICIENT,EXPERTISE}; structured `skillProficiencies` map + `savingThrowProficiencies`
+  set on `Character`/`PlayerRuntimeState` (JSONB, no migration); `CheckModifierService` expertise/
+  half-prof + `computeSaveModifier` + `passiveScore`; `Skills` (skill→ability); `DmRollTools.rollSave`.
+  Frontend: Saving-Throw + Passive-Score sheet sections, creation-wizard Expertise picker
+  (`LEVEL1_EXPERTISE_GRANTS`), `dnd5e.ts` mirrors. Half-prof (Bard JoAT) wired but no level-1 UI source.
+- **Weapon Mastery (2024 PHB) (feature 2)** — `WeaponMastery` enum + `CombatMath.WEAPON_MASTERY`
+  name-lookup (no `InventoryItem` field); `WeaponMasteryRules` fires from `CombatService`
+  applyPendingDamage/miss branch, martial-gated. Topple (CON save→prone), Vex/Sap (synthetic
+  conditions), Slow (SLOWED), Push (grid), Graze (on-miss), Cleave (auto nearest foe), Nick
+  (off-hand die). Informational mastery chip in `CombatControls`. *Simplifications: no known-mastery
+  count, Slow=halve-speed, Cleave auto-target, Nick=extra damage not extra attack.*
 - **Equipment paper-doll** — `EquipSlot`/`ItemSubtype` enums + `InventoryItem.slot/subtype`,
   slot-aware `PlayerStateService.equipItem` (single occupancy + allowed-slot validation), the
   paper-doll `InventoryManager` (native DnD + tap fallback), the `CharacterSheetDialog` mirror,
@@ -50,75 +63,6 @@ Prior batches delivered the core loop. Most recently:
 - **Engine owns all math/randomness; the LLM never rolls** (`DiceService`, `RollMode`). Rules
   math is stateless in `service/game/*Rules.java` + `service/game/combat/CombatMath.java`, mirrored
   client-side in `frontend/src/lib/{dnd5e,combat}.ts`.
-
----
-
-## 1. Saving Throws, Expertise & Passive Scores
-
-**Goal:** Model proficiency as structured data so ability checks and saves are *computed*, not
-LLM-guessed.
-
-### What exists / why it's a gap
-`service/game/CheckModifierService.computeModifier(player, ability, skill)` only adds the
-proficiency bonus on a flat skill-name match. There are **no** saving-throw proficiencies as data,
-**no** expertise (double PB) / half-proficiency (Bard's Jack of All Trades), and **no** passive
-scores (passive Perception). The DM roll tools rely on the LLM passing the correct ability for a
-skill.
-
-### Data
-Class saving-throw proficiencies are already in `srd-5.2.1-structured.json` (`classes[].savingThrows`);
-the 18 skill→ability map already exists in `lib/dnd5e.ts` (`ALL_SKILLS`).
-
-### Backend (`src/main/java/com/dungeon/master/`)
-- New enum `model/enums/ProficiencyLevel.java` `{ NONE, HALF, PROFICIENT, EXPERTISE }`.
-- Structured proficiency on `model/entity/Character` + `model/entity/PlayerRuntimeState`: a
-  `Map<String, ProficiencyLevel>` for skills and a save-proficiency set. Store in the existing JSONB
-  columns where possible (**no migration**); otherwise add a `V{n}__*.sql`.
-- Extend `CheckModifierService`: apply expertise/half-prof in `computeModifier`, add
-  `computeSaveModifier(player, ability)` and `passiveScore(player, skill)` (10 + modifier).
-- Add a `rollSave` verb to `service/ai/DmRollTools.java` (parallels `rollCheck`) so the DM can call
-  for out-of-combat saving throws.
-
-### Frontend (`frontend/src/`)
-- Surface saving throws + passive scores on `components/game/CharacterSheetDialog.tsx`.
-- Let the creation wizard mark a skill as expertise where the class grants it
-  (`components/character/steps/*`); keep the const-array→union pattern from `lib/dnd5e.ts`.
-
-**Scope:** derive expertise/half-prof from class choices at creation/level-up only.
-
----
-
-## 2. Weapon Mastery (2024 PHB)
-
-**Goal:** Give martials the 2024 weapon-mastery properties — the real combat "buttons" casters
-already have via the spell resolver.
-
-### What exists / why it's a gap
-Martials have far fewer combat options than casters. The `mastery` field is **already bundled** on
-every weapon in `srd-5.2.1-structured.json` but is entirely unused. Distinct values present:
-**Cleave, Graze, Nick, Push, Sap, Slow, Topple, Vex.**
-
-### Backend
-- New enum `model/enums/WeaponMastery.java` + a resolver
-  `service/game/combat/WeaponMasteryRules.java` invoked when a mastery-eligible attack lands, reusing
-  `CombatMath` attack resolution and existing primitives:
-  - **Topple** → CON save vs prone (`ConditionRules`)
-  - **Vex** → advantage on the attacker's next attack
-  - **Slow** → −10 ft speed
-  - **Push** → 10 ft forced move (`GridService`)
-  - **Sap** → disadvantage on the target's next attack
-  - **Nick** → free light-weapon off-hand attack (reuse the off-hand path)
-  - **Cleave** → carry damage to a second adjacent creature
-  - **Graze** → ability-mod damage on a miss
-- Gate by class (martials) + a "known masteries" count; wire into `CombatService.resolvePlayerDamage`.
-
-### Frontend
-- Show the equipped weapon's mastery in `components/combat/CombatControls.tsx` (a
-  `SpellTooltip`-style tooltip). For masteries needing a target choice (Cleave/Push), reuse the
-  existing combat target-selection UI.
-
-**Scope:** ship the masteries whose effects already have engine primitives
-(prone/speed/advantage/forced-move/off-hand); DM-narrate any others.
 
 ---
 

@@ -1,11 +1,13 @@
 package com.dungeon.master.model.dto;
 
+import com.dungeon.master.model.enums.ProficiencyLevel;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
+import java.util.Map;
 
 public record CharacterCreateUpdateRequest(
         @NotBlank(message = "Character name is required") String name,
@@ -25,6 +27,8 @@ public record CharacterCreateUpdateRequest(
         int speed,
         List<String> equipment,
         List<String> proficiencies,
+        /** Skill name → training level (expertise / half-proficiency). Saves are derived server-side from class. */
+        Map<String, ProficiencyLevel> skillProficiencies,
         List<String> features,
         List<String> cantrips,
         List<String> knownSpells,

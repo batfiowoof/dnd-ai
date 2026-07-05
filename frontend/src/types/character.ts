@@ -1,4 +1,5 @@
 import type { InventoryItem } from "./player";
+import type { ProficiencyLevel } from "@/lib/dnd5e";
 
 /* ── Character types ──────────────────────────────────────────── */
 
@@ -22,6 +23,10 @@ export interface CharacterDto {
   proficiencyBonus: number;
   equipment: string[];
   proficiencies: string[];
+  /** Structured skill training (skill name → level); source of truth for expertise/half-prof. */
+  skillProficiencies: Record<string, ProficiencyLevel>;
+  /** Ability abbreviations proficient for saving throws ("STR","CON",…), derived from class. */
+  savingThrowProficiencies: string[];
   features: string[];
   cantrips: string[];
   knownSpells: string[];
@@ -72,6 +77,8 @@ export interface CharacterCreateUpdateRequest {
   speed: number;
   equipment: string[];
   proficiencies: string[];
+  /** Skill name → training level (encodes expertise/half-prof); saves derived server-side from class. */
+  skillProficiencies?: Record<string, ProficiencyLevel>;
   features: string[];
   cantrips: string[];
   knownSpells: string[];

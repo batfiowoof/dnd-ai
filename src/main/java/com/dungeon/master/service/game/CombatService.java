@@ -49,6 +49,7 @@ import com.dungeon.master.service.game.combat.CombatSpellResolver;
 import com.dungeon.master.service.game.combat.CombatNarrationFormatter;
 import com.dungeon.master.service.game.combat.CombatTerrainService;
 import com.dungeon.master.service.game.combat.EnemyFactory;
+import com.dungeon.master.service.game.combat.WeaponMasteryRules;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -95,6 +96,7 @@ public class CombatService {
     private final CombatTerrainService combatTerrainService;
     private final CombatLookups combatLookups;
     private final CombatSpellResolver combatSpellResolver;
+    private final WeaponMasteryRules weaponMasteryRules;
 
     /** DC of the Wisdom (Medicine) check to stabilize a dying creature. */
     private static final int STABILIZE_DC = 10;
@@ -256,6 +258,8 @@ public class CombatService {
             List<String> beat = new ArrayList<>();
             beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(), atk,
                     targetAc, false, null, enemy.getCurrentHp(), enemy.getMaxHp(), false));
+            // Graze mastery: a Greatsword/Glaive still deals its ability modifier in damage on a miss.
+            beat.addAll(weaponMasteryRules.applyOnMiss(player, character(player), enemy, safeInventory(player)));
             maybeAutoEndTurn(enc, player, beat);
             flushBeat(sessionId, player.getId(), beat);
             return;
@@ -345,6 +349,11 @@ public class CombatService {
         beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(),
                 pending.atk(), pending.targetAc(), true, damageSummary,
                 enemy.getCurrentHp(), enemy.getMaxHp(), defeated));
+
+        // 2024 weapon mastery: a landed martial hit applies its weapon's mastery effect (prone,
+        // forced movement, advantage/disadvantage, cleave, etc.) using the equipped weapon.
+        beat.addAll(weaponMasteryRules.applyOnHit(enc, player, character(player), enemy,
+                safeInventory(player), dmg.total()));
         return beat;
     }
 
@@ -1631,6 +1640,16 @@ public class CombatService {
             inv = null;
         }
         return CombatMath.armorClass(character(player), inv, playerConds(player.getId()));
+    }
+
+    /** The player's current inventory, or an empty list when no runtime state exists (e.g. tests). */
+    private List<InventoryItem> safeInventory(Player player) {
+        try {
+            PlayerRuntimeStateDto st = playerStateService.getState(player.getId());
+            return st == null || st.inventory() == null ? List.of() : st.inventory();
+        } catch (RuntimeException ex) {
+            return List.of();
+        }
     }
 
     /** Attack bonus = best of STR/DEX modifier + proficiency bonus. */

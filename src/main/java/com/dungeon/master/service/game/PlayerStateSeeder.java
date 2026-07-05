@@ -149,6 +149,10 @@ public class PlayerStateSeeder {
                 .conditions(new ArrayList<>())
                 .cantrips(character.getCantrips() != null ? new ArrayList<>(character.getCantrips()) : new ArrayList<>())
                 .knownSpells(character.getKnownSpells() != null ? new ArrayList<>(character.getKnownSpells()) : new ArrayList<>())
+                .skillProficiencies(character.getSkillProficiencies() != null
+                        ? new LinkedHashMap<>(character.getSkillProficiencies()) : new LinkedHashMap<>())
+                .savingThrowProficiencies(character.getSavingThrowProficiencies() != null
+                        ? new ArrayList<>(character.getSavingThrowProficiencies()) : new ArrayList<>())
                 .hitDieSize(hitDie)
                 .hitDiceTotal(level)
                 .hitDiceRemaining(level)

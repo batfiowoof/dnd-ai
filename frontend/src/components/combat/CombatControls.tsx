@@ -1,7 +1,12 @@
 import { useState } from "react";
 import type { InventoryItem, SpellSummary, Token } from "@/types";
 import { Button, Tooltip, ConfirmDialog, cn } from "@/components/ui";
-import { targetCap, spellMechanics, type Castable } from "@/lib/combat";
+import {
+  targetCap,
+  spellMechanics,
+  MASTERY_INFO,
+  type Castable,
+} from "@/lib/combat";
 import { EconomyPip } from "@/components/combat/atoms";
 import SpellTooltip from "@/components/combat/SpellTooltip";
 
@@ -44,6 +49,8 @@ interface CombatControlsProps {
   /* ── Bonus actions ── */
   /** Lowercased class name, to gate Second Wind (fighter) / Cunning Action (rogue). */
   myClass: string;
+  /** The equipped weapon's 2024 mastery (Topple/Vex/…), or null — informational; auto-applies on hits. */
+  weaponMastery: string | null;
   /** Off-hand attack is "armed" — the next enemy click resolves it as a bonus attack. */
   offHandMode: boolean;
   hasOffHandWeapon: boolean;
@@ -85,6 +92,7 @@ export default function CombatControls({
   onDisengage,
   onDodge,
   myClass,
+  weaponMastery,
   offHandMode,
   hasOffHandWeapon,
   onToggleOffHand,
@@ -184,6 +192,25 @@ export default function CombatControls({
                 {Math.max(0, moveBudget - moveUsed)}/{moveBudget} ft
               </span>
             </div>
+
+            {/* Weapon mastery (2024) — informational: the effect applies automatically on a hit. */}
+            {weaponMastery && (
+              <Tooltip
+                placement="top"
+                content={
+                  <span className="block max-w-[14rem] text-xs text-text-muted">
+                    <span className="font-semibold text-gold">
+                      {weaponMastery}
+                    </span>{" "}
+                    — {MASTERY_INFO[weaponMastery] ?? "Applies automatically on a hit."}
+                  </span>
+                }
+              >
+                <span className="flex items-center gap-1 rounded-md border border-border-accent bg-accent-dark/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-accent-light">
+                  ⚔ {weaponMastery}
+                </span>
+              </Tooltip>
+            )}
 
             {/* Cast Spell (the menu is rendered at row level below so it stays in-bounds) */}
             <button

@@ -125,11 +125,14 @@ class CombatServiceTest {
                 new com.dungeon.master.service.game.combat.CombatSpellResolver(
                         playerStateService, enemyRepo, diceService, new GridService(),
                         combatBroadcaster, combatLookups);
+        com.dungeon.master.service.game.combat.WeaponMasteryRules weaponMasteryRules =
+                new com.dungeon.master.service.game.combat.WeaponMasteryRules(
+                        diceService, enemyRepo, encounterRepo, new GridService());
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
                 sessionRepo, playerStateService, diceService, turnService, eventProducer,
                 monsterCatalog, monsterResolver, spellCatalog, new GridService(), checkModifierService,
                 sceneGenerator, enemyTacticsService, combatMapper, combatBroadcaster,
-                combatTerrainService, combatLookups, combatSpellResolver);
+                combatTerrainService, combatLookups, combatSpellResolver, weaponMasteryRules);
 
         // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
         when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))
@@ -178,17 +181,17 @@ class CombatServiceTest {
     }
 
     private PlayerRuntimeStateDto stateFor(UUID playerId, int hp) {
-        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0);
+        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0);
     }
 
     /** 0 HP, not dead, not stable — actively dying (rolling death saves). */
     private PlayerRuntimeStateDto dyingState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0);
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0);
     }
 
     /** 0 HP, dead (three failures). */
     private PlayerRuntimeStateDto deadState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 3, false, true, null, 0, 0, 0, 0);
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 3, false, true, null, 0, 0, 0, 0);
     }
 
     @Test
@@ -564,7 +567,7 @@ class CombatServiceTest {
     /** Runtime state granting the player a cantrip (for the cast guard); conscious at 20 HP. */
     private PlayerRuntimeStateDto stateWithCantrip(UUID playerId, String spell) {
         return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
-                List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0);
+                java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0);
     }
 
     /** An AUTO-resolution DAMAGE spell — optionally an AoE template (shape != null). */
@@ -791,7 +794,7 @@ class CombatServiceTest {
     /** Runtime state carrying a single named weapon (drives attack-range inference). */
     private PlayerRuntimeStateDto stateWithWeapon(UUID playerId, String weapon) {
         return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
-                List.of(), List.of(new InventoryItem(weapon, 1, ItemKind.WEAPON)),
+                java.util.Map.of(), List.of(), List.of(), List.of(new InventoryItem(weapon, 1, ItemKind.WEAPON)),
                 List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0);
     }
 

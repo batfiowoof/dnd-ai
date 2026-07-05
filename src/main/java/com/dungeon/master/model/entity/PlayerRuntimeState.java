@@ -3,6 +3,7 @@ package com.dungeon.master.model.entity;
 import com.dungeon.master.model.dto.ActiveCondition;
 import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.SpellSlot;
+import com.dungeon.master.model.enums.ProficiencyLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -67,6 +68,18 @@ public class PlayerRuntimeState {
     @Column(columnDefinition = "jsonb")
     @Builder.Default
     private Map<String, Integer> abilities = new LinkedHashMap<>();
+
+    /** Skill training keyed by canonical skill name → {@link ProficiencyLevel}, copied from the Character. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "skill_proficiencies", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, ProficiencyLevel> skillProficiencies = new LinkedHashMap<>();
+
+    /** Ability abbreviations proficient for saving throws ("STR","CON",…), copied from the Character. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "saving_throw_proficiencies", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> savingThrowProficiencies = new ArrayList<>();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "spell_slots", columnDefinition = "jsonb")

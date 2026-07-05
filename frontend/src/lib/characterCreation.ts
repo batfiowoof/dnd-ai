@@ -57,6 +57,8 @@ export interface CharacterDraftData {
   backstory: string;
   imageUrl: string;
   classSkills: string[];
+  /** Trained skills the class doubles to Expertise (must be a subset of `classSkills`). */
+  classExpertise: string[];
   abilityMethod: AbilityMethod;
   baseAbilities: Record<AbilityName, number>;
   standardAssignments: Record<AbilityName, number | null>;

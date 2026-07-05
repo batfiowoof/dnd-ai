@@ -7,6 +7,7 @@ import { bandMeta } from "@/lib/health";
 import {
   isAllyTargeting,
   weaponRangeFeet,
+  weaponMasteryFor,
   resolveCastable,
 } from "@/lib/combat";
 import { gridDistanceFeet } from "@/lib/grid";
@@ -132,6 +133,7 @@ export default function CombatTracker({
   const moveUsed = myToken?.movementUsedFeet ?? 0;
   const moveBudget = mySpeed + (myToken?.dashed ? mySpeed : 0);
   const myAttackRange = weaponRangeFeet(myState?.inventory);
+  const myMastery = weaponMasteryFor(myState?.inventory, myClass);
 
   // Off-hand mode only makes sense on your turn while a bonus action is available.
   useEffect(() => {
@@ -287,6 +289,7 @@ export default function CombatTracker({
         onDisengage={onDisengage}
         onDodge={onDodge}
         myClass={myClass}
+        weaponMastery={myMastery}
         offHandMode={offHandMode}
         hasOffHandWeapon={hasOffHandWeapon}
         onToggleOffHand={() => setOffHandMode((v) => !v)}

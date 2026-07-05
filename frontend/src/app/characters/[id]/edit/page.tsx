@@ -136,8 +136,9 @@ function EditForm({ characterId }: { characterId: string }) {
           speed: derivedSpeed,
           // Edit has no equipment step — preserve the stored gear/inventory.
           equipment: characterQuery.data?.equipment ?? [],
-          // Edit doesn't redo the proficiency/trait selection — preserve them.
+          // Edit doesn't redo the proficiency/trait selection — preserve them (incl. expertise).
           proficiencies: characterQuery.data?.proficiencies ?? [],
+          skillProficiencies: characterQuery.data?.skillProficiencies,
           features: characterQuery.data?.features ?? [],
           // Preserve spell & structured-inventory selections made at creation.
           cantrips: characterQuery.data?.cantrips ?? [],

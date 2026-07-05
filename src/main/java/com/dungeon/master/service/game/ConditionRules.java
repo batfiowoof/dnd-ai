@@ -42,6 +42,9 @@ public final class ConditionRules {
     public static final String SLOWED = "slowed";
     public static final String ENFEEBLED = "enfeebled";
     public static final String BLURRED = "blurred";              // Blur — attackers have disadvantage
+    // 2024 weapon-mastery pseudo-conditions, consumed on the marked creature's next relevant attack.
+    public static final String VEXED = "vexed";                  // Vex — the mastery-wielder's next attack has advantage
+    public static final String SAPPED = "sapped";                // Sap — the victim's next attack has disadvantage
     public static final String MAGE_ARMOR = "mage-armor";        // AC = max(base, 13 + DEX)
     public static final String SHIELD_OF_FAITH = "shield-of-faith"; // +2 AC
     public static final String BARKSKIN = "barkskin";            // AC floor 16
@@ -54,13 +57,13 @@ public final class ConditionRules {
     private static final Set<String> SPEED_ZERO =
             Set.of(GRAPPLED, RESTRAINED, PARALYZED, PETRIFIED, STUNNED, UNCONSCIOUS);
 
-    /** Defender conditions that hand attackers advantage outright. */
+    /** Defender conditions that hand attackers advantage outright ({@code VEXED} approximates Vex). */
     private static final Set<String> ATTACKED_AT_ADVANTAGE =
-            Set.of(BLINDED, PARALYZED, PETRIFIED, RESTRAINED, STUNNED, UNCONSCIOUS, FAERIE_FIRE);
+            Set.of(BLINDED, PARALYZED, PETRIFIED, RESTRAINED, STUNNED, UNCONSCIOUS, FAERIE_FIRE, VEXED);
 
-    /** Attacker conditions that impose disadvantage on its own attack rolls. */
+    /** Attacker conditions that impose disadvantage on its own attack rolls ({@code SAPPED} = Sap). */
     private static final Set<String> ATTACKS_AT_DISADVANTAGE =
-            Set.of(BLINDED, FRIGHTENED, POISONED, PRONE, RESTRAINED, ENFEEBLED);
+            Set.of(BLINDED, FRIGHTENED, POISONED, PRONE, RESTRAINED, ENFEEBLED, SAPPED);
 
     /** Defender conditions vs which a melee hit is an automatic critical (attacker within 5 ft). */
     private static final Set<String> AUTO_CRIT_MELEE = Set.of(PARALYZED, UNCONSCIOUS);

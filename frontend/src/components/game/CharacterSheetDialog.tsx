@@ -11,6 +11,10 @@ import {
   getAbilityModifier,
   formatModifier,
   ABILITY_ABBREVIATIONS,
+  SKILL_ABILITIES,
+  proficiencyBonusForLevel,
+  proficiencyLevelBonus,
+  type ProficiencyLevel,
 } from "@/lib/dnd5e";
 
 interface CharacterSheetDialogProps {
@@ -37,6 +41,31 @@ export default function CharacterSheetDialog({
   const cantrips = state.cantrips ?? [];
   const knownSpells = state.knownSpells ?? [];
   const hasSpells = cantrips.length > 0 || knownSpells.length > 0;
+
+  // Proficiency bonus scales with character level; the runtime state carries level as its Hit Dice total.
+  const proficiencyBonus = proficiencyBonusForLevel(state.hitDiceTotal ?? 1);
+  const saveProfs = state.savingThrowProficiencies ?? [];
+  const skillProfs = state.skillProficiencies ?? {};
+
+  const saveModifier = (abbr: string): { mod: number; proficient: boolean } => {
+    const score = abilities[abbr];
+    const base = typeof score === "number" ? getAbilityModifier(score) : 0;
+    const proficient = saveProfs.some((a) => a.toUpperCase() === abbr);
+    return { mod: base + (proficient ? proficiencyBonus : 0), proficient };
+  };
+
+  // The three "passive" skills a DM checks silently; passive score = 10 + the skill check modifier.
+  const passiveSkills: (keyof typeof SKILL_ABILITIES)[] = [
+    "Perception",
+    "Investigation",
+    "Insight",
+  ];
+  const passiveScore = (skill: keyof typeof SKILL_ABILITIES): number => {
+    const score = abilities[SKILL_ABILITIES[skill]];
+    const base = typeof score === "number" ? getAbilityModifier(score) : 0;
+    const level: ProficiencyLevel = skillProfs[skill] ?? "NONE";
+    return 10 + base + proficiencyLevelBonus(level, proficiencyBonus);
+  };
 
   return (
     <Modal open={open} onClose={onClose} size="lg">
@@ -88,6 +117,68 @@ export default function CharacterSheetDialog({
             );
           })}
         </div>
+
+        {/* Saving throws — a proficiency dot (+ label) marks class-proficient saves. */}
+        <section>
+          <SectionHeading>Saving Throws</SectionHeading>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {ABILITY_ABBREVIATIONS.map((abbr) => {
+              const { mod, proficient } = saveModifier(abbr);
+              return (
+                <div
+                  key={abbr}
+                  className={cn(
+                    "flex flex-col items-center rounded-lg border py-2",
+                    proficient
+                      ? "border-border-accent bg-accent-dark/20"
+                      : "border-border bg-bg-elevated"
+                  )}
+                >
+                  <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-gold">
+                    {proficient && (
+                      <span
+                        className="text-accent-light"
+                        aria-label="Proficient"
+                        title="Proficient"
+                      >
+                        ●
+                      </span>
+                    )}
+                    {abbr}
+                  </span>
+                  <span
+                    className={cn(
+                      "tabular text-base font-bold",
+                      mod < 0 ? "text-danger" : "text-text"
+                    )}
+                  >
+                    {formatModifier(mod)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Passive scores — the skills a DM checks silently (10 + skill modifier). */}
+        <section>
+          <SectionHeading>Passive Scores</SectionHeading>
+          <div className="grid grid-cols-3 gap-2">
+            {passiveSkills.map((skill) => (
+              <div
+                key={skill}
+                className="flex flex-col items-center rounded-lg border border-border bg-bg-elevated py-2"
+              >
+                <span className="text-[10px] uppercase tracking-wider text-text-muted">
+                  {skill}
+                </span>
+                <span className="tabular text-base font-bold text-text">
+                  {passiveScore(skill)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* HP / spell slots / conditions (compact, non-redundant) */}
         <CharacterStatus state={state} />

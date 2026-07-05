@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   EMPTY_ASI,
+  level1ExpertiseCount,
   type AbilityName,
   type AsiAssignment,
   type ClassInfo,
@@ -46,6 +47,7 @@ interface CharacterDraftStore extends CharacterDraftData {
 
   /* capped toggles */
   toggleClassSkill: (skill: string) => void;
+  toggleClassExpertise: (skill: string) => void;
   toggleCantrip: (name: string) => void;
   toggleSpell: (name: string) => void;
 
@@ -62,6 +64,7 @@ const initialState: CharacterDraftData = {
   backstory: "",
   imageUrl: "",
   classSkills: [],
+  classExpertise: [],
   abilityMethod: "standard",
   baseAbilities: {
     strength: 10,
@@ -113,6 +116,7 @@ export const useCharacterDraftStore = create<CharacterDraftStore>((set) => ({
       return {
         selectedClass: cls,
         classSkills: [],
+        classExpertise: [],
         classEquipLetter: "A",
         selectedCantrips: [],
         selectedSpells: [],
@@ -132,10 +136,28 @@ export const useCharacterDraftStore = create<CharacterDraftStore>((set) => ({
     set((s) => {
       if (!s.selectedClass) return {};
       const prev = s.classSkills;
-      if (prev.includes(skill))
-        return { classSkills: prev.filter((x) => x !== skill) };
+      if (prev.includes(skill)) {
+        // Dropping a trained skill also drops any Expertise riding on it.
+        return {
+          classSkills: prev.filter((x) => x !== skill),
+          classExpertise: s.classExpertise.filter((x) => x !== skill),
+        };
+      }
       if (prev.length >= s.selectedClass.skillProficiencies.choose) return {};
       return { classSkills: [...prev, skill] };
+    }),
+
+  // Expertise may only be granted to a skill the character is already trained in,
+  // capped at the class's level-1 expertise count.
+  toggleClassExpertise: (skill) =>
+    set((s) => {
+      if (!s.selectedClass || !s.classSkills.includes(skill)) return {};
+      const cap = level1ExpertiseCount(s.selectedClass);
+      const prev = s.classExpertise;
+      if (prev.includes(skill))
+        return { classExpertise: prev.filter((x) => x !== skill) };
+      if (prev.length >= cap) return {};
+      return { classExpertise: [...prev, skill] };
     }),
 
   toggleCantrip: (name) =>

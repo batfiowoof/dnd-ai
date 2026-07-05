@@ -93,6 +93,37 @@ public class DmRollTools {
                 modifier, finalMode.name(), success, r.crit(), r.fumble(), null);
     }
 
+    @Tool(description = "Roll ONE character's SAVING THROW when they must resist an effect out of combat "
+            + "(a trap's poison, a charm, a blast of fire, a wave of fear). The engine rolls 1d20 plus "
+            + "the character's save modifier (ability modifier, plus proficiency when their class is "
+            + "proficient in that save) authoritatively and returns the result vs the DC. Do not narrate "
+            + "before calling it.")
+    public CheckResult rollSave(
+            @ToolParam(description = "Exact character name of the saving player, verbatim from the prompt") String playerName,
+            @ToolParam(description = "Save ability: one of STR, DEX, CON, INT, WIS, CHA") String ability,
+            @ToolParam(description = "Difficulty Class, typically 8-20; pass 0 to use the session default") int dc,
+            @ToolParam(description = "Situational roll mode: NORMAL, ADVANTAGE, or DISADVANTAGE") String mode,
+            ToolContext toolContext) {
+        Map<String, Object> ctx = toolContext.getContext();
+        UUID sessionId = (UUID) ctx.get(K_SESSION);
+        Player player = resolvePlayer(ctx, playerName);
+        if (player == null) {
+            log.warn("rollSave: unresolved character '{}' (session={})", playerName, sessionId);
+            return new CheckResult(playerName, ability, null, dc, 0, 0,
+                    RollMode.NORMAL.name(), false, false, false, "no such character: " + playerName);
+        }
+        int useDc = dc > 0 ? dc : intCtx(ctx, K_DEFAULT_DC, 13);
+        RollMode finalMode = withExhaustion(player, withInspiration(sessionId, player, parseMode(mode), ctx));
+        int modifier = modifiers.computeSaveModifier(player, ability);
+        DiceRollResult r = diceService.roll(modifiers.notation(modifier), finalMode);
+        broadcastRoll(sessionId, player.getId(), player.getCharacterName(), modifiers.saveLabel(ability), r);
+        boolean success = r.total() >= useDc;
+        log.info("Tool rollSave: session={}, char={}, {} save total={} vs DC{} -> {}",
+                sessionId, player.getCharacterName(), ability, r.total(), useDc, success ? "SUCCESS" : "FAILURE");
+        return new CheckResult(player.getCharacterName(), ability, null, useDc, r.total(),
+                modifier, finalMode.name(), success, r.crit(), r.fumble(), null);
+    }
+
     @Tool(description = "Roll a GROUP check: the SAME uncertain task faces the whole party at once "
             + "(everyone sneaks past, all swim the rapids). Every player rolls; the party succeeds "
             + "only if at least half its members succeed. Returns each roll plus the group verdict.")
