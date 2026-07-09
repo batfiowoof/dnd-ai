@@ -2,7 +2,10 @@ package com.dungeon.master.websocket;
 
 import com.dungeon.master.model.dto.CombatActionRequest;
 import com.dungeon.master.model.dto.CunningActionRequest;
+import com.dungeon.master.model.dto.HoldReactionRequest;
 import com.dungeon.master.model.dto.MoveRequest;
+import com.dungeon.master.model.dto.ReactionChoiceRequest;
+import com.dungeon.master.model.dto.ReadyActionRequest;
 import com.dungeon.master.model.dto.StabilizeRequest;
 import com.dungeon.master.model.dto.StartEncounterRequest;
 import com.dungeon.master.service.game.CombatService;
@@ -186,6 +189,45 @@ public class CombatWebSocketController extends AbstractGameWebSocketController {
             combatService.playerCunningAction(sessionId, username, request.action());
         } catch (Exception e) {
             log.error("Error in Cunning Action: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/reaction/hold")
+    public void handleCombatHoldReaction(@DestinationVariable UUID sessionId,
+                                         @Payload HoldReactionRequest request,
+                                         Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerHoldReaction(sessionId, username, request.hold());
+        } catch (Exception e) {
+            log.error("Error toggling hold-reaction: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/reaction")
+    public void handleCombatReaction(@DestinationVariable UUID sessionId,
+                                     @Payload ReactionChoiceRequest request,
+                                     Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.resolvePlayerReaction(sessionId, username, request.choice());
+        } catch (Exception e) {
+            log.error("Error resolving reaction: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/combat/ready")
+    public void handleCombatReady(@DestinationVariable UUID sessionId,
+                                  @Payload ReadyActionRequest request,
+                                  Principal principal) {
+        String username = principal.getName();
+        try {
+            combatService.playerReadyAction(sessionId, username, request.targetEnemyId());
+        } catch (Exception e) {
+            log.error("Error readying action: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
     }

@@ -107,6 +107,25 @@ export interface SystemMessageEvent {
   text: string;
 }
 
+/**
+ * Pushed privately (via /user/queue/reaction) to a single player when an enemy attack has hit them
+ * and they may spend their reaction on a spell. The paused enemy turn resumes once they answer with
+ * a `/combat/reaction` choice or the `secondsLeft` window elapses (auto-decline).
+ */
+export interface ReactionPromptEvent {
+  type: "REACTION_PROMPT";
+  sessionId: string;
+  promptId: string;
+  /** Attacking enemy's display name. */
+  attacker: string;
+  /** Triggering damage type (e.g. "Fire"), or null. */
+  damageType: string | null;
+  /** Reaction spells the player may cast now. */
+  spellOptions: Array<"SHIELD" | "ABSORB">;
+  /** Decision window in seconds before an automatic decline. */
+  secondsLeft: number;
+}
+
 /** Broadcast when an NPC's attitude toward the party changes (drives the relationship panel). */
 export interface NpcStateEvent {
   type: "NPC_STATE";
@@ -126,5 +145,6 @@ export type WebSocketMessage =
   | CombatActionEvent
   | CombatLifecycleEvent
   | RoundStatusEvent
+  | ReactionPromptEvent
   | SystemMessageEvent
   | NpcStateEvent;

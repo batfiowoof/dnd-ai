@@ -66,6 +66,16 @@ public record SpellEffect(
         return "Bonus Action".equalsIgnoreCase(castingTime);
     }
 
+    /**
+     * True when this spell is cast as a Reaction. Unlike {@link #isBonusAction}, the reaction
+     * casting time is often a long prose trigger ("Reaction, which you take when you are hit…"),
+     * so match on a leading "reaction" rather than exact equality.
+     */
+    public boolean isReaction() {
+        return castingTime != null
+                && castingTime.trim().toLowerCase(java.util.Locale.ROOT).startsWith("reaction");
+    }
+
     /** True for a touch-range spell attack (melee for advantage-vs-prone purposes). */
     public boolean isMeleeRange() {
         return range != null && range.toLowerCase(java.util.Locale.ROOT).startsWith("touch");

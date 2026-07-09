@@ -57,6 +57,13 @@ interface CombatControlsProps {
   onToggleOffHand: () => void;
   onSecondWind: () => void;
   onCunningAction: (action: "dash" | "disengage" | "hide") => void;
+  /* ── Reactions (Feature 4) ── */
+  /** Whether this player is holding their reaction for a spell (suppresses auto opportunity attacks). */
+  holdingReaction: boolean;
+  onToggleHold: () => void;
+  /** Ready is "armed" — the next enemy click readies an attack against it. */
+  readyMode: boolean;
+  onToggleReady: () => void;
   onEndTurn: () => void;
 }
 
@@ -98,6 +105,10 @@ export default function CombatControls({
   onToggleOffHand,
   onSecondWind,
   onCunningAction,
+  holdingReaction,
+  onToggleHold,
+  readyMode,
+  onToggleReady,
   onEndTurn,
 }: CombatControlsProps) {
   const [itemMenu, setItemMenu] = useState(false);
@@ -428,6 +439,49 @@ export default function CombatControls({
                 )}
               </div>
             )}
+
+            {/* ── Reactions ── */}
+            <Tooltip
+              placement="top"
+              content={
+                <span className="block max-w-[13rem] text-xs text-text-muted">
+                  <span className="font-semibold text-gold">Hold reaction</span> —
+                  save your reaction for a spell (Shield / Absorb Elements) instead of
+                  auto-taking opportunity attacks.
+                </span>
+              }
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={holdingReaction ? "primary" : "ghost"}
+                disabled={!connected || reactionSpent}
+                onClick={onToggleHold}
+              >
+                🖐 Hold reaction{holdingReaction ? " — on" : ""}
+              </Button>
+            </Tooltip>
+
+            <Tooltip
+              placement="top"
+              content={
+                <span className="block max-w-[13rem] text-xs text-text-muted">
+                  <span className="font-semibold text-gold">Ready</span> — spend your
+                  action to ready an attack, then click an enemy. It fires as a reaction
+                  when that enemy comes within your reach.
+                </span>
+              }
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={readyMode ? "primary" : "ghost"}
+                disabled={!connected || actionSpent}
+                onClick={onToggleReady}
+              >
+                ⏳ Ready{readyMode ? " — pick target" : ""}
+              </Button>
+            </Tooltip>
 
             <button
               type="button"

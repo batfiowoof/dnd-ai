@@ -16,6 +16,7 @@ import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
+import com.dungeon.master.model.dto.ReactionPromptEvent;
 import com.dungeon.master.model.dto.RollSummary;
 import com.dungeon.master.model.dto.SpellEffect;
 import com.dungeon.master.model.dto.Token;
@@ -29,6 +30,7 @@ import com.dungeon.master.model.enums.CombatStatus;
 import com.dungeon.master.model.enums.CombatantKind;
 import com.dungeon.master.model.enums.Difficulty;
 import com.dungeon.master.model.enums.PlayerRole;
+import com.dungeon.master.model.enums.ReactionChoice;
 import com.dungeon.master.model.enums.RollMode;
 import com.dungeon.master.repository.CharacterRepository;
 import com.dungeon.master.repository.CombatEncounterRepository;
@@ -99,9 +101,36 @@ public class CombatService {
     private final CombatSpellResolver combatSpellResolver;
     private final WeaponMasteryRules weaponMasteryRules;
     private final MagicItemEffects magicItemEffects;
+    private final ReactionWindow reactionWindow;
 
     /** DC of the Wisdom (Medicine) check to stabilize a dying creature. */
     private static final int STABILIZE_DC = 10;
+
+    /** Seconds a player has to answer a reaction prompt before it auto-declines. */
+    private static final int REACTION_WINDOW_SECONDS = 15;
+
+    /** Elemental damage types Absorb Elements can resist. */
+    private static final Set<String> ABSORB_TYPES =
+            Set.of("acid", "cold", "fire", "lightning", "thunder");
+
+    /**
+     * Enemy attacks paused mid-multiattack while the victim decides whether to cast a reaction spell.
+     * Keyed by encounter id; the held swing is pre-rolled so {@code applyReaction} resolves it
+     * deterministically and then finishes the enemy's remaining swings.
+     */
+    private final Map<UUID, PendingReaction> pendingReactions = new ConcurrentHashMap<>();
+
+    private record PendingReaction(UUID enemyId, UUID victimId, int attackBonus, String damageDice,
+                                   String damageType, int swings, int swingIndex, DiceRollResult atk,
+                                   DiceRollResult pendingDamage, boolean crit, int targetAc,
+                                   List<CombatActionEvent.Target> results, UUID promptId) {}
+
+    /** Control-flow signal thrown to unwind the enemy turn engine when a reaction prompt opens. */
+    private static final class ReactionPause extends RuntimeException {
+        ReactionPause() {
+            super(null, null, false, false); // lightweight — no message, no stack trace
+        }
+    }
 
     /**
      * Weapon hits whose damage the player hasn't rolled yet (two-phase attack). Keyed by
@@ -633,6 +662,49 @@ public class CombatService {
         flushBeat(sessionId, player.getId(), beat);
     }
 
+    /* ── reactions (hold / ready) ────────────────────────────────── */
+
+    /**
+     * Toggle whether the active player holds their reaction for a spell. While held, the player will
+     * NOT auto-take opportunity attacks, preserving the reaction for Shield / Absorb Elements. Set on
+     * your turn; it carries through the following enemy turns and clears at your next turn start.
+     */
+    @Transactional
+    public void playerHoldReaction(UUID sessionId, String username, boolean hold) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+        Token token = requireToken(enc, player.getId().toString());
+        token.setHoldingReaction(hold);
+        encounterRepository.save(enc);
+        broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+    }
+
+    /**
+     * Ready an attack against an enemy: spends the action; the readied swing auto-fires as a
+     * reaction when that enemy first comes within the player's reach/range this round. Basic Ready
+     * only — no readied-spell targeting engine.
+     */
+    @Transactional
+    public void playerReadyAction(UUID sessionId, String username, UUID targetEnemyId) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        Player player = requireCombatTurn(enc, sessionId, username);
+        requireActionAvailable(enc, player);
+        Token token = requireToken(enc, player.getId().toString());
+        Enemy enemy = enemyRepository.findById(targetEnemyId)
+                .filter(e -> e.getSessionId().equals(sessionId))
+                .orElseThrow(() -> new IllegalArgumentException("Enemy not found"));
+        if (!enemy.isAlive()) {
+            throw new IllegalStateException(enemy.getName() + " is already defeated");
+        }
+        token.setReadiedTargetEnemyId(targetEnemyId);
+        markAction(enc, player);
+        broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+        List<String> beat = new ArrayList<>();
+        beat.add(player.getCharacterName() + " readies an attack against " + enemy.getName() + ".");
+        maybeAutoEndTurn(enc, player, beat);
+        flushBeat(sessionId, player.getId(), beat);
+    }
+
     /* ── bonus actions ───────────────────────────────────────────── */
 
     /**
@@ -885,7 +957,15 @@ public class CombatService {
                     advanceIndex(enc);
                     continue;
                 }
-                enemyAct(enc, e, beat);
+                try {
+                    enemyAct(enc, e, beat);
+                } catch (ReactionPause pause) {
+                    // A player is deciding whether to react to this enemy's attack. Persist the
+                    // paused state and stop here WITHOUT advancing — applyReaction resumes the turn.
+                    encounterRepository.save(enc);
+                    broadcast(sessionId, CombatLifecycleEvent.turn(sessionId, toStateDto(enc)));
+                    return;
+                }
                 advanceIndex(enc);
                 continue;
             }
@@ -997,6 +1077,10 @@ public class CombatService {
             case HOLD -> null;
         };
 
+        // Snapshot which players threaten the enemy from its CURRENT square, so that stepping out
+        // of their reach can provoke a (auto-resolved) player opportunity attack — hybrid model.
+        List<PlayerOaThreat> playerThreats = collectPlayerOaThreats(enc, ox, oy);
+
         boolean moved = dest != null && (dest.x() != ox || dest.y() != oy);
         if (moved) {
             enemyTok.setX(dest.x());
@@ -1004,6 +1088,31 @@ public class CombatService {
             beat.add(CombatNarrationFormatter.enemyMoveLine(enemy, intent, target.player().getCharacterName()));
             // A standalone MOVE event so the client animates the reposition before any attack.
             broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "MOVE", "moves", List.of());
+
+            // Opportunity attacks: any snapshotted player who no longer has the moved enemy within
+            // reach and still holds its reaction gets one swing.
+            for (PlayerOaThreat threat : playerThreats) {
+                if (!enemy.isAlive()) {
+                    break;
+                }
+                if (withinReach(threat.playerX(), threat.playerY(),
+                        enemyTok.getX(), enemyTok.getY(), threat.reachFeet())) {
+                    continue; // enemy still adjacent — no opportunity
+                }
+                Token pt = tokenFor(enc, threat.refId());
+                if (pt == null || !pt.isReactionAvailable()) {
+                    continue;
+                }
+                pt.setReactionAvailable(false);
+                resolvePlayerOpportunityAttack(enc, threat, enemy, beat);
+            }
+        }
+
+        // A player who readied an attack against THIS enemy strikes as it comes within reach/range.
+        fireReadiedAttacks(enc, enemy, enemyTok, beat);
+
+        if (!enemy.isAlive()) {
+            return; // dropped by an opportunity or readied attack — no turn left to take
         }
 
         // 3. Attack only if the (possibly moved) enemy is within the chosen attack's reach/range.
@@ -1033,16 +1142,30 @@ public class CombatService {
      * primary attack, falling back to the legacy {@code attackBonus}/{@code damageDice}.
      */
     private void resolveMultiattack(CombatEncounter enc, Enemy enemy, TargetPlayer target, List<String> beat) {
-        UUID sessionId = enc.getSessionId();
         List<MonsterAttack> atks = enemy.getAttacks();
         int attackBonus = (atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit())
                 + ConditionRules.attackModifier(enemy.getConditions());
         String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
         String damageType = atks.isEmpty() ? null : atks.get(0).damageType();
         int swings = Math.max(1, enemy.getAttacksPerTurn());
+        runMultiattack(enc, enemy, target, attackBonus, damageDice, damageType, swings, 0,
+                new ArrayList<>(), true, beat);
+    }
 
-        List<CombatActionEvent.Target> results = new ArrayList<>();
-        for (int s = 0; s < swings; s++) {
+    /**
+     * The resumable multiattack swing loop. Runs swings {@code [startIndex, swings)} against
+     * {@code target} (re-acquiring a living target between swings) into the shared {@code results}
+     * list, then broadcasts one combined {@link CombatActionEvent}. When {@code allowReaction} is
+     * true, the first hit that a reaction spell could affect pauses the whole engine (via
+     * {@link ReactionPause}) after stashing a {@link PendingReaction}; {@code applyReaction} later
+     * re-enters this method from {@code startIndex = swingIndex + 1} with {@code allowReaction=false}.
+     */
+    private void runMultiattack(CombatEncounter enc, Enemy enemy, TargetPlayer target,
+                                int attackBonus, String damageDice, String damageType, int swings,
+                                int startIndex, List<CombatActionEvent.Target> results,
+                                boolean allowReaction, List<String> beat) {
+        UUID sessionId = enc.getSessionId();
+        for (int s = startIndex; s < swings; s++) {
             if (target.state().currentHp() <= 0) {     // current target down — re-acquire
                 target = pickTarget(sessionId);
                 if (target == null) break;
@@ -1058,35 +1181,235 @@ public class CombatService {
             // A melee hit on a paralyzed/unconscious victim is an automatic critical (two death-save failures).
             boolean crit = atk.crit() || (hit && ConditionRules.autoCritMelee(playerConds(victim.getId()), melee));
 
-            RollSummary damageSummary = null;
-            int targetHp = target.state().currentHp();
-            int targetMax = target.state().maxHp();
-            boolean defeated = false;
-            if (hit) {
-                DiceRollResult dmg = rollExpr(crit ? CombatMath.critDouble(damageDice) : damageDice);
-                int applied = resisted(dmg.total(), damageType, target.state());
-                if (applied < dmg.total()) {
-                    beat.add(victim.getCharacterName() + " resists " + damageType
-                            + " damage (halved to " + applied + ").");
+            // Reaction interrupt: on the first eligible hit, pre-roll the damage, stash the paused
+            // multiattack, prompt the victim, and unwind the engine until they answer.
+            if (hit && allowReaction) {
+                List<String> options = reactionSpellOptions(enc, victim, atk, targetAc, crit, damageType);
+                if (!options.isEmpty()) {
+                    DiceRollResult dmg = rollExpr(crit ? CombatMath.critDouble(damageDice) : damageDice);
+                    UUID promptId = UUID.randomUUID();
+                    pendingReactions.put(enc.getId(), new PendingReaction(enemy.getId(), victim.getId(),
+                            attackBonus, damageDice, damageType, swings, s, atk, dmg, crit, targetAc,
+                            results, promptId));
+                    openReactionPrompt(enc, victim, enemy, damageType, options, promptId);
+                    throw new ReactionPause();
                 }
-                PlayerRuntimeStateDto updated =
-                        playerStateService.applyHpDelta(victim.getId(), -applied, crit);
-                broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
-                targetHp = updated.currentHp();
-                targetMax = updated.maxHp();
-                defeated = updated.currentHp() <= 0;
-                damageSummary = RollSummary.of(dmg);
-                concentrationCheckOnDamage(enc, victim.getId(), applied, updated, beat);
-                target = new TargetPlayer(victim, updated);  // refresh for the next swing
             }
 
-            results.add(CombatActionEvent.Target.attack(CombatantKind.PLAYER, victim.getCharacterName(),
-                    RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated));
-            beat.add(CombatNarrationFormatter.describeAttack(enemy.getName(), victim.getCharacterName(), atk,
-                    targetAc, hit, damageSummary, targetHp, targetMax, defeated));
+            PlayerRuntimeStateDto post = applySwing(enc, enemy, victim, target.state(), atk, targetAc,
+                    hit, crit, damageDice, damageType, null, results, beat);
+            target = new TargetPlayer(victim, post);  // refresh for the next swing
         }
 
         broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "attacks", results);
+    }
+
+    /**
+     * Apply one resolved enemy swing to the victim: roll (or use pre-rolled) damage, halve it if
+     * resisted, apply HP, run the concentration check, and append the swing to {@code results} +
+     * {@code beat}. Does NOT broadcast — the caller emits the combined action once the loop ends.
+     * Returns the victim's post-swing state (updated on a hit, else {@code preState} unchanged).
+     */
+    private PlayerRuntimeStateDto applySwing(CombatEncounter enc, Enemy enemy, Player victim,
+                                             PlayerRuntimeStateDto preState, DiceRollResult atk,
+                                             int targetAc, boolean hit, boolean crit, String damageDice,
+                                             String damageType, DiceRollResult preRolledDamage,
+                                             List<CombatActionEvent.Target> results, List<String> beat) {
+        UUID sessionId = enc.getSessionId();
+        RollSummary damageSummary = null;
+        int targetHp = preState.currentHp();
+        int targetMax = preState.maxHp();
+        boolean defeated = false;
+        PlayerRuntimeStateDto post = preState;
+        if (hit) {
+            DiceRollResult dmg = preRolledDamage != null ? preRolledDamage
+                    : rollExpr(crit ? CombatMath.critDouble(damageDice) : damageDice);
+            int applied = resisted(dmg.total(), damageType, preState);
+            if (applied < dmg.total()) {
+                beat.add(victim.getCharacterName() + " resists " + damageType
+                        + " damage (halved to " + applied + ").");
+            }
+            PlayerRuntimeStateDto updated = playerStateService.applyHpDelta(victim.getId(), -applied, crit);
+            broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
+            targetHp = updated.currentHp();
+            targetMax = updated.maxHp();
+            defeated = updated.currentHp() <= 0;
+            damageSummary = RollSummary.of(dmg);
+            concentrationCheckOnDamage(enc, victim.getId(), applied, updated, beat);
+            post = updated;
+        }
+        results.add(CombatActionEvent.Target.attack(CombatantKind.PLAYER, victim.getCharacterName(),
+                RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated));
+        beat.add(CombatNarrationFormatter.describeAttack(enemy.getName(), victim.getCharacterName(), atk,
+                targetAc, hit, damageSummary, targetHp, targetMax, defeated));
+        return post;
+    }
+
+    /* ── reaction spells (Shield / Absorb Elements) ──────────────── */
+
+    /** Which reaction spells the victim could cast against this hit (empty → resolve normally). */
+    private List<String> reactionSpellOptions(CombatEncounter enc, Player victim, DiceRollResult atk,
+                                              int targetAc, boolean crit, String damageType) {
+        Token vt = tokenFor(enc, victim.getId().toString());
+        if (vt == null || !vt.isReactionAvailable()) {
+            return List.of();
+        }
+        if (ConditionRules.incapacitated(playerConds(victim.getId()))) {
+            return List.of();
+        }
+        PlayerRuntimeStateDto st = safeState(victim);
+        if (st == null) {
+            return List.of();
+        }
+        List<String> opts = new ArrayList<>();
+        // Shield: +5 AC could still turn this (non-crit) hit into a miss — only worth offering then.
+        if (!crit && atk.total() >= targetAc && atk.total() < targetAc + 5
+                && containsIgnoreCase(st.knownSpells(), "Shield") && hasSpellSlot(st, 1)) {
+            opts.add("SHIELD");
+        }
+        // Absorb Elements: resist the triggering elemental damage type.
+        if (damageType != null && ABSORB_TYPES.contains(damageType.toLowerCase(Locale.ROOT))
+                && containsIgnoreCase(st.knownSpells(), "Absorb Elements") && hasSpellSlot(st, 1)) {
+            opts.add("ABSORB");
+        }
+        return opts;
+    }
+
+    /** True when the player has an unspent spell slot of at least {@code minLevel}. */
+    private boolean hasSpellSlot(PlayerRuntimeStateDto st, int minLevel) {
+        return st.spellSlots() != null
+                && st.spellSlots().stream().anyMatch(sl -> sl.level() >= minLevel && sl.used() < sl.max());
+    }
+
+    /** Persist the paused encounter, push the prompt to the victim, and arm the auto-decline timer. */
+    private void openReactionPrompt(CombatEncounter enc, Player victim, Enemy enemy, String damageType,
+                                    List<String> options, UUID promptId) {
+        encounterRepository.save(enc);
+        UUID sessionId = enc.getSessionId();
+        ReactionPromptEvent event = ReactionPromptEvent.of(sessionId, promptId, enemy.getName(),
+                damageType, options, REACTION_WINDOW_SECONDS);
+        reactionWindow.open(sessionId, victim.getUsername(), event,
+                () -> applyReaction(sessionId, promptId, ReactionChoice.DECLINE));
+    }
+
+    /**
+     * A player's answer to a reaction prompt: validate ownership, cancel the auto-decline, and
+     * resume the paused enemy turn under their choice.
+     */
+    @Transactional
+    public void resolvePlayerReaction(UUID sessionId, String username, String choice) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        PendingReaction pending = pendingReactions.get(enc.getId());
+        if (pending == null) {
+            throw new IllegalStateException("There is no reaction to make right now");
+        }
+        Player player = playerRepository.findBySessionIdAndUsername(sessionId, username)
+                .orElseThrow(() -> new PlayerNotFoundException("You are not in this session"));
+        if (!player.getId().equals(pending.victimId())) {
+            throw new IllegalStateException("This reaction is not yours to make");
+        }
+        reactionWindow.cancel(sessionId);
+        applyReaction(sessionId, pending.promptId(), parseChoice(choice));
+    }
+
+    private ReactionChoice parseChoice(String choice) {
+        try {
+            return choice == null ? ReactionChoice.DECLINE
+                    : ReactionChoice.valueOf(choice.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return ReactionChoice.DECLINE;
+        }
+    }
+
+    /**
+     * Resolve the held swing under {@code choice}, finish the enemy's remaining swings, then resume
+     * the turn engine. Runs inside a transaction (the WS handler's, or the timer's own). Idempotent:
+     * the {@link ConcurrentHashMap#remove} gate means a late auto-decline no-ops once answered.
+     */
+    private void applyReaction(UUID sessionId, UUID promptId, ReactionChoice choice) {
+        CombatEncounter enc = activeEncounter(sessionId);
+        PendingReaction pending = pendingReactions.remove(enc.getId());
+        if (pending == null) {
+            return; // already resolved (answer/timeout race)
+        }
+        if (!pending.promptId().equals(promptId)) {
+            pendingReactions.put(enc.getId(), pending); // a newer prompt — leave it for its own answer
+            return;
+        }
+        reactionWindow.cancel(sessionId);
+
+        Enemy enemy = enemyRepository.findById(pending.enemyId()).orElse(null);
+        Player victim = playerRepository.findById(pending.victimId()).orElse(null);
+        List<String> beat = new ArrayList<>();
+        if (enemy == null || victim == null) {
+            advanceIndex(enc);                       // combatant vanished — just resume
+            resolveUntilPlayerOrEnd(enc, beat);
+            encounterRepository.save(enc);
+            flushBeat(sessionId, anyPlayerId(sessionId), beat);
+            return;
+        }
+
+        // Fall back to DECLINE if the chosen spell can no longer be paid for (slot spent meanwhile).
+        PlayerRuntimeStateDto st = safeState(victim);
+        ReactionChoice eff = choice;
+        if ((eff == ReactionChoice.SHIELD || eff == ReactionChoice.ABSORB)
+                && (st == null || !hasSpellSlot(st, 1))) {
+            eff = ReactionChoice.DECLINE;
+        }
+
+        Token vt = tokenFor(enc, victim.getId().toString());
+        DiceRollResult atk = pending.atk();
+        int targetAc = pending.targetAc();
+        boolean hit;
+        switch (eff) {
+            case SHIELD -> {
+                spendReactionSpell(enc, victim);
+                playerStateService.applyCondition(victim.getId(),
+                        ActiveCondition.of(ConditionRules.SHIELDED).expiringAt(enc.getRound()));
+                broadcast(sessionId, PlayerStateEvent.of(sessionId, playerStateService.getState(victim.getId())));
+                if (vt != null) vt.setReactionAvailable(false);
+                hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc + 5);
+                beat.add(victim.getCharacterName() + " casts Shield (+5 AC)"
+                        + (hit ? "." : ", turning the blow aside!"));
+            }
+            case ABSORB -> {
+                spendReactionSpell(enc, victim);
+                String type = pending.damageType() == null ? ""
+                        : pending.damageType().toLowerCase(Locale.ROOT);
+                playerStateService.applyCondition(victim.getId(),
+                        ActiveCondition.of(ConditionRules.ABSORBING_PREFIX + type).expiringAt(enc.getRound()));
+                broadcast(sessionId, PlayerStateEvent.of(sessionId, playerStateService.getState(victim.getId())));
+                if (vt != null) vt.setReactionAvailable(false);
+                hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+                beat.add(victim.getCharacterName() + " casts Absorb Elements, resisting the " + type + " damage.");
+            }
+            default -> hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+        }
+
+        // Apply the held swing (pre-rolled damage; resisted() now sees any Absorb condition).
+        PlayerRuntimeStateDto post = applySwing(enc, enemy, victim, playerStateService.getState(victim.getId()),
+                atk, targetAc, hit, pending.crit(), pending.damageDice(), pending.damageType(),
+                pending.pendingDamage(), pending.results(), beat);
+
+        // Finish the enemy's remaining swings (no further prompts) and resume the engine.
+        if (enemy.isAlive()) {
+            TargetPlayer target = new TargetPlayer(victim, post);
+            runMultiattack(enc, enemy, target, pending.attackBonus(), pending.damageDice(),
+                    pending.damageType(), pending.swings(), pending.swingIndex() + 1,
+                    pending.results(), false, beat);
+        } else {
+            broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "attacks", pending.results());
+        }
+        advanceIndex(enc);
+        resolveUntilPlayerOrEnd(enc, beat);
+        encounterRepository.save(enc);
+        flushBeat(sessionId, victim.getId(), beat);
+    }
+
+    /** Spend a 1st-level slot for a reaction spell and broadcast the updated slots. */
+    private void spendReactionSpell(CombatEncounter enc, Player victim) {
+        PlayerRuntimeStateDto after = playerStateService.useSpellSlot(victim.getId(), 1);
+        broadcast(enc.getSessionId(), PlayerStateEvent.of(enc.getSessionId(), after));
     }
 
     /* ── grid-aware enemy AI helpers ─────────────────────────────── */
@@ -1548,6 +1871,8 @@ public class CombatService {
         t.setDodging(false);
         t.setActionUsed(false);
         t.setBonusActionUsed(false);
+        t.setHoldingReaction(false);
+        t.setReadiedTargetEnemyId(null);
     }
 
     /** A hostile that currently threatens the mover, captured before a move resolves opportunity attacks. */
@@ -1635,6 +1960,131 @@ public class CombatService {
                 damageSummary, targetHp, targetMax, defeated));
     }
 
+    /* ── player→enemy opportunity attacks (auto-resolved) ────────── */
+
+    /** A player who currently threatens an enemy, captured before the enemy moves. */
+    private record PlayerOaThreat(UUID playerId, String refId, int playerX, int playerY, int reachFeet) {}
+
+    /**
+     * Living, positioned, conscious players who have the enemy within their melee reach right now
+     * AND can still react — reaction available, not incapacitated, and not deliberately holding
+     * their reaction for a spell. Snapshotted before an enemy moves so leaving reach can provoke.
+     */
+    private List<PlayerOaThreat> collectPlayerOaThreats(CombatEncounter enc, int enemyX, int enemyY) {
+        List<PlayerOaThreat> threats = new ArrayList<>();
+        GridState grid = enc.getGridState();
+        if (grid == null || grid.getTokens() == null) {
+            return threats;
+        }
+        for (PlayerRuntimeStateDto s : playerStateService.getSessionStates(enc.getSessionId())) {
+            if (s.currentHp() <= 0) {
+                continue;
+            }
+            Optional<Player> p = playerRepository.findById(s.playerId());
+            if (p.isEmpty() || p.get().getRole() != PlayerRole.PLAYER) {
+                continue;
+            }
+            Token pt = grid.getTokens().get(s.playerId().toString());
+            if (pt == null || !pt.isReactionAvailable() || pt.isHoldingReaction()) {
+                continue; // no token, reaction spent, or held for a spell
+            }
+            if (ConditionRules.incapacitated(playerConds(s.playerId()))) {
+                continue; // can't take reactions
+            }
+            int reach = CombatMath.playerReachFeet(s.inventory());
+            if (withinReach(pt.getX(), pt.getY(), enemyX, enemyY, reach)) {
+                threats.add(new PlayerOaThreat(s.playerId(), s.playerId().toString(),
+                        pt.getX(), pt.getY(), reach));
+            }
+        }
+        return threats;
+    }
+
+    /**
+     * One player opportunity-attack (or readied) swing at an enemy: rolls a main-hand attack vs the
+     * enemy's AC (cover + dodge aware), applies enemy HP, broadcasts an ATTACK beat. Mirrors
+     * {@link #playerOffHandAttack}'s enemy-HP path and {@link #resolveOpportunityAttack}'s broadcast.
+     */
+    private void resolvePlayerOpportunityAttack(CombatEncounter enc, PlayerOaThreat threat, Enemy enemy,
+                                                List<String> beat) {
+        if (!enemy.isAlive()) {
+            return;
+        }
+        Player player = playerRepository.findById(threat.playerId()).orElse(null);
+        if (player == null) {
+            return;
+        }
+        Token attackerTok = tokenFor(enc, threat.refId());
+        Token defenderTok = tokenFor(enc, enemy.getId().toString());
+        boolean melee = isMelee(attackerTok, defenderTok, enc.getGridState());
+        int attackBonus = attackBonus(player) + ConditionRules.attackModifier(playerConds(player.getId()));
+        RollMode mode = playerVsEnemyMode(player, enemy, defenderTok, melee);
+        DiceRollResult atk = rollAttack(attackBonus, mode);
+        int targetAc = effectiveAc(enemy.getArmorClass(), attackerTok, defenderTok, enc.getGridState());
+        boolean hit = atk.crit() || (!atk.fumble() && atk.total() >= targetAc);
+
+        RollSummary damageSummary = null;
+        int targetHp = enemy.getCurrentHp();
+        int targetMax = enemy.getMaxHp();
+        boolean defeated = false;
+        if (hit) {
+            String dice = damageDice(player);
+            DiceRollResult dmg = rollExpr(atk.crit() ? CombatMath.critDouble(dice) : dice);
+            enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
+            if (enemy.getCurrentHp() == 0) {
+                enemy.setAlive(false);
+                defeated = true;
+            }
+            enemyRepository.save(enemy);
+            targetHp = enemy.getCurrentHp();
+            damageSummary = RollSummary.of(dmg);
+        }
+
+        broadcastAction(enc, CombatantKind.PLAYER, player.getCharacterName(), "ATTACK",
+                "makes an opportunity attack",
+                List.of(CombatActionEvent.Target.attack(CombatantKind.ENEMY, enemy.getName(),
+                        RollSummary.of(atk), targetAc, hit, damageSummary, targetHp, targetMax, defeated)));
+        beat.add(CombatNarrationFormatter.describeAttack(player.getCharacterName(), enemy.getName(), atk,
+                targetAc, hit, damageSummary, targetHp, targetMax, defeated));
+    }
+
+    /**
+     * Fire any readied player attacks whose trigger — "this enemy comes within my reach/range" — is
+     * now met after the enemy's movement. Reuses the single-shot opportunity-attack swing.
+     */
+    private void fireReadiedAttacks(CombatEncounter enc, Enemy enemy, Token enemyTok, List<String> beat) {
+        GridState grid = enc.getGridState();
+        if (grid == null || grid.getTokens() == null || enemyTok == null) {
+            return;
+        }
+        for (PlayerRuntimeStateDto s : playerStateService.getSessionStates(enc.getSessionId())) {
+            if (!enemy.isAlive()) {
+                break;
+            }
+            if (s.currentHp() <= 0) {
+                continue;
+            }
+            Token pt = grid.getTokens().get(s.playerId().toString());
+            if (pt == null || !pt.isReactionAvailable()
+                    || !enemy.getId().equals(pt.getReadiedTargetEnemyId())) {
+                continue; // no token / reaction spent / not readied against this enemy
+            }
+            if (ConditionRules.incapacitated(playerConds(s.playerId()))) {
+                continue;
+            }
+            int range = CombatMath.attackRangeFeet(s.inventory());
+            if (gridService.distanceFeet(pt.getX(), pt.getY(),
+                    enemyTok.getX(), enemyTok.getY()) > range) {
+                continue; // enemy not yet within reach/range — keep the readied action waiting
+            }
+            pt.setReactionAvailable(false);
+            pt.setReadiedTargetEnemyId(null);
+            PlayerOaThreat threat = new PlayerOaThreat(s.playerId(), s.playerId().toString(),
+                    pt.getX(), pt.getY(), range);
+            resolvePlayerOpportunityAttack(enc, threat, enemy, beat);
+        }
+    }
+
     /* ── stat helpers (load from the Character template) ─────────── */
 
     private Character character(Player player) {
@@ -1655,13 +2105,18 @@ public class CombatService {
     }
 
     /**
-     * Halve incoming damage of a type the victim has magic-item Resistance to (round down). Returns
-     * the (possibly reduced) amount to apply. No-op when the damage type is unknown or unresisted.
+     * Halve incoming damage of a type the victim resists (round down) — from magic items OR from a
+     * condition (Absorb Elements' {@code absorbing-<type>}). Returns the (possibly reduced) amount to
+     * apply. No-op when the damage type is unknown or unresisted.
      */
     private int resisted(int total, String damageType, PlayerRuntimeStateDto victimState) {
         if (total <= 0 || damageType == null || victimState == null) return total;
         Set<String> res = magicItemEffects.resistances(victimState.inventory(), victimState.attunedItems());
-        return res.stream().anyMatch(r -> r.equalsIgnoreCase(damageType)) ? total / 2 : total;
+        if (res.stream().anyMatch(r -> r.equalsIgnoreCase(damageType))) {
+            return total / 2;
+        }
+        Set<String> condRes = ConditionRules.resistances(playerConds(victimState.playerId()));
+        return condRes.stream().anyMatch(r -> r.equalsIgnoreCase(damageType)) ? total / 2 : total;
     }
 
     /** The player's full runtime state, or {@code null} when none exists (e.g. tests). */

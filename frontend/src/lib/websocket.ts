@@ -389,3 +389,56 @@ export function sendEndCombat(client: Client, sessionId: string) {
     body: JSON.stringify({}),
   });
 }
+
+/* ── Reactions (Feature 4): reaction spells, hold, ready ──────────── */
+
+/** Answer a reaction prompt: "SHIELD" | "ABSORB" | "DECLINE". */
+export function sendCombatReaction(
+  client: Client,
+  sessionId: string,
+  choice: "SHIELD" | "ABSORB" | "DECLINE",
+  promptId?: string
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/reaction`,
+    body: JSON.stringify({ choice, promptId }),
+  });
+}
+
+/** Toggle holding your reaction for a spell (suppresses auto opportunity attacks). */
+export function sendCombatHoldReaction(
+  client: Client,
+  sessionId: string,
+  hold: boolean
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/reaction/hold`,
+    body: JSON.stringify({ hold }),
+  });
+}
+
+/** Ready an attack against an enemy — fires as a reaction when it enters your reach. */
+export function sendCombatReady(
+  client: Client,
+  sessionId: string,
+  targetEnemyId: string
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/combat/ready`,
+    body: JSON.stringify({ targetEnemyId }),
+  });
+}
+
+/** Subscribe to this player's private reaction prompts (pushed only to the targeted player). */
+export function subscribeToReactions(
+  client: Client,
+  onPrompt: (msg: unknown) => void
+) {
+  return client.subscribe("/user/queue/reaction", (message: IMessage) => {
+    try {
+      onPrompt(JSON.parse(message.body));
+    } catch {
+      console.error("Failed to parse reaction prompt frame:", message.body);
+    }
+  });
+}

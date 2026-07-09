@@ -9,6 +9,7 @@ import type {
   NpcState,
   PlayerDto,
   PlayerRuntimeState,
+  ReactionPromptEvent,
   RoundStatusEvent,
   TravelPace,
   TurnEventDto,
@@ -94,6 +95,8 @@ interface SessionState {
   combatNarrating: boolean;
   /** Collaborative round collection status (null when no window is open). */
   round: RoundStatus | null;
+  /** An open reaction prompt targeted at THIS player (null when none). */
+  pendingReaction: ReactionPromptEvent | null;
   /** End-of-session recap; null until the session ends (or while it's still being written). */
   recap: string | null;
   /** True while the recap is being generated after the session ends. */
@@ -180,6 +183,10 @@ interface SessionState {
   /* collaborative round */
   applyRoundStatus: (evt: RoundStatusEvent) => void;
 
+  /* reactions (Feature 4) */
+  applyReactionPrompt: (evt: ReactionPromptEvent) => void;
+  clearReaction: () => void;
+
   setConnected: (connected: boolean) => void;
   reset: () => void;
 }
@@ -203,6 +210,7 @@ const initialState = {
   combatInitializing: false,
   combatNarrating: false,
   round: null as RoundStatus | null,
+  pendingReaction: null as ReactionPromptEvent | null,
   recap: null as string | null,
   recapPending: false,
   currentRegion: null as string | null,
@@ -612,6 +620,12 @@ export const useSessionStore = create<SessionState>((set) => ({
           }
         : null,
     }),
+
+  /* REACTION_PROMPT — open the reaction modal for THIS player. */
+  applyReactionPrompt: (evt) => set({ pendingReaction: evt }),
+
+  /** Dismiss the reaction prompt once answered (or its window elapsed). */
+  clearReaction: () => set({ pendingReaction: null }),
 
   setConnected: (connected) => set({ connected }),
   reset: () => set({ ...initialState }),

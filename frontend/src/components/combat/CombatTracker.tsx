@@ -67,6 +67,9 @@ interface CombatTrackerProps {
   onOffHandAttack: (enemyId: string) => void;
   onSecondWind: () => void;
   onCunningAction: (action: "dash" | "disengage" | "hide") => void;
+  /* ── Reactions (Feature 4) ── */
+  onHoldReaction: (hold: boolean) => void;
+  onReady: (enemyId: string) => void;
 }
 
 /**
@@ -105,6 +108,8 @@ export default function CombatTracker({
   onOffHandAttack,
   onSecondWind,
   onCunningAction,
+  onHoldReaction,
+  onReady,
 }: CombatTrackerProps) {
   const isMyTurn =
     combat.active?.kind === "PLAYER" && combat.active.refId === myPlayerId;
@@ -115,6 +120,20 @@ export default function CombatTracker({
   const hasOffHandWeapon = !!myState?.inventory.some(
     (i) => i.kind === "WEAPON" && i.slot === "OFF_HAND"
   );
+
+  // Ready "mode": armed from the controls, then the next enemy click readies an attack against it.
+  // Off-hand and Ready arming are mutually exclusive — arming one cancels the other.
+  const [readyMode, setReadyMode] = useState(false);
+  const armOffHand = () =>
+    setOffHandMode((v) => {
+      if (!v) setReadyMode(false);
+      return !v;
+    });
+  const armReady = () =>
+    setReadyMode((v) => {
+      if (!v) setOffHandMode(false);
+      return !v;
+    });
 
   // My token's action-economy flags (drive the toggled Dash/Disengage/Dodge state).
   const myToken = combat.grid?.tokens[myPlayerId] ?? null;
@@ -201,8 +220,11 @@ export default function CombatTracker({
             e.alive &&
             connected &&
             !casting &&
-            inAttackRange &&
-            (offHandMode ? !bonusSpent && hasOffHandWeapon : !actionSpent);
+            // Ready can target an enemy OUT of range (that's the point); attack/off-hand can't.
+            (readyMode
+              ? !actionSpent
+              : inAttackRange &&
+                (offHandMode ? !bonusSpent && hasOffHandWeapon : !actionSpent));
           const selectable = targetingEnemies && e.alive && connected;
           return (
             <EnemyCard
@@ -217,6 +239,9 @@ export default function CombatTracker({
                 if (offHandMode) {
                   onOffHandAttack(e.id);
                   setOffHandMode(false);
+                } else if (readyMode) {
+                  onReady(e.id);
+                  setReadyMode(false);
                 } else {
                   onAttack(e.id);
                 }
@@ -292,9 +317,13 @@ export default function CombatTracker({
         weaponMastery={myMastery}
         offHandMode={offHandMode}
         hasOffHandWeapon={hasOffHandWeapon}
-        onToggleOffHand={() => setOffHandMode((v) => !v)}
+        onToggleOffHand={armOffHand}
         onSecondWind={onSecondWind}
         onCunningAction={onCunningAction}
+        holdingReaction={!!myToken?.holdingReaction}
+        onToggleHold={() => onHoldReaction(!myToken?.holdingReaction)}
+        readyMode={readyMode}
+        onToggleReady={armReady}
         onEndTurn={onEndTurn}
       />
     </div>

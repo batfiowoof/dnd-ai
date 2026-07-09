@@ -131,12 +131,15 @@ class CombatServiceTest {
         // Real (unloaded) magic-item beans — empty catalog, so gear effects are no-ops here.
         MagicItemEffects magicItemEffects = new MagicItemEffects(
                 new MagicItemCatalog(new com.dungeon.master.service.ai.SrdContent()));
+        // Reaction prompts aren't exercised here (no test player knows Shield/Absorb), so a bare mock
+        // is enough — the window never opens.
+        ReactionWindow reactionWindow = mock(ReactionWindow.class);
         combat = new CombatService(enemyRepo, encounterRepo, playerRepo, characterRepo,
                 sessionRepo, playerStateService, diceService, turnService, eventProducer,
                 monsterCatalog, monsterResolver, spellCatalog, new GridService(), checkModifierService,
                 sceneGenerator, enemyTacticsService, combatMapper, combatBroadcaster,
                 combatTerrainService, combatLookups, combatSpellResolver, weaponMasteryRules,
-                magicItemEffects);
+                magicItemEffects, reactionWindow);
 
         // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
         when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))
@@ -359,8 +362,8 @@ class CombatServiceTest {
     /** Build a single-player + single-enemy ACTIVE encounter with a grid, the player active. */
     private CombatEncounter gridEncounter(UUID pid, int px, int py, UUID enemyId, int ex, int ey) {
         GridState grid = GridState.builder().width(14).height(10).build();
-        grid.getTokens().put(pid.toString(), new Token(px, py, 0, true, false, false, false, false, false));
-        grid.getTokens().put(enemyId.toString(), new Token(ex, ey, 0, true, false, false, false, false, false));
+        grid.getTokens().put(pid.toString(), new Token(px, py, 0, true, false, false, false, false, false, false, null));
+        grid.getTokens().put(enemyId.toString(), new Token(ex, ey, 0, true, false, false, false, false, false, false, null));
         return CombatEncounter.builder()
                 .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
                 .initiativeOrder(List.of(
@@ -594,9 +597,9 @@ class CombatServiceTest {
      */
     private CombatEncounter aoeEncounter(UUID pid, UUID aId, int ax, int ay, UUID bId, int bx, int by) {
         GridState grid = GridState.builder().width(16).height(12).build();
-        grid.getTokens().put(pid.toString(), new Token(5, 5, 0, true, false, false, false, false, false));
-        grid.getTokens().put(aId.toString(), new Token(ax, ay, 0, true, false, false, false, false, false));
-        grid.getTokens().put(bId.toString(), new Token(bx, by, 0, true, false, false, false, false, false));
+        grid.getTokens().put(pid.toString(), new Token(5, 5, 0, true, false, false, false, false, false, false, null));
+        grid.getTokens().put(aId.toString(), new Token(ax, ay, 0, true, false, false, false, false, false, false, null));
+        grid.getTokens().put(bId.toString(), new Token(bx, by, 0, true, false, false, false, false, false, false, null));
         return CombatEncounter.builder()
                 .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
                 .initiativeOrder(List.of(new Combatant(CombatantKind.PLAYER, pid, "Aria", 18, 0)))

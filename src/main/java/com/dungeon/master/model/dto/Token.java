@@ -1,5 +1,7 @@
 package com.dungeon.master.model.dto;
 
+import java.util.UUID;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -43,4 +45,16 @@ public class Token {
 
     /** Whether the combatant has spent its bonus action this turn (e.g. a Bonus-Action spell). */
     private boolean bonusActionUsed;
+
+    /**
+     * When set, this combatant is holding its reaction for a spell (Shield/Absorb Elements) and
+     * will NOT auto-take opportunity attacks. Cleared each turn in {@code resetTurnFlags}.
+     */
+    private boolean holdingReaction;
+
+    /**
+     * A readied attack: the enemy this player will strike as a reaction when it first comes within
+     * reach/range this round. Null when nothing is readied; cleared each turn or when it fires.
+     */
+    private UUID readiedTargetEnemyId;
 }

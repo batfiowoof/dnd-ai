@@ -48,6 +48,9 @@ public final class ConditionRules {
     public static final String MAGE_ARMOR = "mage-armor";        // AC = max(base, 13 + DEX)
     public static final String SHIELD_OF_FAITH = "shield-of-faith"; // +2 AC
     public static final String BARKSKIN = "barkskin";            // AC floor 16
+    public static final String SHIELDED = "shielded";            // Shield spell — +5 AC until next turn
+    // Absorb Elements — resistance to a damage type until next turn, encoded as "absorbing-<type>".
+    public static final String ABSORBING_PREFIX = "absorbing-";
 
     /** Conditions that cost the creature its turn (can take no actions/reactions). */
     private static final Set<String> INCAPACITATING =
@@ -124,7 +127,29 @@ public final class ConditionRules {
         if (has(conds, MAGE_ARMOR)) ac = Math.max(ac, 13 + dexMod);
         if (has(conds, BARKSKIN)) ac = Math.max(ac, 16);
         if (has(conds, SHIELD_OF_FAITH)) ac += 2;
+        if (has(conds, SHIELDED)) ac += 5;
         return ac;
+    }
+
+    /**
+     * Damage types the creature currently resists via conditions — today only Absorb Elements,
+     * encoded as {@code "absorbing-<type>"} pseudo-conditions. Types are lowercased; empty when none.
+     */
+    public static Set<String> resistances(List<ActiveCondition> conds) {
+        if (conds == null) {
+            return Set.of();
+        }
+        Set<String> types = new java.util.LinkedHashSet<>();
+        for (ActiveCondition c : conds) {
+            if (c == null || c.name() == null) {
+                continue;
+            }
+            String name = c.name().toLowerCase(Locale.ROOT);
+            if (name.startsWith(ABSORBING_PREFIX) && name.length() > ABSORBING_PREFIX.length()) {
+                types.add(name.substring(ABSORBING_PREFIX.length()));
+            }
+        }
+        return types;
     }
 
     /* ── saving throws ───────────────────────────────────────────────── */

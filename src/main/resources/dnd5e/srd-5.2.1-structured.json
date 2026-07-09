@@ -11523,6 +11523,46 @@
    }
   },
   {
+   "index": "absorb-elements",
+   "name": "Absorb Elements",
+   "level": 1,
+   "school": "Abjuration",
+   "classes": [
+    "Druid",
+    "Ranger",
+    "Sorcerer",
+    "Wizard"
+   ],
+   "castingTime": "Reaction, which you take when you take acid, cold, fire, lightning, or thunder damage",
+   "range": "Self",
+   "components": "S",
+   "duration": "1 round",
+   "concentration": false,
+   "ritual": false,
+   "desc": "The spell captures some of the incoming energy, lessening its effect on you. You have resistance to the triggering damage type until the start of your next turn.",
+   "higherLevel": null,
+   "combat": {
+    "effectType": "BUFF",
+    "targetType": "SELF",
+    "resolution": "AUTO",
+    "saveAbility": null,
+    "damageDice": null,
+    "damageType": null,
+    "healDice": null,
+    "addCastingMod": false,
+    "halfOnSave": false,
+    "scaling": {
+     "perSlotAbove": null,
+     "cantripDie": null
+    },
+    "aoe": null,
+    "maxTargets": 1,
+    "projectiles": 1,
+    "condition": null,
+    "parsed": true
+   }
+  },
+  {
    "index": "shield",
    "name": "Shield",
    "level": 1,

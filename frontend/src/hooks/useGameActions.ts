@@ -32,6 +32,9 @@ import {
   sendCombatSecondWind,
   sendCombatCunningAction,
   sendCombatStabilize,
+  sendCombatReaction,
+  sendCombatHoldReaction,
+  sendCombatReady,
   sendEndCombat,
 } from "@/lib/websocket";
 
@@ -133,6 +136,16 @@ export function useGameActions(
       ),
       combatStabilize: run((c, targetPlayerId: string) =>
         sendCombatStabilize(c, sessionId, targetPlayerId)
+      ),
+      combatReaction: run(
+        (c, choice: "SHIELD" | "ABSORB" | "DECLINE", promptId?: string) =>
+          sendCombatReaction(c, sessionId, choice, promptId)
+      ),
+      combatHoldReaction: run((c, hold: boolean) =>
+        sendCombatHoldReaction(c, sessionId, hold)
+      ),
+      combatReady: run((c, enemyId: string) =>
+        sendCombatReady(c, sessionId, enemyId)
       ),
       endCombat: run((c) => sendEndCombat(c, sessionId)),
     };

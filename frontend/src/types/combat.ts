@@ -52,6 +52,10 @@ export interface Token {
   actionUsed: boolean;
   /** Whether this combatant has spent its bonus action this turn (e.g. a Bonus-Action spell). */
   bonusActionUsed: boolean;
+  /** Whether this player is holding their reaction for a spell (suppresses auto opportunity attacks). */
+  holdingReaction?: boolean;
+  /** Enemy id this player readied an attack against, or null. */
+  readiedTargetEnemyId?: string | null;
 }
 
 export interface GridState {

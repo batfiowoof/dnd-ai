@@ -30,6 +30,7 @@ import InventoryManager from "@/components/game/InventoryManager";
 import ShopDialog from "@/components/game/ShopDialog";
 import { useAvailableShops } from "@/hooks/useShopQueries";
 import CombatActionModal from "@/components/combat/CombatActionModal";
+import ReactionPromptModal from "@/components/combat/ReactionPromptModal";
 import { uploadCombatMap, leaveSession, getMagicItems } from "@/lib/api";
 import { buildMagicIndex } from "@/lib/magicItems";
 import type { MagicItemSummary } from "@/types";
@@ -398,6 +399,8 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
     onOffHandAttack: actions.combatOffHandAttack,
     onSecondWind: actions.combatSecondWind,
     onCunningAction: actions.combatCunningAction,
+    onHoldReaction: actions.combatHoldReaction,
+    onReady: actions.combatReady,
     onMove: actions.combatMove,
     onUploadMap: handleUploadMap,
   };
@@ -434,6 +437,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         onCancel={gate.cancelPending}
         onRollDamage={actions.combatResolveDamage}
       />
+      <ReactionPromptModal onReact={actions.combatReaction} />
       <InventoryManager
         open={manageOpen}
         onClose={() => setManageOpen(false)}

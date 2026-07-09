@@ -397,6 +397,25 @@ public final class CombatMath {
         return range;
     }
 
+    /**
+     * A player's melee reach in feet for opportunity-attack purposes: 10 ft when a reach weapon is
+     * equipped, otherwise the 5 ft floor. Mirrors {@link #attackRangeFeet} but caps at melee reach
+     * (ranged weapons don't extend the square from which you threaten an opportunity attack).
+     */
+    public static int playerReachFeet(List<InventoryItem> inv) {
+        int reach = GridService.FEET_PER_SQUARE; // 5 ft melee floor
+        if (inv == null) return reach;
+        for (InventoryItem item : inv) {
+            if (item.name() == null || item.kind() != ItemKind.WEAPON) continue;
+            String name = item.name().toLowerCase(Locale.ROOT);
+            if (name.contains("pike") || name.contains("glaive") || name.contains("halberd")
+                    || name.contains("lance") || name.contains("whip")) {
+                reach = Math.max(reach, 10);
+            }
+        }
+        return reach;
+    }
+
     /* ── grid-aware combat math (gridService passed in) ──────────── */
 
     /** True when two tokens are within 5 ft (one square); assumes melee when there is no grid. */

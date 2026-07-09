@@ -41,6 +41,8 @@ interface CombatRegionProps {
   onOffHandAttack: (enemyId: string) => void;
   onSecondWind: () => void;
   onCunningAction: (action: "dash" | "disengage" | "hide") => void;
+  onHoldReaction: (hold: boolean) => void;
+  onReady: (enemyId: string) => void;
   onMove: (x: number, y: number) => void;
   onUploadMap: (file: File) => Promise<void>;
 }
@@ -76,6 +78,8 @@ export default function CombatRegion({
   onOffHandAttack,
   onSecondWind,
   onCunningAction,
+  onHoldReaction,
+  onReady,
   onMove,
   onUploadMap,
 }: CombatRegionProps) {
@@ -189,6 +193,8 @@ export default function CombatRegion({
             onOffHandAttack={onOffHandAttack}
             onSecondWind={onSecondWind}
             onCunningAction={onCunningAction}
+            onHoldReaction={onHoldReaction}
+            onReady={onReady}
           />
         </div>
       )}

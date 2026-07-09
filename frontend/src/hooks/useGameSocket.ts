@@ -6,6 +6,7 @@ import {
   createStompClient,
   subscribeToSession,
   subscribeToErrors,
+  subscribeToReactions,
 } from "@/lib/websocket";
 import { useSessionStore } from "@/store/sessionStore";
 import { playSound } from "@/lib/sound";
@@ -17,6 +18,7 @@ import type {
   CombatActionEvent,
   CombatLifecycleEvent,
   RoundStatusEvent,
+  ReactionPromptEvent,
 } from "@/types";
 
 interface UseGameSocketArgs {
@@ -61,6 +63,9 @@ export function useGameSocket({
             dispatchMessage(msg, scrollToBottom)
           );
           subscribeToErrors(client!, onError);
+          subscribeToReactions(client!, (msg) =>
+            dispatchMessage(msg, scrollToBottom)
+          );
         },
         () => {
           useSessionStore.getState().setConnected(false);
@@ -168,6 +173,7 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       if (type === "COMBAT_START") playSound("combatStart");
       else if (type === "COMBAT_TURN") playSound("turn");
       else playSound(data.victory ? "victory" : "defeat");
+      if (type === "COMBAT_END") s.clearReaction(); // no reactions once combat's over
       scrollToBottom();
       break;
     case "COMBAT_ACTION":
@@ -175,6 +181,10 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       break;
     case "ROUND_STATUS":
       s.applyRoundStatus(data as unknown as RoundStatusEvent);
+      break;
+    case "REACTION_PROMPT":
+      s.applyReactionPrompt(data as unknown as ReactionPromptEvent);
+      playSound("turn");
       break;
     case "NPC_STATE":
       s.applyNpcState(
