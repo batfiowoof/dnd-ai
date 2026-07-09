@@ -10,6 +10,7 @@ import type {
   PlayerDto,
   PlayerRuntimeState,
   ReactionPromptEvent,
+  RerollPromptEvent,
   RoundStatusEvent,
   TravelPace,
   TurnEventDto,
@@ -97,6 +98,8 @@ interface SessionState {
   round: RoundStatus | null;
   /** An open reaction prompt targeted at THIS player (null when none). */
   pendingReaction: ReactionPromptEvent | null;
+  /** An open reroll prompt (Heroic Inspiration / Lucky) targeted at THIS player (null when none). */
+  pendingReroll: RerollPromptEvent | null;
   /** End-of-session recap; null until the session ends (or while it's still being written). */
   recap: string | null;
   /** True while the recap is being generated after the session ends. */
@@ -187,6 +190,10 @@ interface SessionState {
   applyReactionPrompt: (evt: ReactionPromptEvent) => void;
   clearReaction: () => void;
 
+  /* reroll (Features 5 & 6) */
+  applyRerollPrompt: (evt: RerollPromptEvent) => void;
+  clearReroll: () => void;
+
   setConnected: (connected: boolean) => void;
   reset: () => void;
 }
@@ -211,6 +218,7 @@ const initialState = {
   combatNarrating: false,
   round: null as RoundStatus | null,
   pendingReaction: null as ReactionPromptEvent | null,
+  pendingReroll: null as RerollPromptEvent | null,
   recap: null as string | null,
   recapPending: false,
   currentRegion: null as string | null,
@@ -626,6 +634,12 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   /** Dismiss the reaction prompt once answered (or its window elapsed). */
   clearReaction: () => set({ pendingReaction: null }),
+
+  /* REROLL_PROMPT — open the reroll modal for THIS player. */
+  applyRerollPrompt: (evt) => set({ pendingReroll: evt }),
+
+  /** Dismiss the reroll prompt once answered (or its window elapsed). */
+  clearReroll: () => set({ pendingReroll: null }),
 
   setConnected: (connected) => set({ connected }),
   reset: () => set({ ...initialState }),

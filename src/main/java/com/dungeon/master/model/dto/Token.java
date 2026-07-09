@@ -57,4 +57,7 @@ public class Token {
      * reach/range this round. Null when nothing is readied; cleared each turn or when it fires.
      */
     private UUID readiedTargetEnemyId;
+
+    /** Savage Attacker feat: whether its once-per-turn weapon-damage reroll has been used this turn. */
+    private boolean savageAttackerUsed;
 }

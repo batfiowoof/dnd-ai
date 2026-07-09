@@ -67,8 +67,10 @@ export interface PlayerRuntimeState {
   conditions: string[];
   cantrips: string[];
   knownSpells: string[];
-  /** Whether the player currently holds Inspiration (spendable on a roll for advantage). */
+  /** Whether the player currently holds Heroic Inspiration (spendable to reroll a failed roll). */
   inspiration: boolean;
+  /** Lucky feat: remaining Luck Points (0 without the feat); spendable to reroll, restored on a long rest. */
+  luckPoints: number;
   /* ── Death saving throws (mostly Phase C; types land now) ── */
   deathSaveSuccesses: number;
   deathSaveFailures: number;

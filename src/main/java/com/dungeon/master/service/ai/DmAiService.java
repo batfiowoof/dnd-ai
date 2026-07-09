@@ -23,7 +23,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -61,7 +60,6 @@ public class DmAiService {
      */
     @CircuitBreaker(name = "aiService", fallbackMethod = "fallbackNarrativeTurn")
     public NarrativeTurnResult generateNarrativeTurn(UUID sessionId, List<Contribution> actions,
-                                                     Map<UUID, Boolean> spendInspiration,
                                                      TravelContext travel,
                                                      Consumer<String> onChunk) {
         log.info("Streaming narrative turn for session={}, actions={}", sessionId, actions.size());
@@ -108,7 +106,7 @@ public class DmAiService {
 
         ToolCallingChatOptions toolOpts = ToolCallingChatOptions.builder()
                 .toolCallbacks(ToolCallbacks.from(tools.toArray()))
-                .toolContext(promptBuilder.buildToolContext(sessionId, session, spendInspiration))
+                .toolContext(promptBuilder.buildToolContext(sessionId, session))
                 .internalToolExecutionEnabled(false)
                 .build();
 
@@ -251,7 +249,6 @@ public class DmAiService {
 
     @SuppressWarnings("unused")
     private NarrativeTurnResult fallbackNarrativeTurn(UUID sessionId, List<Contribution> actions,
-                                                      Map<UUID, Boolean> spendInspiration,
                                                       TravelContext travel,
                                                       Consumer<String> onChunk, Throwable throwable) {
         log.error("AI narrative turn unavailable, using fallback. session={}, error={}",

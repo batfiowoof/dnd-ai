@@ -31,6 +31,7 @@ import ShopDialog from "@/components/game/ShopDialog";
 import { useAvailableShops } from "@/hooks/useShopQueries";
 import CombatActionModal from "@/components/combat/CombatActionModal";
 import ReactionPromptModal from "@/components/combat/ReactionPromptModal";
+import RerollPromptModal from "@/components/combat/RerollPromptModal";
 import { uploadCombatMap, leaveSession, getMagicItems } from "@/lib/api";
 import { buildMagicIndex } from "@/lib/magicItems";
 import type { MagicItemSummary } from "@/types";
@@ -87,8 +88,6 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   /* ── purely-local UI state ──────────────────────────────────── */
   const [copied, setCopied] = useState(false);
   const [actionText, setActionText] = useState("");
-  /** Pre-arm Inspiration for any check the AI DM rolls this turn (auto-rolls happen inline). */
-  const [spendInspiration, setSpendInspiration] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
   const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
@@ -265,11 +264,10 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   /* ── game actions ───────────────────────────────────────────── */
   function handleSendAction() {
     if (!clientRef.current) return;
-    sendAction(clientRef.current, sessionId, actionText.trim(), spendInspiration);
+    sendAction(clientRef.current, sessionId, actionText.trim());
     // No optimistic local entry: the server echoes the action via DM_THINKING,
     // so every client (including this one) renders it once, in order.
     setActionText("");
-    setSpendInspiration(false);
     scrollToBottom();
   }
 
@@ -438,6 +436,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         onRollDamage={actions.combatResolveDamage}
       />
       <ReactionPromptModal onReact={actions.combatReaction} />
+      <RerollPromptModal onReroll={actions.reroll} />
       <InventoryManager
         open={manageOpen}
         onClose={() => setManageOpen(false)}
@@ -532,8 +531,6 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     playerId={playerId}
                     actionText={actionText}
                     setActionText={setActionText}
-                    spendInspiration={spendInspiration}
-                    setSpendInspiration={setSpendInspiration}
                     onSend={handleSendAction}
                     onPass={actions.pass}
                     onRoll={actions.roll}

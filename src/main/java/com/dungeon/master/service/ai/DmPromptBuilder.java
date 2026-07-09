@@ -91,9 +91,8 @@ public class DmPromptBuilder {
         return message.toString();
     }
 
-    /** Per-turn context handed to the dice tools: session, name→player map, Inspiration intent, DCs. */
-    public Map<String, Object> buildToolContext(UUID sessionId, GameSession session,
-                                                 Map<UUID, Boolean> spendInspiration) {
+    /** Per-turn context handed to the dice tools: session, name→player map, DCs. */
+    public Map<String, Object> buildToolContext(UUID sessionId, GameSession session) {
         Map<String, UUID> nameToPlayer = new HashMap<>();
         for (Player p : playerRepository.findBySessionId(sessionId)) {
             if (p.getRole() != PlayerRole.PLAYER) {
@@ -106,7 +105,6 @@ public class DmPromptBuilder {
         Map<String, Object> ctx = new HashMap<>();
         ctx.put(DmRollTools.K_SESSION, sessionId);
         ctx.put(DmRollTools.K_NAME_TO_PLAYER, nameToPlayer);
-        ctx.put(DmRollTools.K_SPEND_INSP, spendInspiration == null ? Map.of() : spendInspiration);
         ctx.put(DmRollTools.K_DEFAULT_DC, CheckModifierService.defaultDc(diff));
         ctx.put(DmRollTools.K_DEFAULT_CONTEST_MOD, CheckModifierService.defaultContestMod(diff));
         return ctx;

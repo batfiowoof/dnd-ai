@@ -35,6 +35,7 @@ import {
   sendCombatReaction,
   sendCombatHoldReaction,
   sendCombatReady,
+  sendReroll,
   sendEndCombat,
 } from "@/lib/websocket";
 
@@ -146,6 +147,10 @@ export function useGameActions(
       ),
       combatReady: run((c, enemyId: string) =>
         sendCombatReady(c, sessionId, enemyId)
+      ),
+      reroll: run(
+        (c, resource: "INSPIRATION" | "LUCK" | "KEEP", promptId?: string) =>
+          sendReroll(c, sessionId, resource, promptId)
       ),
       endCombat: run((c) => sendEndCombat(c, sessionId)),
     };

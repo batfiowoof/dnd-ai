@@ -29,6 +29,7 @@ public class PlayerStateSeeder {
 
     private final PlayerRuntimeStateRepository repository;
     private final Dnd5eReferenceService referenceService;
+    private final FeatEffects featEffects;
 
     /** Hit-die size for a class from the SRD corpus (defaults to d8 when the class is unknown). */
     private int hitDieForClass(String characterClass) {
@@ -95,7 +96,8 @@ public class PlayerStateSeeder {
 
     @Transactional
     public void seedForPlayer(Player player, Character character) {
-        int hp = character.getHitPoints();
+        // Tough folds in as a derived +2/level max-HP bonus (never mutates the stored base HP).
+        int hp = character.getHitPoints() + featEffects.bonusMaxHp(character);
         int level = Math.max(1, character.getLevel());
         int hitDie = hitDieForClass(character.getCharacterClass());
 
@@ -156,6 +158,7 @@ public class PlayerStateSeeder {
                 .hitDieSize(hitDie)
                 .hitDiceTotal(level)
                 .hitDiceRemaining(level)
+                .luckPoints(featEffects.luckPoints(character))
                 .copper(copper)
                 .build();
         repository.save(state);

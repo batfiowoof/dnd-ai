@@ -95,7 +95,7 @@ class GridServiceTest {
     @Test
     void reachableOnOpenArenaWithinBudget() {
         GridState g = GridState.builder().width(11).height(11).build();
-        g.getTokens().put("me", new Token(5, 5, 0, true, false, false, false, false, false, false, null));
+        g.getTokens().put("me", new Token(5, 5, 0, true, false, false, false, false, false, false, null, false));
         // Budget 5 ft = the 3×3 block around the mover (start + 8 neighbours).
         var cells = grid.reachable(g, "me", 5);
         assertEquals(9, cells.size());
@@ -159,8 +159,8 @@ class GridServiceTest {
     @Test
     void approachSquareEndsAdjacentToTarget() {
         GridState g = GridState.builder().width(11).height(11).build();
-        g.getTokens().put("me", new Token(0, 0, 0, true, false, false, false, false, false, false, null));
-        g.getTokens().put("foe", new Token(5, 5, 0, true, false, false, false, false, false, false, null));
+        g.getTokens().put("me", new Token(0, 0, 0, true, false, false, false, false, false, false, null, false));
+        g.getTokens().put("foe", new Token(5, 5, 0, true, false, false, false, false, false, false, null, false));
 
         // Speed 30 (6 squares) is enough to close on the foe and end in 5-ft melee reach.
         GridService.Square dest = grid.approachSquare(g, "me", 5, 5, 30, 5);
@@ -174,7 +174,7 @@ class GridServiceTest {
     @Test
     void fleeSquareIncreasesDistanceFromThreats() {
         GridState g = GridState.builder().width(11).height(11).build();
-        g.getTokens().put("me", new Token(5, 5, 0, true, false, false, false, false, false, false, null));
+        g.getTokens().put("me", new Token(5, 5, 0, true, false, false, false, false, false, false, null, false));
         List<GridService.Square> threats = List.of(new GridService.Square(4, 5)); // adjacent pursuer
 
         int before = grid.distanceFeet(5, 5, 4, 5);

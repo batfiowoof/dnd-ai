@@ -12,10 +12,11 @@ resolution, exhaustion, rests, quests, shops/currency, NPCs, travel, world-build
 RAG-grounded DM). Each feature **reuses existing infrastructure** rather than adding a new
 subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
-> **Suggested build order (dependency-aware):** ~~1 → 2 → 3~~ (shipped) → 4 → 5 → 6 → 7 → 8.
+> **Suggested build order (dependency-aware):** ~~1 → 2 → 3 → 4 → 5 → 6~~ (shipped) → 7 → 8.
 > Feature 1 (structured proficiency) was foundational — features 5 (feats) and 7 (spell prep) now
 > plug into its proficiency model; features 5–8 lean on the combat/roll hooks the earlier ones
-> establish.
+> establish. Features 5 (Lucky) and 6 (Heroic Inspiration) shipped together — they share one
+> interactive reroll window.
 
 ---
 
@@ -23,6 +24,26 @@ subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
 Prior batches delivered the core loop. Most recently:
 
+- **Feats with mechanical effects (feature 5)** — `FeatKey` enum + `FeatEffects` bean (analogue of
+  `MagicItemEffects`) resolving a character's origin feat from its background via `Dnd5eReferenceService`.
+  **Alert** adds proficiency bonus to initiative (`CombatService.startCombat`); **Tough** adds a derived
+  +2/level to max HP at seed + level-up (`PlayerStateSeeder`/`applyLevelUpToRuntime`, base HP untouched);
+  **Savage Attacker** rerolls weapon damage keep-higher once/turn (`Token.savageAttackerUsed` gate);
+  **Lucky** grants Luck Points = proficiency bonus (`V33` migration, regained on long rest). Added the
+  missing SRD data (Tough/Lucky feats + Farmer/Merchant/Charlatan backgrounds) so all are selectable.
+  *Simplifications: origin feat from background only; Skilled stays descriptive (no skill-choice UI);
+  Savage Attacker fires on the main damage roll.*
+- **Heroic Inspiration 2024 (feature 6)** — evolved Inspiration from pre-roll advantage to a post-roll
+  **interactive reroll**. Shared `RerollWindow` (blocks the DM roll tool on a bounded wait, mirrors
+  `ReactionWindow`) + `RerollPromptEvent`/`RerollChoiceRequest`/`RerollResource`; `DmRollTools`
+  offers a reroll on a *failed* single-target check/save/contest when the player holds Inspiration or
+  Luck (Inspiration uses the new roll, Lucky keeps the better). Granted to Humans on long rest. Removed
+  the old `spendInspiration` pre-arm plumbing end-to-end. Frontend `RerollPromptModal` + store/socket
+  wiring, luck/inspiration badges. *Simplification: no reroll on group checks; the DM roll thread
+  blocks up to ~12s (single-backend).*
+- **Reactions & Opportunity Attacks (feature 4)** — real reaction economy: opportunity attacks (both
+  directions), Ready action, *Shield*/*Absorb Elements* reaction spells, timed `ReactionWindow` +
+  `ReactionPromptModal`.
 - **Saving Throws, Expertise & Passive Scores (feature 1)** — `ProficiencyLevel` enum
   {NONE,HALF,PROFICIENT,EXPERTISE}; structured `skillProficiencies` map + `savingThrowProficiencies`
   set on `Character`/`PlayerRuntimeState` (JSONB, no migration); `CheckModifierService` expertise/
@@ -76,73 +97,6 @@ Prior batches delivered the core loop. Most recently:
 - **Engine owns all math/randomness; the LLM never rolls** (`DiceService`, `RollMode`). Rules
   math is stateless in `service/game/*Rules.java` + `service/game/combat/CombatMath.java`, mirrored
   client-side in `frontend/src/lib/{dnd5e,combat}.ts`.
-
----
-
-## 4. Reactions & Opportunity Attacks
-
-**Goal:** A real reaction economy in combat.
-
-### What exists / why it's a gap
-Reactions are only implicit; `model/dto/Token.java` already tracks `reactionAvailable` but nothing
-spends it on a real opportunity attack or reaction spell, and there are no readied actions.
-
-### Backend
-- Detect provoking movement in `CombatService.playerMove` (and enemy movement): a creature leaving
-  another's melee reach — use `CombatMath.isMelee` / `enemyReachFeet`. Offer an opportunity attack
-  that spends the reaction.
-- Add reaction spells resolved through `CombatSpellResolver`: *Shield* (+5 AC vs a triggering hit),
-  *Absorb Elements*.
-- Add a **Ready** action that stores a trigger. Reaction resets at turn start (already per-round).
-  Route "reaction already used" through `WsErrors`.
-
-### Frontend
-- An async reaction **prompt** (modal/toast with a short decision window) in `components/combat/` when
-  a reaction is available; wire senders via `hooks/useGameActions.ts` + `lib/websocket.ts`, respecting
-  the existing turn-broadcast model.
-
-**Scope:** opportunity attack + *Shield* + basic Ready first; no full readied-spell targeting engine.
-
----
-
-## 5. Feats with mechanical effects
-
-**Goal:** Wire a handful of the 17 SRD feats to real effects (today feats are name-only display text).
-
-### Backend
-- A small `service/game/FeatEffects.java` hook applied where the relevant math runs:
-  - **Alert** → initiative bonus in `TurnService` initiative roll
-  - **Tough** → +2 HP/level in `LevelingRules` / HP calc
-  - **Lucky** → luck points → reroll via `DiceService` (shares plumbing with §6)
-  - **Savage Attacker** → reroll weapon damage once in `CombatMath`
-  - **Skilled** / expertise-granting feats → feed the proficiency model in §1
-
-### Frontend
-- Show active feat effects on `CharacterSheetDialog` (the origin feat is already chosen at creation).
-
-**Scope:** the ~4–5 feats with clean engine hooks; others stay descriptive.
-
----
-
-## 6. Heroic Inspiration (2024)
-
-**Goal:** Evolve existing Inspiration to the 2024 rule — **reroll any die after rolling** — plus 2024
-grant sources.
-
-### What exists / why it's a gap
-Today Inspiration grants advantage (a *pre-roll* decision). `PlayerRuntimeState.inspiration` (bool)
-and the DM award tag already exist.
-
-### Backend
-- Change spend semantics in `PlayerStateService` / `DiceService` to reroll the last die (keep the
-  second result) rather than roll-twice-advantage. Grant to Humans on `longRest` and where a class
-  feature applies.
-
-### Frontend
-- Update the Inspiration control copy/affordance to "reroll" in the roll UI (`components/dice/`,
-  `QuickRollBar`).
-
-**Scope:** rename + behavior change only; not a new resource.
 
 ---
 

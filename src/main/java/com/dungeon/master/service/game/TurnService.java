@@ -65,12 +65,8 @@ public class TurnService {
     }
 
     /** Convenience overload for mechanical actions (cast/use-item/rest) that never spend Inspiration. */
-    public void submitAction(UUID sessionId, String username, String action) {
-        submitAction(sessionId, username, action, false);
-    }
-
     @Transactional
-    public void submitAction(UUID sessionId, String username, String action, boolean spendInspiration) {
+    public void submitAction(UUID sessionId, String username, String action) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalStateException("Session not found: " + sessionId));
 
@@ -92,7 +88,7 @@ public class TurnService {
                 // fires a single RoundActionEvent on flush. No per-action LLM call, no racing.
                 int expected = (int) playerRepository.countBySessionIdAndRole(sessionId, PlayerRole.PLAYER);
                 roundCollector.submit(sessionId, player.getId(), player.getCharacterName(),
-                        action, spendInspiration, session.getCollabWindowSeconds(), expected);
+                        action, session.getCollabWindowSeconds(), expected);
                 log.info("Action collected (collaborative): session={}, player={}", sessionId, username);
             }
             case INITIATIVE -> {
@@ -100,9 +96,9 @@ public class TurnService {
                     throw new NotYourTurnException("It's not your turn, " + username
                             + ". Current turn: " + session.getCurrentTurnPlayerId());
                 }
-                dispatchImmediateAction(sessionId, player, action, spendInspiration);
+                dispatchImmediateAction(sessionId, player, action);
             }
-            case FREEFORM -> dispatchImmediateAction(sessionId, player, action, spendInspiration);
+            case FREEFORM -> dispatchImmediateAction(sessionId, player, action);
         }
     }
 
@@ -130,8 +126,7 @@ public class TurnService {
     }
 
     /** Persist the action and fire the per-action DM pipeline (initiative + freeform modes). */
-    private void dispatchImmediateAction(UUID sessionId, Player player, String action,
-                                         boolean spendInspiration) {
+    private void dispatchImmediateAction(UUID sessionId, Player player, String action) {
         int nextTurnNumber = turnEventRepository.findTopBySessionIdOrderByTurnNumberDesc(sessionId)
                 .map(e -> e.getTurnNumber() + 1)
                 .orElse(1);
@@ -146,7 +141,7 @@ public class TurnService {
 
         PlayerActionEvent kafkaEvent = new PlayerActionEvent(
                 sessionId, player.getId(), player.getCharacterName(), action, nextTurnNumber,
-                turnEvent.getId(), spendInspiration, null);
+                turnEvent.getId(), null);
         eventProducer.sendPlayerAction(kafkaEvent);
 
         log.info("Action submitted: session={}, player={}, turn={}",
@@ -178,7 +173,7 @@ public class TurnService {
 
         eventProducer.sendPlayerAction(new PlayerActionEvent(
                 sessionId, playerId, characterName, action, nextTurnNumber,
-                turnEvent.getId(), false, travel));
+                turnEvent.getId(), travel));
 
         log.info("Travel turn dispatched: session={}, to={}, turn={}",
                 sessionId, travel == null ? null : travel.toRegion(), nextTurnNumber);

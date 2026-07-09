@@ -11,8 +11,6 @@ interface GameInputBarProps {
   playerId: string | null;
   actionText: string;
   setActionText: (text: string) => void;
-  spendInspiration: boolean;
-  setSpendInspiration: (v: boolean) => void;
   /** Dispatch the current action (page owns the WS send + field clearing + scroll). */
   onSend: () => void;
   onPass: () => void;
@@ -30,15 +28,14 @@ interface GameInputBarProps {
 /**
  * The narrative input bar (ACTIVE sessions, out of combat): the out-of-combat ActionBar +
  * QuickRollBar, the collaborative round-collection indicator + Pass, the action textarea
- * with mode-aware placeholder, the Inspiration pre-arm checkbox, and the "it's your turn"
- * hint. Subscribes to the store for turn/combat state; owns the collaborative countdown.
+ * with mode-aware placeholder, the reroll-resource hint (Heroic Inspiration / Luck), and the
+ * "it's your turn" hint. Subscribes to the store for turn/combat state; owns the collaborative
+ * countdown.
  */
 export default function GameInputBar({
   playerId,
   actionText,
   setActionText,
-  spendInspiration,
-  setSpendInspiration,
   onSend,
   onPass,
   onRoll,
@@ -167,18 +164,16 @@ export default function GameInputBar({
           {turnMode === "COLLABORATIVE" && round?.open ? "Add" : "Send"}
         </Button>
       </div>
-      {/* Inspiration is now pre-armed before acting (the DM auto-rolls any check inline). */}
-      {myState?.inspiration && (
-        <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-xs text-gold">
-          <input
-            type="checkbox"
-            checked={spendInspiration}
-            onChange={(e) => setSpendInspiration(e.target.checked)}
-            disabled={!canType}
-            className="accent-gold"
-          />
-          Spend Inspiration on this action (advantage on any check)
-        </label>
+      {/* Reroll resources are spent reactively: a prompt appears after a failed roll (see
+          RerollPromptModal), so here we only remind the player what they're holding. */}
+      {(myState?.inspiration || (myState?.luckPoints ?? 0) > 0) && (
+        <p className="mt-1.5 inline-flex items-center gap-2 text-xs text-gold">
+          {myState?.inspiration && <span>✦ Heroic Inspiration</span>}
+          {(myState?.luckPoints ?? 0) > 0 && (
+            <span>🍀 {myState?.luckPoints} Luck</span>
+          )}
+          <span className="text-text-muted">— spend to reroll a failed roll</span>
+        </p>
       )}
       {turnMode === "INITIATIVE" && isMyTurn && !inCombat && (
         <p className="mt-1.5 text-xs font-medium text-gold">

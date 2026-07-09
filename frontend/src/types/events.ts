@@ -126,6 +126,30 @@ export interface ReactionPromptEvent {
   secondsLeft: number;
 }
 
+/**
+ * Pushed privately (via /user/queue/reroll) to a single player right after one of their d20 rolls
+ * fails, when they hold a resource that can reroll it (Heroic Inspiration and/or Lucky points). The
+ * DM's roll is paused until they answer with a `/roll/reroll` choice or the `secondsLeft` window
+ * elapses (auto-keep).
+ */
+export interface RerollPromptEvent {
+  type: "REROLL_PROMPT";
+  sessionId: string;
+  promptId: string;
+  /** The roll's display label (e.g. "DEX (Stealth) check"). */
+  label: string;
+  /** The failed roll's total. */
+  originalTotal: number;
+  /** The DC the roll was measured against. */
+  dc: number;
+  /** Spendable resources offered ("INSPIRATION" / "LUCK"). */
+  options: Array<"INSPIRATION" | "LUCK">;
+  /** Remaining Luck Points, for display. */
+  luckPoints: number;
+  /** Decision window in seconds before an automatic keep. */
+  secondsLeft: number;
+}
+
 /** Broadcast when an NPC's attitude toward the party changes (drives the relationship panel). */
 export interface NpcStateEvent {
   type: "NPC_STATE";
@@ -146,5 +170,6 @@ export type WebSocketMessage =
   | CombatLifecycleEvent
   | RoundStatusEvent
   | ReactionPromptEvent
+  | RerollPromptEvent
   | SystemMessageEvent
   | NpcStateEvent;

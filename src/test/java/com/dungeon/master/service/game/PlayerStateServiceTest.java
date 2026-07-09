@@ -38,7 +38,9 @@ class PlayerStateServiceTest {
     void setup() {
         repository = mock(PlayerRuntimeStateRepository.class);
         service = new PlayerStateService(repository, mock(DiceService.class), mock(PlayerStateSeeder.class),
-                MAGIC_CATALOG, MAGIC_EFFECTS);
+                MAGIC_CATALOG, MAGIC_EFFECTS, mock(FeatEffects.class),
+                mock(com.dungeon.master.repository.PlayerRepository.class),
+                mock(com.dungeon.master.repository.CharacterRepository.class));
         when(repository.save(any(PlayerRuntimeState.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -255,7 +257,9 @@ class PlayerStateServiceTest {
         when(dice.roll("2d8")).thenReturn(new DiceRollResult("2d8", 2, 16, 0, RollMode.NORMAL,
                 List.of(5, 5), null, 10, false, false));
         service = new PlayerStateService(repository, dice, mock(PlayerStateSeeder.class),
-                MAGIC_CATALOG, MAGIC_EFFECTS);
+                MAGIC_CATALOG, MAGIC_EFFECTS, mock(FeatEffects.class),
+                mock(com.dungeon.master.repository.PlayerRepository.class),
+                mock(com.dungeon.master.repository.CharacterRepository.class));
 
         PlayerRuntimeStateDto dto = service.shortRest(id, 2);
         // 10 rolled + 2 dice × +2 CON = 14 healed → 4 + 14 = 18

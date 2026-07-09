@@ -11,6 +11,8 @@ import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.entity.PlayerRuntimeState;
 import com.dungeon.master.model.enums.EquipSlot;
 import com.dungeon.master.model.enums.ItemKind;
+import com.dungeon.master.repository.CharacterRepository;
+import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.repository.PlayerRuntimeStateRepository;
 import com.dungeon.master.service.game.combat.CombatMath;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +48,9 @@ public class PlayerStateService {
     private final PlayerStateSeeder seeder;
     private final MagicItemCatalog magicItemCatalog;
     private final MagicItemEffects magicItemEffects;
+    private final FeatEffects featEffects;
+    private final PlayerRepository playerRepository;
+    private final CharacterRepository characterRepository;
 
     /** Outcome of consuming an item, including any heal roll for narration/animation. */
     public record ItemUseResult(
@@ -122,9 +127,11 @@ public class PlayerStateService {
     @Transactional
     public PlayerRuntimeStateDto applyLevelUpToRuntime(UUID playerId, Character c) {
         PlayerRuntimeState s = require(playerId);
-        int gained = Math.max(0, c.getHitPoints() - s.getMaxHp());
-        s.setMaxHp(c.getHitPoints());
-        s.setCurrentHp(Math.min(c.getHitPoints(), s.getCurrentHp() + gained));
+        // Tough's +2/level rides on top of the template HP and grows as the level does.
+        int newMax = c.getHitPoints() + featEffects.bonusMaxHp(c);
+        int gained = Math.max(0, newMax - s.getMaxHp());
+        s.setMaxHp(newMax);
+        s.setCurrentHp(Math.min(newMax, s.getCurrentHp() + gained));
         s.setSpellSlots(rebuildSlotsPreservingUsed(s.getSpellSlots(),
                 SpellSlotTable.forClass(c.getCharacterClass(), c.getLevel())));
         s.setAbilities(abilitiesOf(c));
@@ -451,6 +458,22 @@ public class PlayerStateService {
     }
 
     /**
+     * Spend one Luck Point if the player has any (Lucky feat). Returns {@code true} when a point was
+     * spent (and the pool decremented), {@code false} when the player had none — mirrors
+     * {@link #consumeInspiration(UUID)} so a reroll only fires when a resource was actually consumed.
+     */
+    @Transactional
+    public boolean consumeLuckPoint(UUID playerId) {
+        PlayerRuntimeState s = require(playerId);
+        if (s.getLuckPoints() <= 0) {
+            return false;
+        }
+        s.setLuckPoints(s.getLuckPoints() - 1);
+        repository.save(s);
+        return true;
+    }
+
+    /**
      * Short rest ({@code diceToSpend} Hit Dice, at least 1 hour of in-game time — the clock is advanced
      * by the caller): spend up to the requested number of remaining Hit Dice, each healing
      * {@code roll(1d hitDie) + CON modifier} (minimum 1 per die). Does not touch spell slots, conditions,
@@ -504,7 +527,28 @@ public class PlayerStateService {
             s.setDeathSaveSuccesses(0);
             s.setDeathSaveFailures(0);
         }
+        // Feat-driven long-rest grants: Lucky regains its full pool; Humans regain Heroic Inspiration.
+        Character c = characterFor(playerId);
+        s.setLuckPoints(featEffects.luckPoints(c));
+        if (isHuman(c)) {
+            s.setInspiration(true);
+        }
         return toDto(repository.save(s));
+    }
+
+    /** The Character template backing a runtime state, or {@code null} when none is linked. */
+    private Character characterFor(UUID playerId) {
+        Player p = playerRepository.findById(playerId).orElse(null);
+        if (p == null || p.getCharacterId() == null) {
+            return null;
+        }
+        return characterRepository.findById(p.getCharacterId()).orElse(null);
+    }
+
+    /** True when the character's (free-text) species reads as Human — the 2024 Heroic Inspiration source. */
+    private static boolean isHuman(Character c) {
+        return c != null && c.getRace() != null
+                && c.getRace().trim().toLowerCase(Locale.ROOT).contains("human");
     }
 
     /**
@@ -675,6 +719,7 @@ public class PlayerStateService {
                 s.getCantrips(),
                 s.getKnownSpells(),
                 s.isInspiration(),
+                s.getLuckPoints(),
                 s.getDeathSaveSuccesses(),
                 s.getDeathSaveFailures(),
                 s.isStable(),

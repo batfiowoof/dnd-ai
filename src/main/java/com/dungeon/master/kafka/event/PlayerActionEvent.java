@@ -17,7 +17,6 @@ public record PlayerActionEvent(
         String action,
         int turnNumber,
         UUID turnEventId,
-        boolean spendInspiration,
         TravelContext travel
 ) {
 }

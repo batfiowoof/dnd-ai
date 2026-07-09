@@ -53,10 +53,15 @@ public class PlayerRuntimeState {
     @Builder.Default
     private int tempHp = 0;
 
-    /** Whether the player currently holds Inspiration (spendable on a roll for advantage). */
+    /** Whether the player currently holds Heroic Inspiration (spendable to reroll a failed roll). */
     @Column(name = "inspiration", nullable = false)
     @Builder.Default
     private boolean inspiration = false;
+
+    /** Lucky feat: remaining Luck Points (0 without the feat). Regained to the pool on a long rest. */
+    @Column(name = "luck_points", nullable = false)
+    @Builder.Default
+    private int luckPoints = 0;
 
     /** Armor class, snapshotted from the Character template on join. */
     @Column(name = "armor_class", nullable = false)

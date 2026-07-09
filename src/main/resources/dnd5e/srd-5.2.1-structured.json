@@ -76,6 +76,63 @@
     "optionA": "Spear, Shortbow, 20 Arrows, Gaming Set (same as above), Healer's Kit, Quiver, Traveler's Clothes, 14 GP",
     "optionB": "50 GP"
    }
+  },
+  {
+   "index": "farmer",
+   "name": "Farmer",
+   "abilityScores": [
+    "Strength",
+    "Constitution",
+    "Wisdom"
+   ],
+   "feat": "Tough",
+   "skillProficiencies": [
+    "Animal Handling",
+    "Nature"
+   ],
+   "toolProficiency": "Carpenter's Tools",
+   "equipment": {
+    "optionA": "Sickle, Carpenter's Tools, Healer's Kit, Iron Pot, Shovel, Traveler's Clothes, 30 GP",
+    "optionB": "50 GP"
+   }
+  },
+  {
+   "index": "merchant",
+   "name": "Merchant",
+   "abilityScores": [
+    "Constitution",
+    "Intelligence",
+    "Charisma"
+   ],
+   "feat": "Lucky",
+   "skillProficiencies": [
+    "Animal Handling",
+    "Persuasion"
+   ],
+   "toolProficiency": "Navigator's Tools",
+   "equipment": {
+    "optionA": "Navigator's Tools, 2 Pouches, Merchant's Scale, Traveler's Clothes, 22 GP",
+    "optionB": "50 GP"
+   }
+  },
+  {
+   "index": "charlatan",
+   "name": "Charlatan",
+   "abilityScores": [
+    "Dexterity",
+    "Constitution",
+    "Charisma"
+   ],
+   "feat": "Skilled",
+   "skillProficiencies": [
+    "Deception",
+    "Sleight of Hand"
+   ],
+   "toolProficiency": "Forgery Kit",
+   "equipment": {
+    "optionA": "Forgery Kit, Costume, Fine Clothes, Pouch containing 15 GP",
+    "optionB": "50 GP"
+   }
   }
  ],
  "species": [
@@ -655,6 +712,20 @@
    "category": "Origin",
    "prerequisite": null,
    "desc": "You gain proficiency in any combination of three skills or tools of your choice. Repeatable. You can take this feat more than once."
+  },
+  {
+   "index": "tough",
+   "name": "Tough",
+   "category": "Origin",
+   "prerequisite": null,
+   "desc": "Your Hit Point maximum increases by an amount equal to twice your character level when you gain this feat. Whenever you gain a character level thereafter, your Hit Point maximum increases by an additional 2 Hit Points."
+  },
+  {
+   "index": "lucky",
+   "name": "Lucky",
+   "category": "Origin",
+   "prerequisite": null,
+   "desc": "You have a reservoir of luck that you can draw on. You have a number of Luck Points equal to your Proficiency Bonus and can spend them on the following benefits. You regain your expended Luck Points when you finish a Long Rest. Advantage. When you roll a d20 for a D20 Test, you can spend 1 Luck Point to give yourself Advantage on the roll. Disadvantage. When a creature rolls a d20 for an attack roll against you, you can spend 1 Luck Point to impose Disadvantage on that roll."
   },
   {
    "index": "ability-score-improvement",

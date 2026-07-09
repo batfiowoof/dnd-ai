@@ -20,8 +20,7 @@ public record RoundActionEvent(
         List<Contribution> actions
 ) {
     /** One player's contribution to the round. A passed player has a {@code null} action. */
-    public record Contribution(UUID playerId, String characterName, String action,
-                               boolean spendInspiration) {
+    public record Contribution(UUID playerId, String characterName, String action) {
         public boolean passed() {
             return action == null || action.isBlank();
         }

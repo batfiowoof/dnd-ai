@@ -94,10 +94,10 @@ export default function GameRoomHeader({
           <span className="tabular text-gold">Turn {turnNumber}</span>
           {activeLabel && <> &middot; {activeLabel}</>}
         </span>
-        {/* Inspiration token — the local player holds spendable Inspiration. */}
+        {/* Heroic Inspiration token — the local player holds a spendable reroll. */}
         {myState?.inspiration && (
           <span
-            title="You have Inspiration — spend it on a roll for advantage"
+            title="You have Heroic Inspiration — spend it to reroll a failed roll"
             className="inline-flex items-center gap-1 rounded-full border border-gold/50 bg-gold-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold"
           >
             <svg
@@ -110,6 +110,15 @@ export default function GameRoomHeader({
               <path d="M12 2l1.9 5.6a3 3 0 0 0 1.9 1.9L21.5 11l-5.7 1.9a3 3 0 0 0-1.9 1.9L12 20.5l-1.9-5.7a3 3 0 0 0-1.9-1.9L2.5 11l5.7-1.9a3 3 0 0 0 1.9-1.9L12 2z" />
             </svg>
             Inspiration
+          </span>
+        )}
+        {/* Luck points — the local player has the Lucky feat and unspent points. */}
+        {(myState?.luckPoints ?? 0) > 0 && (
+          <span
+            title="Luck Points — spend one to reroll a failed roll (keep the better result)"
+            className="inline-flex items-center gap-1 rounded-full border border-gold/50 bg-gold-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold"
+          >
+            🍀 {myState?.luckPoints} Luck
           </span>
         )}
 

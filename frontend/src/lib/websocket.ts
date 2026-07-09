@@ -79,15 +79,10 @@ export function subscribeToErrors(
 
 const GENERIC_WS_ERROR = "Something went wrong. Please try again.";
 
-export function sendAction(
-  client: Client,
-  sessionId: string,
-  action: string,
-  spendInspiration = false
-) {
+export function sendAction(client: Client, sessionId: string, action: string) {
   client.publish({
     destination: `/app/game/${sessionId}/action`,
-    body: JSON.stringify({ action, spendInspiration }),
+    body: JSON.stringify({ action }),
   });
 }
 
@@ -439,6 +434,35 @@ export function subscribeToReactions(
       onPrompt(JSON.parse(message.body));
     } catch {
       console.error("Failed to parse reaction prompt frame:", message.body);
+    }
+  });
+}
+
+/* ── Reroll (Features 5 & 6): Heroic Inspiration / Lucky reroll ────── */
+
+/** Answer a reroll prompt: spend "INSPIRATION" / "LUCK", or "KEEP" the original roll. */
+export function sendReroll(
+  client: Client,
+  sessionId: string,
+  resource: "INSPIRATION" | "LUCK" | "KEEP",
+  promptId?: string
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/roll/reroll`,
+    body: JSON.stringify({ resource, promptId }),
+  });
+}
+
+/** Subscribe to this player's private reroll prompts (pushed only to the rolling player). */
+export function subscribeToReroll(
+  client: Client,
+  onPrompt: (msg: unknown) => void
+) {
+  return client.subscribe("/user/queue/reroll", (message: IMessage) => {
+    try {
+      onPrompt(JSON.parse(message.body));
+    } catch {
+      console.error("Failed to parse reroll prompt frame:", message.body);
     }
   });
 }

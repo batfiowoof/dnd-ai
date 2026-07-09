@@ -62,7 +62,7 @@ class ShopServiceTest {
     private static PlayerRuntimeStateDto stateWith(long copper, List<InventoryItem> inventory) {
         return new PlayerRuntimeStateDto(UUID.randomUUID(), 10, 10, 0, 10, Map.of(),
                 Map.of(), List.of(), List.of(), inventory, List.of(), List.of(), List.of(),
-                false, 0, 0, false, false, null, 0, 1, 1, copper, List.of());
+                false, 0, 0, 0, false, false, null, 0, 1, 1, copper, List.of());
     }
 
     @Test

@@ -22,7 +22,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -62,11 +61,10 @@ public class PlayerActionConsumer {
                     "action", event.action()));
 
             List<Contribution> actions = List.of(new Contribution(
-                    event.playerId(), event.playerName(), event.action(), event.spendInspiration()));
-            Map<UUID, Boolean> spend = Map.of(event.playerId(), event.spendInspiration());
+                    event.playerId(), event.playerName(), event.action()));
 
             DmAiService.NarrativeTurnResult result = dmAiService.generateNarrativeTurn(
-                    event.sessionId(), actions, spend, event.travel(),
+                    event.sessionId(), actions, event.travel(),
                     chunk -> messagingTemplate.convertAndSend(destination, (Object) Map.of(
                             "type", "DM_CHUNK",
                             "turnNumber", turnNumber,
@@ -112,13 +110,8 @@ public class PlayerActionConsumer {
                     "playerName", "The Party",
                     "action", combined));
 
-            Map<UUID, Boolean> spend = new HashMap<>();
-            for (Contribution c : actions) {
-                spend.put(c.playerId(), c.spendInspiration());
-            }
-
             DmAiService.NarrativeTurnResult result = dmAiService.generateNarrativeTurn(
-                    event.sessionId(), actions, spend, null,
+                    event.sessionId(), actions, null,
                     chunk -> messagingTemplate.convertAndSend(destination, (Object) Map.of(
                             "type", "DM_CHUNK",
                             "turnNumber", turnNumber,

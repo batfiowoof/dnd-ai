@@ -14,6 +14,7 @@ import com.dungeon.master.model.dto.JoinSessionRequest;
 import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.dto.RerollChoiceRequest;
 import com.dungeon.master.model.dto.RollRequest;
 import com.dungeon.master.model.dto.ShopBuyRequest;
 import com.dungeon.master.model.dto.ShopSellRequest;
@@ -21,6 +22,7 @@ import com.dungeon.master.model.dto.ShortRestRequest;
 import com.dungeon.master.model.dto.TravelRequest;
 import com.dungeon.master.model.dto.UseItemRequest;
 import com.dungeon.master.model.entity.Player;
+import com.dungeon.master.model.enums.RerollResource;
 import com.dungeon.master.model.enums.RollMode;
 import com.dungeon.master.service.game.DiceService;
 import com.dungeon.master.service.game.GameSessionService;
@@ -29,6 +31,7 @@ import com.dungeon.master.service.game.SessionMembershipService;
 import com.dungeon.master.service.game.GameClockService;
 import com.dungeon.master.service.game.MoneyUtil;
 import com.dungeon.master.service.game.PlayerStateService;
+import com.dungeon.master.service.game.RerollWindow;
 import com.dungeon.master.service.game.ShopService;
 import com.dungeon.master.service.game.ShopService.ShopTxnResult;
 import com.dungeon.master.service.game.TravelService;
@@ -59,6 +62,15 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
     private final DiceService diceService;
     private final TravelService travelService;
     private final GameClockService gameClockService;
+    private final RerollWindow rerollWindow;
+
+    @MessageMapping("/game/{sessionId}/roll/reroll")
+    public void handleReroll(@DestinationVariable UUID sessionId,
+                             @Payload RerollChoiceRequest request,
+                             Principal principal) {
+        // Completes the decision window the DM's roll tool is blocked on; the tool applies the spend.
+        rerollWindow.resolve(sessionId, request.promptId(), RerollResource.parse(request.resource()));
+    }
 
     @MessageMapping("/game/{sessionId}/action")
     public void handlePlayerAction(@DestinationVariable UUID sessionId,
@@ -69,8 +81,7 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
                 sessionId, username, request.action());
 
         try {
-            turnService.submitAction(sessionId, username, request.action(),
-                    Boolean.TRUE.equals(request.spendInspiration()));
+            turnService.submitAction(sessionId, username, request.action());
         } catch (Exception e) {
             log.error("Error processing player action: session={}, player={}",
                     sessionId, username, e);

@@ -2,15 +2,19 @@ package com.dungeon.master.service.ai;
 
 import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
+import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.dto.PlayerStateEvent;
+import com.dungeon.master.model.dto.RerollPromptEvent;
 import com.dungeon.master.model.entity.Player;
 import com.dungeon.master.model.enums.PlayerRole;
+import com.dungeon.master.model.enums.RerollResource;
 import com.dungeon.master.model.enums.RollMode;
 import com.dungeon.master.repository.PlayerRepository;
 import com.dungeon.master.service.game.CheckModifierService;
 import com.dungeon.master.service.game.DiceService;
 import com.dungeon.master.service.game.ExhaustionRules;
 import com.dungeon.master.service.game.PlayerStateService;
+import com.dungeon.master.service.game.RerollWindow;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ToolContext;
@@ -41,15 +45,18 @@ public class DmRollTools {
 
     public static final String K_SESSION = "sessionId";              // UUID
     public static final String K_NAME_TO_PLAYER = "nameToPlayer";    // Map<String,UUID> (lowercased)
-    public static final String K_SPEND_INSP = "spendInspiration";    // Map<UUID,Boolean>
     public static final String K_DEFAULT_DC = "defaultDc";           // Integer
     public static final String K_DEFAULT_CONTEST_MOD = "defaultContestMod"; // Integer
+
+    /** Seconds a player has to answer a reroll prompt before it auto-keeps the original roll. */
+    private static final int REROLL_WINDOW_SECONDS = 12;
 
     private final DiceService diceService;
     private final CheckModifierService modifiers;
     private final PlayerStateService playerStateService;
     private final PlayerRepository playerRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final RerollWindow rerollWindow;
 
     /** One character's check result. {@code error} is non-null only when the character couldn't be resolved. */
     public record CheckResult(String character, String ability, String skill, int dc, int total,
@@ -81,11 +88,13 @@ public class DmRollTools {
                     RollMode.NORMAL.name(), false, false, false, "no such character: " + playerName);
         }
         int useDc = dc > 0 ? dc : intCtx(ctx, K_DEFAULT_DC, 13);
-        RollMode finalMode = withExhaustion(player, withInspiration(sessionId, player, parseMode(mode), ctx));
+        RollMode finalMode = withExhaustion(player, parseMode(mode));
         int modifier = modifiers.computeModifier(player, ability, skill);
-        DiceRollResult r = diceService.roll(modifiers.notation(modifier), finalMode);
-        broadcastRoll(sessionId, player.getId(), player.getCharacterName(),
-                modifiers.label(ability, skill), r);
+        String notation = modifiers.notation(modifier);
+        String label = modifiers.label(ability, skill);
+        DiceRollResult r = diceService.roll(notation, finalMode);
+        broadcastRoll(sessionId, player.getId(), player.getCharacterName(), label, r);
+        r = offerReroll(sessionId, player, label, notation, useDc, r);
         boolean success = r.total() >= useDc;
         log.info("Tool rollCheck: session={}, char={}, {} total={} vs DC{} -> {}",
                 sessionId, player.getCharacterName(), ability, r.total(), useDc, success ? "SUCCESS" : "FAILURE");
@@ -113,10 +122,13 @@ public class DmRollTools {
                     RollMode.NORMAL.name(), false, false, false, "no such character: " + playerName);
         }
         int useDc = dc > 0 ? dc : intCtx(ctx, K_DEFAULT_DC, 13);
-        RollMode finalMode = withExhaustion(player, withInspiration(sessionId, player, parseMode(mode), ctx));
+        RollMode finalMode = withExhaustion(player, parseMode(mode));
         int modifier = modifiers.computeSaveModifier(player, ability);
-        DiceRollResult r = diceService.roll(modifiers.notation(modifier), finalMode);
-        broadcastRoll(sessionId, player.getId(), player.getCharacterName(), modifiers.saveLabel(ability), r);
+        String notation = modifiers.notation(modifier);
+        String label = modifiers.saveLabel(ability);
+        DiceRollResult r = diceService.roll(notation, finalMode);
+        broadcastRoll(sessionId, player.getId(), player.getCharacterName(), label, r);
+        r = offerReroll(sessionId, player, label, notation, useDc, r);
         boolean success = r.total() >= useDc;
         log.info("Tool rollSave: session={}, char={}, {} save total={} vs DC{} -> {}",
                 sessionId, player.getCharacterName(), ability, r.total(), useDc, success ? "SUCCESS" : "FAILURE");
@@ -141,7 +153,7 @@ public class DmRollTools {
             if (p.getRole() != PlayerRole.PLAYER) {
                 continue;
             }
-            RollMode finalMode = withExhaustion(p, withInspiration(sessionId, p, RollMode.NORMAL, ctx));
+            RollMode finalMode = withExhaustion(p, RollMode.NORMAL);
             int modifier = modifiers.computeModifier(p, ability, skill);
             DiceRollResult r = diceService.roll(modifiers.notation(modifier), finalMode);
             broadcastRoll(sessionId, p.getId(), p.getCharacterName(), modifiers.label(ability, skill), r);
@@ -179,15 +191,18 @@ public class DmRollTools {
         String label = (targetLabel == null || targetLabel.isBlank()) ? "the opposed party" : targetLabel;
         int npcMod = targetMod != 0 ? targetMod : intCtx(ctx, K_DEFAULT_CONTEST_MOD, 4);
 
-        RollMode actorMode = withExhaustion(actor, withInspiration(sessionId, actor, RollMode.NORMAL, ctx));
+        RollMode actorMode = withExhaustion(actor, RollMode.NORMAL);
         int actorModifier = modifiers.computeModifier(actor, actorAbility, actorSkill);
-        DiceRollResult actorRoll = diceService.roll(modifiers.notation(actorModifier), actorMode);
-        broadcastRoll(sessionId, actor.getId(), actor.getCharacterName(),
-                modifiers.label(actorAbility, actorSkill), actorRoll);
+        String actorNotation = modifiers.notation(actorModifier);
+        String actorLabel = modifiers.label(actorAbility, actorSkill);
+        DiceRollResult actorRoll = diceService.roll(actorNotation, actorMode);
+        broadcastRoll(sessionId, actor.getId(), actor.getCharacterName(), actorLabel, actorRoll);
 
         DiceRollResult npcRoll = diceService.roll(modifiers.notation(npcMod), RollMode.NORMAL);
         broadcastRoll(sessionId, null, label, "Contested roll", npcRoll);
 
+        // The actor wins only on a strictly higher total, so they "succeed" at npcTotal + 1.
+        actorRoll = offerReroll(sessionId, actor, actorLabel, actorNotation, npcRoll.total() + 1, actorRoll);
         boolean actorWon = actorRoll.total() > npcRoll.total(); // ties favour the defender
         log.info("Tool contest: session={}, {} {} vs {} {} -> {}",
                 sessionId, actor.getCharacterName(), actorRoll.total(), label, npcRoll.total(),
@@ -220,23 +235,55 @@ public class DmRollTools {
     }
 
     /**
-     * Combine the DM's situational mode with ADVANTAGE when the player chose to spend Inspiration
-     * this turn (and actually holds it). Consuming Inspiration broadcasts the cleared state, mirroring
-     * the old CheckService behaviour.
+     * When a d20 roll <em>fails</em> and the player holds a reroll resource (2024 Heroic Inspiration
+     * and/or Lucky points), offer an interactive reroll and resolve it. The DM's roll tool blocks on
+     * the {@link RerollWindow} until the player answers or the window elapses (auto-keep). Inspiration
+     * must use the new roll; Lucky keeps the better of the two. Returns the roll to score against the
+     * DC — the original when the roll already succeeded, no resource is held, or the player declines.
      */
-    @SuppressWarnings("unchecked")
-    private RollMode withInspiration(UUID sessionId, Player player, RollMode dmMode, Map<String, Object> ctx) {
-        Map<UUID, Boolean> spend = (Map<UUID, Boolean>) ctx.get(K_SPEND_INSP);
-        boolean wants = spend != null && Boolean.TRUE.equals(spend.get(player.getId()));
-        boolean used = false;
-        if (wants) {
-            used = playerStateService.consumeInspiration(player.getId());
-            if (used) {
-                messagingTemplate.convertAndSend("/topic/game/" + sessionId,
-                        PlayerStateEvent.of(sessionId, playerStateService.getState(player.getId())));
-            }
+    private DiceRollResult offerReroll(UUID sessionId, Player player, String label,
+                                       String notation, int dc, DiceRollResult original) {
+        if (original.total() >= dc) {
+            return original; // already a success — nothing to improve
         }
-        return RollMode.combine(dmMode, used ? RollMode.ADVANTAGE : null);
+        PlayerRuntimeStateDto state;
+        try {
+            state = playerStateService.getState(player.getId());
+        } catch (RuntimeException e) {
+            return original; // no runtime state to spend from
+        }
+        List<String> options = new ArrayList<>();
+        if (state.inspiration()) {
+            options.add(RerollResource.INSPIRATION.name());
+        }
+        if (state.luckPoints() > 0) {
+            options.add(RerollResource.LUCK.name());
+        }
+        if (options.isEmpty()) {
+            return original;
+        }
+        UUID promptId = UUID.randomUUID();
+        RerollResource choice = rerollWindow.offer(sessionId, player.getUsername(),
+                RerollPromptEvent.of(sessionId, promptId, label, original.total(), dc, options,
+                        state.luckPoints(), REROLL_WINDOW_SECONDS));
+        boolean spent = switch (choice) {
+            case INSPIRATION -> playerStateService.consumeInspiration(player.getId());
+            case LUCK -> playerStateService.consumeLuckPoint(player.getId());
+            case KEEP -> false;
+        };
+        if (!spent) {
+            return original;
+        }
+        // Broadcast the spent resource so the client's Inspiration / Luck badges update.
+        messagingTemplate.convertAndSend("/topic/game/" + sessionId,
+                PlayerStateEvent.of(sessionId, playerStateService.getState(player.getId())));
+        DiceRollResult reroll = diceService.roll(notation);
+        broadcastRoll(sessionId, player.getId(), player.getCharacterName(), label + " (reroll)", reroll);
+        // Lucky keeps whichever die is better; Heroic Inspiration must take the new roll.
+        if (choice == RerollResource.LUCK) {
+            return reroll.total() > original.total() ? reroll : original;
+        }
+        return reroll;
     }
 
     /** Fold in disadvantage on ability checks when the character has exhaustion (level 1+). */

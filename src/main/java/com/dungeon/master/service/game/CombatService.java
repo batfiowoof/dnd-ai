@@ -102,6 +102,7 @@ public class CombatService {
     private final WeaponMasteryRules weaponMasteryRules;
     private final MagicItemEffects magicItemEffects;
     private final ReactionWindow reactionWindow;
+    private final FeatEffects featEffects;
 
     /** DC of the Wisdom (Medicine) check to stabilize a dying creature. */
     private static final int STABILIZE_DC = 10;
@@ -197,7 +198,8 @@ public class CombatService {
         for (Player p : players) {
             if (p.getRole() != PlayerRole.PLAYER) continue;
             int dex = dexMod(p);
-            int init = diceService.roll("1d20").total() + dex;
+            // Alert (2024): add the Proficiency Bonus to the initiative roll.
+            int init = diceService.roll("1d20").total() + dex + featEffects.initiativeBonus(character(p));
             order.add(new Combatant(CombatantKind.PLAYER, p.getId(), p.getCharacterName(), init, dex));
         }
         for (Enemy e : enemies) {
@@ -359,7 +361,7 @@ public class CombatService {
                 .orElseThrow(() -> new IllegalArgumentException("Enemy not found"));
 
         String dmgDice = damageDice(player);
-        DiceRollResult dmg = diceService.roll(
+        DiceRollResult dmg = rollWeaponDamage(enc, player,
                 pending.atk().crit() ? CombatMath.critDouble(dmgDice) : dmgDice);
         enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
         boolean defeated = false;
@@ -1873,6 +1875,24 @@ public class CombatService {
         t.setBonusActionUsed(false);
         t.setHoldingReaction(false);
         t.setReadiedTargetEnemyId(null);
+        t.setSavageAttackerUsed(false);
+    }
+
+    /**
+     * Roll a weapon-damage expression, applying the Savage Attacker feat: once per turn a wielder
+     * with the feat rolls the damage dice twice and keeps the higher total. The once-per-turn gate
+     * lives on the attacker's {@link Token} (reset each turn in {@link #resetTurnFlags}); a null token
+     * (no grid position) simply skips the reroll.
+     */
+    private DiceRollResult rollWeaponDamage(CombatEncounter enc, Player player, String expr) {
+        DiceRollResult first = rollExpr(expr);
+        Token tok = tokenFor(enc, player.getId().toString());
+        if (tok == null || tok.isSavageAttackerUsed() || !featEffects.hasSavageAttacker(character(player))) {
+            return first;
+        }
+        tok.setSavageAttackerUsed(true);
+        DiceRollResult second = rollExpr(expr);
+        return second.total() > first.total() ? second : first;
     }
 
     /** A hostile that currently threatens the mover, captured before a move resolves opportunity attacks. */
@@ -2029,7 +2049,7 @@ public class CombatService {
         boolean defeated = false;
         if (hit) {
             String dice = damageDice(player);
-            DiceRollResult dmg = rollExpr(atk.crit() ? CombatMath.critDouble(dice) : dice);
+            DiceRollResult dmg = rollWeaponDamage(enc, player, atk.crit() ? CombatMath.critDouble(dice) : dice);
             enemy.setCurrentHp(Math.max(0, enemy.getCurrentHp() - dmg.total()));
             if (enemy.getCurrentHp() == 0) {
                 enemy.setAlive(false);

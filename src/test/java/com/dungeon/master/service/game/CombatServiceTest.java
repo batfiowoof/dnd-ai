@@ -139,7 +139,7 @@ class CombatServiceTest {
                 monsterCatalog, monsterResolver, spellCatalog, new GridService(), checkModifierService,
                 sceneGenerator, enemyTacticsService, combatMapper, combatBroadcaster,
                 combatTerrainService, combatLookups, combatSpellResolver, weaponMasteryRules,
-                magicItemEffects, reactionWindow);
+                magicItemEffects, reactionWindow, mock(FeatEffects.class));
 
         // Combat beats persist a TurnEvent then fire a narration event; return a stub event.
         when(turnService.createCombatBeat(any(UUID.class), any(UUID.class), anyString()))
@@ -188,17 +188,17 @@ class CombatServiceTest {
     }
 
     private PlayerRuntimeStateDto stateFor(UUID playerId, int hp) {
-        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     /** 0 HP, not dead, not stable — actively dying (rolling death saves). */
     private PlayerRuntimeStateDto dyingState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     /** 0 HP, dead (three failures). */
     private PlayerRuntimeStateDto deadState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 3, false, true, null, 0, 0, 0, 0, List.of());
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, 3, false, true, null, 0, 0, 0, 0, List.of());
     }
 
     @Test
@@ -362,8 +362,8 @@ class CombatServiceTest {
     /** Build a single-player + single-enemy ACTIVE encounter with a grid, the player active. */
     private CombatEncounter gridEncounter(UUID pid, int px, int py, UUID enemyId, int ex, int ey) {
         GridState grid = GridState.builder().width(14).height(10).build();
-        grid.getTokens().put(pid.toString(), new Token(px, py, 0, true, false, false, false, false, false, false, null));
-        grid.getTokens().put(enemyId.toString(), new Token(ex, ey, 0, true, false, false, false, false, false, false, null));
+        grid.getTokens().put(pid.toString(), new Token(px, py, 0, true, false, false, false, false, false, false, null, false));
+        grid.getTokens().put(enemyId.toString(), new Token(ex, ey, 0, true, false, false, false, false, false, false, null, false));
         return CombatEncounter.builder()
                 .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
                 .initiativeOrder(List.of(
@@ -574,7 +574,7 @@ class CombatServiceTest {
     /** Runtime state granting the player a cantrip (for the cast guard); conscious at 20 HP. */
     private PlayerRuntimeStateDto stateWithCantrip(UUID playerId, String spell) {
         return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
-                java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+                java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     /** An AUTO-resolution DAMAGE spell — optionally an AoE template (shape != null). */
@@ -597,9 +597,9 @@ class CombatServiceTest {
      */
     private CombatEncounter aoeEncounter(UUID pid, UUID aId, int ax, int ay, UUID bId, int bx, int by) {
         GridState grid = GridState.builder().width(16).height(12).build();
-        grid.getTokens().put(pid.toString(), new Token(5, 5, 0, true, false, false, false, false, false, false, null));
-        grid.getTokens().put(aId.toString(), new Token(ax, ay, 0, true, false, false, false, false, false, false, null));
-        grid.getTokens().put(bId.toString(), new Token(bx, by, 0, true, false, false, false, false, false, false, null));
+        grid.getTokens().put(pid.toString(), new Token(5, 5, 0, true, false, false, false, false, false, false, null, false));
+        grid.getTokens().put(aId.toString(), new Token(ax, ay, 0, true, false, false, false, false, false, false, null, false));
+        grid.getTokens().put(bId.toString(), new Token(bx, by, 0, true, false, false, false, false, false, false, null, false));
         return CombatEncounter.builder()
                 .id(UUID.randomUUID()).sessionId(sessionId).status(CombatStatus.ACTIVE)
                 .initiativeOrder(List.of(new Combatant(CombatantKind.PLAYER, pid, "Aria", 18, 0)))
@@ -802,7 +802,7 @@ class CombatServiceTest {
     private PlayerRuntimeStateDto stateWithWeapon(UUID playerId, String weapon) {
         return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
                 java.util.Map.of(), List.of(), List.of(), List.of(new InventoryItem(weapon, 1, ItemKind.WEAPON)),
-                List.of(), List.of(), List.of(), false, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+                List.of(), List.of(), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     @Test

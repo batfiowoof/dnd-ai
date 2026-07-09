@@ -165,6 +165,29 @@ export default function CharacterSheetDialog({
           </div>
         </section>
 
+        {/* Feat resources — the reroll-bearing feats surfaced in runtime state. */}
+        {(state.inspiration || (state.luckPoints ?? 0) > 0) && (
+          <section>
+            <SectionHeading>Feat Resources</SectionHeading>
+            <div className="flex flex-wrap gap-2">
+              {state.inspiration && (
+                <span className="inline-flex items-center gap-1 rounded-lg border border-gold/50 bg-gold-muted px-2.5 py-1 text-xs font-semibold text-gold">
+                  ✦ Heroic Inspiration
+                </span>
+              )}
+              {(state.luckPoints ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-lg border border-gold/50 bg-gold-muted px-2.5 py-1 text-xs font-semibold text-gold">
+                  🍀 Lucky — {state.luckPoints} point
+                  {state.luckPoints === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Spend on a failed roll to reroll (a prompt appears automatically).
+            </p>
+          </section>
+        )}
+
         {/* Passive scores — the skills a DM checks silently (10 + skill modifier). */}
         <section>
           <SectionHeading>Passive Scores</SectionHeading>

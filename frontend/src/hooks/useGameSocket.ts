@@ -7,6 +7,7 @@ import {
   subscribeToSession,
   subscribeToErrors,
   subscribeToReactions,
+  subscribeToReroll,
 } from "@/lib/websocket";
 import { useSessionStore } from "@/store/sessionStore";
 import { playSound } from "@/lib/sound";
@@ -19,6 +20,7 @@ import type {
   CombatLifecycleEvent,
   RoundStatusEvent,
   ReactionPromptEvent,
+  RerollPromptEvent,
 } from "@/types";
 
 interface UseGameSocketArgs {
@@ -64,6 +66,9 @@ export function useGameSocket({
           );
           subscribeToErrors(client!, onError);
           subscribeToReactions(client!, (msg) =>
+            dispatchMessage(msg, scrollToBottom)
+          );
+          subscribeToReroll(client!, (msg) =>
             dispatchMessage(msg, scrollToBottom)
           );
         },
@@ -184,6 +189,10 @@ function dispatchMessage(msg: unknown, scrollToBottom: () => void) {
       break;
     case "REACTION_PROMPT":
       s.applyReactionPrompt(data as unknown as ReactionPromptEvent);
+      playSound("turn");
+      break;
+    case "REROLL_PROMPT":
+      s.applyRerollPrompt(data as unknown as RerollPromptEvent);
       playSound("turn");
       break;
     case "NPC_STATE":

@@ -78,19 +78,18 @@ public class RoundCollector {
 
     /** Record (or replace) a player's action for the current round. */
     public synchronized void submit(UUID sessionId, UUID playerId, String characterName,
-                                    String action, boolean spendInspiration,
-                                    int windowSeconds, int expectedPlayers) {
-        contribute(sessionId, playerId, characterName, action, spendInspiration, windowSeconds, expectedPlayers);
+                                    String action, int windowSeconds, int expectedPlayers) {
+        contribute(sessionId, playerId, characterName, action, windowSeconds, expectedPlayers);
     }
 
     /** Record that a player passes (no action) for the current round. */
     public synchronized void pass(UUID sessionId, UUID playerId, String characterName,
                                   int windowSeconds, int expectedPlayers) {
-        contribute(sessionId, playerId, characterName, null, false, windowSeconds, expectedPlayers);
+        contribute(sessionId, playerId, characterName, null, windowSeconds, expectedPlayers);
     }
 
     private void contribute(UUID sessionId, UUID playerId, String characterName,
-                            String action, boolean spendInspiration, int windowSeconds, int expectedPlayers) {
+                            String action, int windowSeconds, int expectedPlayers) {
         Instant now = Instant.now();
         Round r = rounds.computeIfAbsent(sessionId, k -> {
             Round nr = new Round();
@@ -98,7 +97,7 @@ public class RoundCollector {
             return nr;
         });
         r.expected = Math.max(1, Math.max(r.expected, expectedPlayers));
-        r.contributions.put(playerId, new Contribution(playerId, characterName, action, spendInspiration));
+        r.contributions.put(playerId, new Contribution(playerId, characterName, action));
 
         // Early flush once everyone has weighed in.
         if (r.contributions.size() >= r.expected) {
