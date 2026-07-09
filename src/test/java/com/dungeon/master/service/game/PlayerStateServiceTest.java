@@ -1,13 +1,16 @@
 package com.dungeon.master.service.game;
 
 import com.dungeon.master.model.dto.DiceRollResult;
+import com.dungeon.master.model.dto.InventoryItem;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
 import com.dungeon.master.model.entity.PlayerRuntimeState;
+import com.dungeon.master.model.enums.ItemKind;
 import com.dungeon.master.model.enums.RollMode;
 import com.dungeon.master.repository.PlayerRuntimeStateRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,10 +29,16 @@ class PlayerStateServiceTest {
     private PlayerStateService service;
     private final UUID id = UUID.randomUUID();
 
+    // Real (unloaded) magic-item beans — empty catalog, so effects are no-ops for these tests.
+    private static final MagicItemCatalog MAGIC_CATALOG =
+            new MagicItemCatalog(new com.dungeon.master.service.ai.SrdContent());
+    private static final MagicItemEffects MAGIC_EFFECTS = new MagicItemEffects(MAGIC_CATALOG);
+
     @BeforeEach
     void setup() {
         repository = mock(PlayerRuntimeStateRepository.class);
-        service = new PlayerStateService(repository, mock(DiceService.class), mock(PlayerStateSeeder.class));
+        service = new PlayerStateService(repository, mock(DiceService.class), mock(PlayerStateSeeder.class),
+                MAGIC_CATALOG, MAGIC_EFFECTS);
         when(repository.save(any(PlayerRuntimeState.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -245,7 +254,8 @@ class PlayerStateServiceTest {
         DiceService dice = (DiceService) org.mockito.Mockito.mock(DiceService.class);
         when(dice.roll("2d8")).thenReturn(new DiceRollResult("2d8", 2, 16, 0, RollMode.NORMAL,
                 List.of(5, 5), null, 10, false, false));
-        service = new PlayerStateService(repository, dice, mock(PlayerStateSeeder.class));
+        service = new PlayerStateService(repository, dice, mock(PlayerStateSeeder.class),
+                MAGIC_CATALOG, MAGIC_EFFECTS);
 
         PlayerRuntimeStateDto dto = service.shortRest(id, 2);
         // 10 rolled + 2 dice × +2 CON = 14 healed → 4 + 14 = 18
@@ -293,5 +303,55 @@ class PlayerStateServiceTest {
         List<PlayerRuntimeStateDto> changed = service.accrueExhaustion(sessionId, 24 * 60);
         assertEquals(6, changed.get(0).exhaustionLevel());
         assertTrue(changed.get(0).dead(), "level 6 exhaustion is death");
+    }
+
+    /* ── attunement (uses name-synthesized magic items, so no loaded catalog needed) ── */
+
+    // "Ring of Fire Resistance" synthesizes a requires-attunement Resistance item;
+    // "+1 Longsword" synthesizes a non-attunement magic weapon.
+    private PlayerRuntimeState seedWithItems(List<String> attuned, String... itemNames) {
+        List<InventoryItem> inv = new ArrayList<>();
+        for (String n : itemNames) inv.add(new InventoryItem(n, 1, ItemKind.GEAR));
+        PlayerRuntimeState s = PlayerRuntimeState.builder()
+                .playerId(id).sessionId(UUID.randomUUID())
+                .currentHp(10).maxHp(10)
+                .inventory(inv)
+                .attunedItems(new ArrayList<>(attuned))
+                .build();
+        when(repository.findById(id)).thenReturn(Optional.of(s));
+        return s;
+    }
+
+    @Test
+    void attuneAddsAttunementRequiredItem() {
+        seedWithItems(List.of(), "Ring of Fire Resistance");
+        PlayerRuntimeStateDto dto = service.attuneItem(id, "Ring of Fire Resistance");
+        assertTrue(dto.attunedItems().contains("Ring of Fire Resistance"));
+    }
+
+    @Test
+    void attuneRejectsNonAttunementItem() {
+        seedWithItems(List.of(), "+1 Longsword");
+        assertThrows(IllegalStateException.class, () -> service.attuneItem(id, "+1 Longsword"));
+    }
+
+    @Test
+    void attuneRejectsWhenAtCapOfThree() {
+        seedWithItems(List.of("Cloak of Fire Resistance", "Amulet of Cold Resistance",
+                "Ring of Acid Resistance"), "Ring of Fire Resistance");
+        assertThrows(IllegalStateException.class, () -> service.attuneItem(id, "Ring of Fire Resistance"));
+    }
+
+    @Test
+    void attuneRejectsItemNotInInventory() {
+        seedWithItems(List.of());
+        assertThrows(IllegalStateException.class, () -> service.attuneItem(id, "Ring of Fire Resistance"));
+    }
+
+    @Test
+    void endAttunementRemovesTheItem() {
+        seedWithItems(new ArrayList<>(List.of("Ring of Fire Resistance")), "Ring of Fire Resistance");
+        PlayerRuntimeStateDto dto = service.endAttunement(id, "Ring of Fire Resistance");
+        assertFalse(dto.attunedItems().contains("Ring of Fire Resistance"));
     }
 }

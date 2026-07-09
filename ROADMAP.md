@@ -12,7 +12,7 @@ resolution, exhaustion, rests, quests, shops/currency, NPCs, travel, world-build
 RAG-grounded DM). Each feature **reuses existing infrastructure** rather than adding a new
 subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
-> **Suggested build order (dependency-aware):** ~~1 → 2~~ (shipped) → 3 → 4 → 5 → 6 → 7 → 8.
+> **Suggested build order (dependency-aware):** ~~1 → 2 → 3~~ (shipped) → 4 → 5 → 6 → 7 → 8.
 > Feature 1 (structured proficiency) was foundational — features 5 (feats) and 7 (spell prep) now
 > plug into its proficiency model; features 5–8 lean on the combat/roll hooks the earlier ones
 > establish.
@@ -29,6 +29,19 @@ Prior batches delivered the core loop. Most recently:
   half-prof + `computeSaveModifier` + `passiveScore`; `Skills` (skill→ability); `DmRollTools.rollSave`.
   Frontend: Saving-Throw + Passive-Score sheet sections, creation-wizard Expertise picker
   (`LEVEL1_EXPERTISE_GRANTS`), `dnd5e.ts` mirrors. Half-prof (Bard JoAT) wired but no level-1 UI source.
+- **Magic Items & Attunement (feature 3)** — `MagicItemRarity` enum + `MagicItemEffect` DTO;
+  `MagicItemCatalog` parses rarity/type/slot/attunement from the SRD prose headers of all 251
+  items, merges a curated `resources/dnd5e/magic-item-effects.json` overlay (~8 iconic items), and
+  synthesizes `+N` weapon/armor and typed-Resistance effects from item names. `MagicItemEffects`
+  (bean, analogue of `ConditionRules`) gates each item live-when-attuned-or-equipped and sums AC/
+  attack/damage/save bonuses, resistances, advantage, and set-ability overrides. `PlayerRuntimeState.
+  attunedItems` (JSONB, `V32` migration) + `attuneItem`/`endAttunement` (cap 3) in `PlayerStateService`;
+  `toDto` folds effective abilities + item AC. Wired into `CombatService` armorClass/attackBonus/
+  damageDice (via `CombatMath.addFlat`) + enemy-damage resistance halving, and `CheckModifierService`
+  saves. `/combat/magic-items` REST + `/attunement/attune|end` WS verbs. Frontend: `lib/magicItems.ts`
+  (rarity color+label, name synthesis), attunement section + rarity chips in `InventoryManager`,
+  attuned list on `CharacterSheetDialog`. *Simplifications: charge/activated items stay DM-narrated;
+  combat AC uses character DEX (sheet AC uses effective DEX); advantage flags surfaced, not fully wired.*
 - **Weapon Mastery (2024 PHB) (feature 2)** — `WeaponMastery` enum + `CombatMath.WEAPON_MASTERY`
   name-lookup (no `InventoryItem` field); `WeaponMasteryRules` fires from `CombatService`
   applyPendingDamage/miss branch, martial-gated. Topple (CON save→prone), Vex/Sap (synthetic
@@ -63,41 +76,6 @@ Prior batches delivered the core loop. Most recently:
 - **Engine owns all math/randomness; the LLM never rolls** (`DiceService`, `RollMode`). Rules
   math is stateless in `service/game/*Rules.java` + `service/game/combat/CombatMath.java`, mirrored
   client-side in `frontend/src/lib/{dnd5e,combat}.ts`.
-
----
-
-## 3. Magic Items & Attunement
-
-**Goal:** Make magic items mechanical, with the attunement limit (max 3, requires a short rest).
-Completes the loot/reward loop.
-
-### What exists / why it's a gap
-251 magic items exist **as prose only**; inventory, shops, and the paper-doll all work, but magic
-items have zero mechanical effect. Equipped gear already recomputes AC via
-`CombatMath.armorClassBase`.
-
-### Data
-Parse the `MAGIC_ITEM` prose entries from `SrdContent` into a structured catalog (rarity, slot,
-attunement-required, and a small typed `effect`) — mirror the spell `combat` block that
-`SpellCatalog` already loads.
-
-### Backend
-- New `service/game/MagicItemCatalog.java` (mirror `MonsterCatalog` / `SpellCatalog` load pattern) +
-  a structured `model/dto/MagicItemEffect.java` (bonus AC/attack/damage, resistance, ability-score
-  set, advantage-on-X).
-- Attunement state on `PlayerRuntimeState` (attuned item ids, cap 3) + `attuneItem` / `endAttunement`
-  in `service/game/PlayerStateService.java`, gated on a short rest (`shortRest` already advances the
-  clock).
-- Wire item bonuses into `CombatMath.attackBonus` / `damageDice` / `armorClass` behind the
-  equipped-and-attuned check. Let `ShopService` and loot reference magic items by id.
-
-### Frontend
-- Attunement affordance on the paper-doll (`components/game/InventoryManager.tsx`) +
-  `CharacterSheetDialog`. Reuse `components/ui/` primitives; rarity color coding must pair color with
-  a text label (a11y).
-
-**Scope:** support +N weapon/armor, resistance, stat-set, and advantage effects mechanically; leave
-charge-based/activated items DM-narrated.
 
 ---
 

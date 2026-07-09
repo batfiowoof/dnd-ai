@@ -30,6 +30,7 @@ public record PlayerRuntimeStateDto(
         int exhaustionLevel,
         int hitDiceRemaining,
         int hitDiceTotal,
-        long copper
+        long copper,
+        List<String> attunedItems
 ) {
 }

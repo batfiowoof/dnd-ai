@@ -24,6 +24,7 @@ public class CheckModifierService {
 
     private final PlayerStateService playerStateService;
     private final CharacterRepository characterRepository;
+    private final MagicItemEffects magicItemEffects;
 
     /**
      * Ability modifier from runtime state, plus the character's proficiency bonus when the named
@@ -54,7 +55,17 @@ public class CheckModifierService {
                 mod += c.getProficiencyBonus();
             }
         }
-        return mod;
+        return mod + itemSaveBonus(player);
+    }
+
+    /** Flat saving-throw bonus from equipped/attuned magic items (Ring/Cloak of Protection). */
+    private int itemSaveBonus(Player player) {
+        try {
+            PlayerRuntimeStateDto st = playerStateService.getState(player.getId());
+            return magicItemEffects.saveBonus(st.inventory(), st.attunedItems());
+        } catch (RuntimeException e) {
+            return 0;
+        }
     }
 
     /** Passive score for a skill = 10 + the character's check modifier for that skill (10 + mod, no roll). */

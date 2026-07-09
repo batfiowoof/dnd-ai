@@ -1,0 +1,13 @@
+{
+  "_comment": "Curated mechanical-effect overlay for magic items, keyed by SRD slug (the <slug> in SRD:MAGIC_ITEM:<slug>). Metadata (itemType/slot/rarity/requiresAttunement) is parsed from the prose header by MagicItemCatalog; only the mechanical effect is authored here. Generic +N items (armor-1-2-or-3, weapon-1-2-or-3, shield-1-2-or-3) are NOT listed — real +N loot is named like '+1 Longsword' and resolved by name synthesis. Typed-resistance items (Ring/Armor of Resistance) are resolved by name synthesis from the damage type in the item's own name. See MagicItemCatalog / MagicItemEffects. SRD 5.2.1 content, CC-BY-4.0.",
+  "effects": {
+    "ring-of-protection": { "acBonus": 1, "saveBonus": 1 },
+    "cloak-of-protection": { "acBonus": 1, "saveBonus": 1 },
+    "bracers-of-defense": { "acBonus": 2, "requiresNoArmor": true },
+    "brooch-of-shielding": { "resistances": ["Force"] },
+    "gauntlets-of-ogre-power": { "setAbility": { "STR": 19 } },
+    "headband-of-intellect": { "setAbility": { "INT": 19 } },
+    "belt-of-giant-strength": { "setAbility": { "STR": 21 } },
+    "sentinel-shield": { "advantageOn": ["initiative", "perception"] }
+  }
+}

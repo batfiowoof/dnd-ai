@@ -38,9 +38,14 @@ public class PlayerStateService {
     /** D&D 5e Potion of Healing. */
     private static final String HEALING_POTION_DICE = "2d4+2";
 
+    /** Max simultaneous attunements per creature (SRD). */
+    private static final int MAX_ATTUNEMENTS = 3;
+
     private final PlayerRuntimeStateRepository repository;
     private final DiceService diceService;
     private final PlayerStateSeeder seeder;
+    private final MagicItemCatalog magicItemCatalog;
+    private final MagicItemEffects magicItemEffects;
 
     /** Outcome of consuming an item, including any heal roll for narration/animation. */
     public record ItemUseResult(
@@ -367,6 +372,55 @@ public class PlayerStateService {
     }
 
     /**
+     * Attune to the named magic item the player holds (the short-rest bond, modelled as a single
+     * action). Enforces the SRD rules: the item must be in the inventory, must require attunement,
+     * must not already be attuned, and the player may hold at most {@value #MAX_ATTUNEMENTS}
+     * attunements at once. Once attuned, the item's mechanical effects go live (see
+     * {@link MagicItemEffects}).
+     */
+    @Transactional
+    public PlayerRuntimeStateDto attuneItem(UUID playerId, String itemName) {
+        PlayerRuntimeState s = require(playerId);
+        InventoryItem item = findItem(s, itemName);
+        if (item == null) {
+            throw new IllegalStateException("Item not in inventory: " + itemName);
+        }
+        boolean requiresAttunement = magicItemCatalog.forItemName(item.name())
+                .map(e -> e.requiresAttunement())
+                .orElse(false);
+        if (!requiresAttunement) {
+            throw new IllegalStateException(item.name() + " doesn't require attunement.");
+        }
+        List<String> attuned = s.getAttunedItems();
+        if (attuned.stream().anyMatch(a -> a.equalsIgnoreCase(item.name()))) {
+            return toDto(s); // already attuned — idempotent
+        }
+        if (attuned.size() >= MAX_ATTUNEMENTS) {
+            throw new IllegalStateException(
+                    "You're already attuned to " + MAX_ATTUNEMENTS + " items — end an attunement first.");
+        }
+        attuned.add(item.name());
+        return toDto(repository.save(s));
+    }
+
+    /** End attunement with the named item, taking its mechanical effects offline. Idempotent. */
+    @Transactional
+    public PlayerRuntimeStateDto endAttunement(UUID playerId, String itemName) {
+        PlayerRuntimeState s = require(playerId);
+        boolean removed = s.getAttunedItems().removeIf(a -> a.equalsIgnoreCase(itemName));
+        return removed ? toDto(repository.save(s)) : toDto(s);
+    }
+
+    /** The inventory stack matching {@code itemName} (case-insensitive), or {@code null}. */
+    private static InventoryItem findItem(PlayerRuntimeState s, String itemName) {
+        if (itemName == null) return null;
+        for (InventoryItem it : s.getInventory()) {
+            if (it.name().equalsIgnoreCase(itemName)) return it;
+        }
+        return null;
+    }
+
+    /**
      * Award Inspiration to a player (idempotent — setting an already-inspired player is a no-op).
      * Returns the updated state so callers can broadcast without a second read.
      */
@@ -586,14 +640,22 @@ public class PlayerStateService {
     }
 
     private PlayerRuntimeStateDto toDto(PlayerRuntimeState s) {
-        // Effective AC layers three things onto the character's stored (unarmored/base) AC:
-        // equipped armor + shield, then live AC-buff conditions (Mage Armor / Shield of Faith /
-        // Barkskin). Both derive from the stored base so they revert automatically when gear is
-        // unequipped or a condition ends — the stored armorClass column stays the base.
-        Integer dex = s.getAbilities() == null ? null : s.getAbilities().get("DEX");
+        List<InventoryItem> inv = s.getInventory();
+        List<String> attuned = s.getAttunedItems();
+        // Effective abilities fold in any set-ability magic items (Gauntlets of Ogre Power etc.) —
+        // the higher of the base score and the item wins. Surfaced so the sheet, DEX-based AC, and
+        // any downstream reader see the boosted score without mutating the stored abilities.
+        Map<String, Integer> effAbilities = magicItemEffects.effectiveAbilities(s.getAbilities(), inv, attuned);
+        // Effective AC layers onto the character's stored (unarmored/base) AC: equipped armor +
+        // shield, then live AC-buff conditions (Mage Armor / Shield of Faith / Barkskin), then flat
+        // AC bonuses from equipped/attuned magic items (Ring of Protection, Bracers of Defense).
+        // Everything derives from the stored base so it reverts automatically when gear is
+        // unequipped, a condition ends, or attunement is dropped — the stored column stays the base.
+        Integer dex = effAbilities.get("DEX");
         int dexMod = dex == null ? 0 : Math.floorDiv(dex - 10, 2);
-        int baseAc = CombatMath.armorClassBase(s.getArmorClass(), dexMod, s.getInventory());
-        int effectiveAc = ConditionRules.acAdjust(s.getConditions(), baseAc, dexMod);
+        int baseAc = CombatMath.armorClassBase(s.getArmorClass(), dexMod, inv);
+        int effectiveAc = ConditionRules.acAdjust(s.getConditions(), baseAc, dexMod)
+                + magicItemEffects.acBonus(inv, attuned);
         // Exhaustion level 4+ halves the HP maximum; surface the effective values so the bar and
         // combat healing caps reflect it (the stored maxHp stays the base and restores when it lifts).
         int effectiveMaxHp = ExhaustionRules.effectiveMaxHp(s.getMaxHp(), s.getExhaustionLevel());
@@ -604,7 +666,7 @@ public class PlayerStateService {
                 effectiveMaxHp,
                 s.getTempHp(),
                 effectiveAc,
-                s.getAbilities(),
+                effAbilities,
                 s.getSkillProficiencies(),
                 s.getSavingThrowProficiencies(),
                 s.getSpellSlots(),
@@ -621,6 +683,7 @@ public class PlayerStateService {
                 s.getExhaustionLevel(),
                 s.getHitDiceRemaining(),
                 s.getHitDiceTotal(),
-                s.getCopper());
+                s.getCopper(),
+                List.copyOf(s.getAttunedItems()));
     }
 }

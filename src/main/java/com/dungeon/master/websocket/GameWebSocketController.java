@@ -1,6 +1,7 @@
 package com.dungeon.master.websocket;
 
 import com.dungeon.master.model.dto.AddItemRequest;
+import com.dungeon.master.model.dto.AttuneItemRequest;
 import com.dungeon.master.model.dto.CastRequest;
 import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
@@ -257,6 +258,36 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
             broadcastState(sessionId, state);
         } catch (Exception e) {
             log.error("Error equipping item: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/attunement/attune")
+    public void handleAttuneItem(@DestinationVariable UUID sessionId,
+                                 @Payload AttuneItemRequest request,
+                                 Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            PlayerRuntimeStateDto state = playerStateService.attuneItem(player.id(), request.name());
+            broadcastState(sessionId, state);
+        } catch (Exception e) {
+            log.error("Error attuning item: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    @MessageMapping("/game/{sessionId}/attunement/end")
+    public void handleEndAttunement(@DestinationVariable UUID sessionId,
+                                    @Payload AttuneItemRequest request,
+                                    Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            PlayerRuntimeStateDto state = playerStateService.endAttunement(player.id(), request.name());
+            broadcastState(sessionId, state);
+        } catch (Exception e) {
+            log.error("Error ending attunement: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
     }

@@ -182,6 +182,20 @@ export function sendEquipItem(
   });
 }
 
+export function sendAttuneItem(client: Client, sessionId: string, name: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/attunement/attune`,
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function sendEndAttunement(client: Client, sessionId: string, name: string) {
+  client.publish({
+    destination: `/app/game/${sessionId}/attunement/end`,
+    body: JSON.stringify({ name }),
+  });
+}
+
 export function sendShopBuy(
   client: Client,
   sessionId: string,

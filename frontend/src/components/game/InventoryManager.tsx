@@ -6,6 +6,7 @@ import type {
   InventoryItem,
   ItemKind,
   ItemSubtype,
+  MagicItemSummary,
   PlayerRuntimeState,
 } from "@/types";
 import { Modal, Button, cn } from "@/components/ui";
@@ -19,6 +20,25 @@ import {
   allowedSlotsFor,
   subtypeFromKind,
 } from "@/lib/itemKinds";
+import { RARITY_BADGE, RARITY_LABELS, magicFor } from "@/lib/magicItems";
+
+/** The SRD attunement cap (mirrors backend MAX_ATTUNEMENTS). */
+const MAX_ATTUNEMENTS = 3;
+
+/** A small rarity chip — colour is always paired with the rarity word for accessibility. */
+function RarityChip({ magic }: { magic: MagicItemSummary }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+        RARITY_BADGE[magic.rarity]
+      )}
+    >
+      {RARITY_LABELS[magic.rarity]}
+      {magic.requiresAttunement ? " · Attune" : ""}
+    </span>
+  );
+}
 
 interface InventoryManagerProps {
   open: boolean;
@@ -33,6 +53,10 @@ interface InventoryManagerProps {
     kind: ItemKind;
     subtype?: ItemSubtype | null;
   }) => void;
+  /** Magic-item catalog indexed by lowercased name (see lib/magicItems); empty until fetched. */
+  magicByName?: Record<string, MagicItemSummary>;
+  onAttune: (name: string) => void;
+  onEndAttunement: (name: string) => void;
 }
 
 /**
@@ -61,6 +85,9 @@ export default function InventoryManager({
   onDrop,
   onEquip,
   onAdd,
+  magicByName = {},
+  onAttune,
+  onEndAttunement,
 }: InventoryManagerProps) {
   const [newName, setNewName] = useState("");
   const [newQty, setNewQty] = useState(1);
@@ -79,6 +106,19 @@ export default function InventoryManager({
     return m;
   }, [items]);
   const backpack = useMemo(() => items.filter((it) => !it.slot), [items]);
+
+  // Attunement: the set currently attuned, plus every held item that requires attunement.
+  const attuned = useMemo(
+    () => new Set((state?.attunedItems ?? []).map((n) => n.toLowerCase())),
+    [state]
+  );
+  const magic = (name: string) => magicFor(name, magicByName);
+  const attunable = useMemo(
+    () => items.filter((it) => magic(it.name)?.requiresAttunement),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, magicByName]
+  );
+  const atCap = attuned.size >= MAX_ATTUNEMENTS;
 
   const findItem = (name: string | null) =>
     name ? items.find((it) => it.name === name) ?? null : null;
@@ -265,6 +305,7 @@ export default function InventoryManager({
                           {item.qty > 1 && (
                             <span className="tabular text-xs text-text-muted">×{item.qty}</span>
                           )}
+                          {magic(item.name) && <RarityChip magic={magic(item.name)!} />}
                         </div>
                         <span className="text-[10px] uppercase tracking-wider text-text-muted">
                           {item.subtype && item.subtype !== "OTHER"
@@ -288,6 +329,62 @@ export default function InventoryManager({
             )}
           </div>
         </div>
+
+        {/* ── Attunement ───────────────────────────────── */}
+        {attunable.length > 0 && (
+          <div className="border-t border-border pt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Attunement
+              </span>
+              <span
+                className={cn(
+                  "tabular rounded border px-1.5 py-0.5 text-[10px] font-semibold",
+                  atCap ? "border-gold/60 text-gold" : "border-border text-text-muted"
+                )}
+                aria-label={`${attuned.size} of ${MAX_ATTUNEMENTS} attunement slots used`}
+              >
+                {attuned.size} / {MAX_ATTUNEMENTS} attuned
+              </span>
+            </div>
+            <ul className="space-y-1.5">
+              {attunable.map((item, i) => {
+                const m = magic(item.name)!;
+                const isAttuned = attuned.has(item.name.toLowerCase());
+                const blocked = !isAttuned && atCap;
+                const reason = blocked
+                  ? `Attuned to ${MAX_ATTUNEMENTS} items already — end another attunement first.`
+                  : undefined;
+                return (
+                  <li
+                    key={`attune-${item.name}-${i}`}
+                    className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm text-text">{item.name}</span>
+                    <RarityChip magic={m} />
+                    <Button
+                      size="sm"
+                      variant={isAttuned ? "outline" : "primary"}
+                      disabled={!connected || blocked}
+                      title={reason}
+                      onClick={() =>
+                        isAttuned ? onEndAttunement(item.name) : onAttune(item.name)
+                      }
+                    >
+                      {isAttuned ? "End Attunement" : "Attune"}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+            {atCap && (
+              <p className="mt-1.5 text-[11px] text-text-muted">
+                You&rsquo;re attuned to the maximum of {MAX_ATTUNEMENTS} items. End an attunement to
+                free a slot.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ── Add item ─────────────────────────────────── */}
         <div className="border-t border-border pt-4">

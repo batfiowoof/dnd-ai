@@ -13,6 +13,8 @@ import {
   sendAddItem,
   sendDropItem,
   sendEquipItem,
+  sendAttuneItem,
+  sendEndAttunement,
   sendShopBuy,
   sendShopSell,
   sendLongRest,
@@ -90,6 +92,12 @@ export function useGameActions(
       ),
       equipItem: run((c, itemName: string, slot: EquipSlot | null) =>
         sendEquipItem(c, sessionId, itemName, slot)
+      ),
+      attuneItem: run((c, itemName: string) =>
+        sendAttuneItem(c, sessionId, itemName)
+      ),
+      endAttunement: run((c, itemName: string) =>
+        sendEndAttunement(c, sessionId, itemName)
       ),
       shopBuy: run((c, payload: { shopKey: string; itemRef: string; qty: number }) =>
         sendShopBuy(c, sessionId, payload)

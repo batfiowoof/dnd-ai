@@ -86,6 +86,30 @@ export interface PlayerRuntimeState {
   hitDiceTotal: number;
   /** Coin purse in copper (1 gp = 100 cp, 1 sp = 10 cp). Spent/earned at shops; format via lib/money. */
   copper: number;
+  /** Display names of the magic items this player is attuned to (max 3). */
+  attunedItems?: string[];
+}
+
+/** Magic-item rarity tier (mirrors backend MagicItemRarity). */
+export type MagicItemRarity =
+  | "COMMON"
+  | "UNCOMMON"
+  | "RARE"
+  | "VERY_RARE"
+  | "LEGENDARY"
+  | "ARTIFACT"
+  | "VARIES"
+  | "UNKNOWN";
+
+/** Client view of a magic-item catalog entry, used to badge inventory names (see lib/api getMagicItems). */
+export interface MagicItemSummary {
+  key: string;
+  name: string;
+  itemType: string;
+  slot?: EquipSlot | null;
+  rarity: MagicItemRarity;
+  requiresAttunement: boolean;
+  hasEffect: boolean;
 }
 
 export interface PlayerStateEvent {

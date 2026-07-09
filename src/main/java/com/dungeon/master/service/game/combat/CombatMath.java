@@ -116,6 +116,25 @@ public final class CombatMath {
                 List.of(n), null, n, false, false);
     }
 
+    /**
+     * Merge an extra flat modifier into a dice expression's single modifier term, preserving the
+     * one-modifier invariant the dice parser requires ("1d8+3" + 2 -> "1d8+5"; "1d8" + 2 -> "1d8+2";
+     * "1d8+3" + -3 -> "1d8"). A flat-constant expression becomes the summed constant; an
+     * unparseable expression is returned unchanged. Used to fold a magic weapon's +N (and set-ability
+     * modifier deltas) into weapon damage without producing chained "+a+b" terms.
+     */
+    public static String addFlat(String notation, int extra) {
+        if (notation == null) return null;
+        if (extra == 0) return notation;
+        String n = notation.trim();
+        if (n.matches("-?\\d+")) return String.valueOf(Integer.parseInt(n) + extra);
+        Matcher m = DICE.matcher(n);
+        if (!m.matches()) return notation;
+        int mod = (m.group(3) == null ? 0 : Integer.parseInt(m.group(3))) + extra;
+        return m.group(1) + "d" + m.group(2)
+                + (mod > 0 ? "+" + mod : mod < 0 ? String.valueOf(mod) : "");
+    }
+
     /** 5E crit: double the number of dice, keep the flat modifier ("1d8+3" -> "2d8+3"). */
     public static String critDouble(String notation) {
         if (notation == null) return null;

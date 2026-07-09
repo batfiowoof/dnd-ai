@@ -30,7 +30,9 @@ import InventoryManager from "@/components/game/InventoryManager";
 import ShopDialog from "@/components/game/ShopDialog";
 import { useAvailableShops } from "@/hooks/useShopQueries";
 import CombatActionModal from "@/components/combat/CombatActionModal";
-import { uploadCombatMap, leaveSession } from "@/lib/api";
+import { uploadCombatMap, leaveSession, getMagicItems } from "@/lib/api";
+import { buildMagicIndex } from "@/lib/magicItems";
+import type { MagicItemSummary } from "@/types";
 import { useLobbyData } from "@/components/game/hooks/useLobbyData";
 import { useCombatInteraction } from "@/components/game/hooks/useCombatInteraction";
 import { useCombatActionGate } from "@/components/game/hooks/useCombatActionGate";
@@ -91,8 +93,27 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   const [sheetPlayerId, setSheetPlayerId] = useState<string | null>(null);
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
+  const [magicIndex, setMagicIndex] = useState<Record<string, MagicItemSummary>>({});
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Fetch the magic-item catalog once so the inventory can badge items by rarity/attunement.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const items = await getMagicItems(token);
+        if (!cancelled) setMagicIndex(buildMagicIndex(items));
+      } catch {
+        /* non-fatal — items simply won't be badged as magic */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
 
   /* ── mutations ──────────────────────────────────────────────── */
   const startMutation = useStartSession();
@@ -421,6 +442,9 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
         onDrop={actions.dropItem}
         onEquip={actions.equipItem}
         onAdd={actions.addItem}
+        magicByName={magicIndex}
+        onAttune={actions.attuneItem}
+        onEndAttunement={actions.endAttunement}
       />
       <ShopDialog
         open={shopOpen}
@@ -438,6 +462,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
           state={sheetState}
           characterName={sheetPlayer.characterName}
           imageUrl={sheetPlayer.imageUrl}
+          magicByName={magicIndex}
         />
       )}
 

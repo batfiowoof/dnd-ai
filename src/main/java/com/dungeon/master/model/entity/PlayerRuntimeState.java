@@ -91,6 +91,15 @@ public class PlayerRuntimeState {
     @Builder.Default
     private List<InventoryItem> inventory = new ArrayList<>();
 
+    /**
+     * Display names of the magic items this player is currently attuned to (max 3, per the SRD).
+     * Attunement gates an attunement-required item's mechanical effects (see {@code MagicItemEffects}).
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "attuned_items", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> attunedItems = new ArrayList<>();
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     @Builder.Default

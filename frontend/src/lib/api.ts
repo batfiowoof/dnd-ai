@@ -4,6 +4,7 @@ import type {
   CreateSessionResponse,
   GameStateDto,
   JoinSessionRequest,
+  MagicItemSummary,
   MonsterSummary,
   PlayerDto,
   PlayerRuntimeState,
@@ -272,6 +273,14 @@ export async function getCombatSpells(token: string): Promise<SpellSummary[]> {
 /** Available encounter monsters (for the host's encounter picker). */
 export async function getCombatMonsters(token: string): Promise<MonsterSummary[]> {
   const res = await fetch(`${BASE_URL}/combat/monsters`, {
+    headers: getAuthHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+/** Magic-item catalog metadata (used to badge inventory items by name with rarity/attunement). */
+export async function getMagicItems(token: string): Promise<MagicItemSummary[]> {
+  const res = await fetch(`${BASE_URL}/combat/magic-items`, {
     headers: getAuthHeaders(token),
   });
   return handleResponse(res);

@@ -61,6 +61,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -97,6 +98,7 @@ public class CombatService {
     private final CombatLookups combatLookups;
     private final CombatSpellResolver combatSpellResolver;
     private final WeaponMasteryRules weaponMasteryRules;
+    private final MagicItemEffects magicItemEffects;
 
     /** DC of the Wisdom (Medicine) check to stabilize a dying creature. */
     private static final int STABILIZE_DC = 10;
@@ -1036,6 +1038,7 @@ public class CombatService {
         int attackBonus = (atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit())
                 + ConditionRules.attackModifier(enemy.getConditions());
         String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
+        String damageType = atks.isEmpty() ? null : atks.get(0).damageType();
         int swings = Math.max(1, enemy.getAttacksPerTurn());
 
         List<CombatActionEvent.Target> results = new ArrayList<>();
@@ -1061,14 +1064,19 @@ public class CombatService {
             boolean defeated = false;
             if (hit) {
                 DiceRollResult dmg = rollExpr(crit ? CombatMath.critDouble(damageDice) : damageDice);
+                int applied = resisted(dmg.total(), damageType, target.state());
+                if (applied < dmg.total()) {
+                    beat.add(victim.getCharacterName() + " resists " + damageType
+                            + " damage (halved to " + applied + ").");
+                }
                 PlayerRuntimeStateDto updated =
-                        playerStateService.applyHpDelta(victim.getId(), -dmg.total(), crit);
+                        playerStateService.applyHpDelta(victim.getId(), -applied, crit);
                 broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
                 targetHp = updated.currentHp();
                 targetMax = updated.maxHp();
                 defeated = updated.currentHp() <= 0;
                 damageSummary = RollSummary.of(dmg);
-                concentrationCheckOnDamage(enc, victim.getId(), dmg.total(), updated, beat);
+                concentrationCheckOnDamage(enc, victim.getId(), applied, updated, beat);
                 target = new TargetPlayer(victim, updated);  // refresh for the next swing
             }
 
@@ -1588,6 +1596,7 @@ public class CombatService {
         int attackBonus = (atks.isEmpty() ? enemy.getAttackBonus() : atks.get(0).toHit())
                 + ConditionRules.attackModifier(enemy.getConditions());
         String damageDice = atks.isEmpty() ? enemy.getDamageDice() : atks.get(0).damageDice();
+        String damageType = atks.isEmpty() ? null : atks.get(0).damageType();
 
         Token enemyTok = tokenFor(enc, enemy.getId().toString());
         Token victimTok = tokenFor(enc, victim.getId().toString());
@@ -1604,14 +1613,19 @@ public class CombatService {
         boolean defeated = false;
         if (hit) {
             DiceRollResult dmg = rollExpr(damageDice);
+            int applied = resisted(dmg.total(), damageType, state);
+            if (applied < dmg.total()) {
+                beat.add(victim.getCharacterName() + " resists " + damageType
+                        + " damage (halved to " + applied + ").");
+            }
             PlayerRuntimeStateDto updated =
-                    playerStateService.applyHpDelta(victim.getId(), -dmg.total(), crit);
+                    playerStateService.applyHpDelta(victim.getId(), -applied, crit);
             broadcast(sessionId, PlayerStateEvent.of(sessionId, updated));
             targetHp = updated.currentHp();
             targetMax = updated.maxHp();
             defeated = updated.currentHp() <= 0;
             damageSummary = RollSummary.of(dmg);
-            concentrationCheckOnDamage(enc, victim.getId(), dmg.total(), updated, beat);
+            concentrationCheckOnDamage(enc, victim.getId(), applied, updated, beat);
         }
 
         broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), "ATTACK", "makes an opportunity attack",
@@ -1633,13 +1647,47 @@ public class CombatService {
     }
 
     private int armorClass(Player player) {
-        List<InventoryItem> inv;
+        PlayerRuntimeStateDto st = safeState(player);
+        List<InventoryItem> inv = st == null ? null : st.inventory();
+        List<String> attuned = st == null ? List.of() : st.attunedItems();
+        return CombatMath.armorClass(character(player), inv, playerConds(player.getId()))
+                + magicItemEffects.acBonus(inv, attuned);
+    }
+
+    /**
+     * Halve incoming damage of a type the victim has magic-item Resistance to (round down). Returns
+     * the (possibly reduced) amount to apply. No-op when the damage type is unknown or unresisted.
+     */
+    private int resisted(int total, String damageType, PlayerRuntimeStateDto victimState) {
+        if (total <= 0 || damageType == null || victimState == null) return total;
+        Set<String> res = magicItemEffects.resistances(victimState.inventory(), victimState.attunedItems());
+        return res.stream().anyMatch(r -> r.equalsIgnoreCase(damageType)) ? total / 2 : total;
+    }
+
+    /** The player's full runtime state, or {@code null} when none exists (e.g. tests). */
+    private PlayerRuntimeStateDto safeState(Player player) {
         try {
-            inv = playerStateService.getState(player.getId()).inventory();
+            return playerStateService.getState(player.getId());
         } catch (RuntimeException ex) {
-            inv = null;
+            return null;
         }
-        return CombatMath.armorClass(character(player), inv, playerConds(player.getId()));
+    }
+
+    /**
+     * The attack/damage bonus from a set-ability magic item (Gauntlets of Ogre Power etc.): the
+     * increase in the best-of-STR/DEX modifier once the item raises the relevant score. Based on the
+     * character's own scores (the same source {@link CombatMath#attackBonus} uses) so it is purely
+     * the item's contribution. Zero when no set-ability item is live.
+     */
+    private int statSetAttackDelta(Character c, List<InventoryItem> inv, List<String> attuned) {
+        if (c == null) return 0;
+        Map<String, Integer> base = new java.util.LinkedHashMap<>();
+        base.put("STR", c.getStrength());
+        base.put("DEX", c.getDexterity());
+        Map<String, Integer> eff = magicItemEffects.effectiveAbilities(base, inv, attuned);
+        int baseBest = Math.max(Math.floorDiv(base.get("STR") - 10, 2), Math.floorDiv(base.get("DEX") - 10, 2));
+        int effBest = Math.max(Math.floorDiv(eff.get("STR") - 10, 2), Math.floorDiv(eff.get("DEX") - 10, 2));
+        return effBest - baseBest;
     }
 
     /** The player's current inventory, or an empty list when no runtime state exists (e.g. tests). */
@@ -1652,9 +1700,15 @@ public class CombatService {
         }
     }
 
-    /** Attack bonus = best of STR/DEX modifier + proficiency bonus. */
+    /** Attack bonus = best of STR/DEX modifier + proficiency bonus, plus magic weapon/stat bonuses. */
     private int attackBonus(Player player) {
-        return CombatMath.attackBonus(character(player));
+        PlayerRuntimeStateDto st = safeState(player);
+        List<InventoryItem> inv = st == null ? null : st.inventory();
+        List<String> attuned = st == null ? List.of() : st.attunedItems();
+        Character c = character(player);
+        return CombatMath.attackBonus(c)
+                + magicItemEffects.attackBonus(inv, attuned)
+                + statSetAttackDelta(c, inv, attuned);
     }
 
     /** The player's basic-attack range in feet, inferred from their weapon items by name. */
@@ -1666,15 +1720,18 @@ public class CombatService {
         }
     }
 
-    /** Weapon damage = the equipped weapon's die (by name) + best STR/DEX modifier; 1d4 unarmed. */
+    /**
+     * Weapon damage = the equipped weapon's die (by name) + best STR/DEX modifier; 1d4 unarmed.
+     * Folds a magic weapon's +N and any set-ability modifier delta into the flat term.
+     */
     private String damageDice(Player player) {
-        List<InventoryItem> inv;
-        try {
-            inv = playerStateService.getState(player.getId()).inventory();
-        } catch (RuntimeException ex) {
-            inv = null;
-        }
-        return CombatMath.damageDice(character(player), inv);
+        PlayerRuntimeStateDto st = safeState(player);
+        List<InventoryItem> inv = st == null ? null : st.inventory();
+        List<String> attuned = st == null ? List.of() : st.attunedItems();
+        Character c = character(player);
+        String base = CombatMath.damageDice(c, inv);
+        int extra = magicItemEffects.damageBonus(inv, attuned) + statSetAttackDelta(c, inv, attuned);
+        return CombatMath.addFlat(base, extra);
     }
 
     private String notation(int bonus) {

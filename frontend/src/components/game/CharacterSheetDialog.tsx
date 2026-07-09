@@ -1,9 +1,10 @@
 "use client";
 
-import type { PlayerRuntimeState } from "@/types";
+import type { MagicItemSummary, PlayerRuntimeState } from "@/types";
 import { Modal, cn } from "@/components/ui";
 import { formatCoins } from "@/lib/money";
 import { SLOT_LABELS } from "@/lib/itemKinds";
+import { RARITY_BADGE, RARITY_LABELS, magicFor } from "@/lib/magicItems";
 import Portrait from "@/components/Portrait";
 import CharacterStatus from "@/components/game/CharacterStatus";
 import SrdEntryRow from "@/components/game/SrdEntryRow";
@@ -23,6 +24,8 @@ interface CharacterSheetDialogProps {
   state: PlayerRuntimeState;
   characterName?: string;
   imageUrl?: string | null;
+  /** Magic-item catalog indexed by lowercased name (see lib/magicItems); empty until fetched. */
+  magicByName?: Record<string, MagicItemSummary>;
 }
 
 /**
@@ -36,7 +39,9 @@ export default function CharacterSheetDialog({
   state,
   characterName,
   imageUrl,
+  magicByName = {},
 }: CharacterSheetDialogProps) {
+  const attuned = new Set((state.attunedItems ?? []).map((n) => n.toLowerCase()));
   const abilities = state.abilities ?? {};
   const cantrips = state.cantrips ?? [];
   const knownSpells = state.knownSpells ?? [];
@@ -209,28 +214,54 @@ export default function CharacterSheetDialog({
         {/* Equipment — expand a row for damage / AC / properties / rules text */}
         {state.inventory.length > 0 && (
           <section>
-            <SectionHeading>Equipment</SectionHeading>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <SectionHeading>Equipment</SectionHeading>
+              {(state.attunedItems?.length ?? 0) > 0 && (
+                <span className="text-[10px] font-semibold text-gold" aria-label={`${attuned.size} of 3 attunement slots used`}>
+                  ✦ {attuned.size} / 3 attuned
+                </span>
+              )}
+            </div>
             <div className="space-y-1.5">
-              {state.inventory.map((item) => (
-                <SrdEntryRow
-                  key={`${item.name}-${item.kind}`}
-                  name={item.name}
-                  kind="equipment"
-                  accent={item.kind === "POTION_HEALING"}
-                  meta={
-                    <span className="flex items-center gap-1.5">
-                      {(item.slot || item.equipped) && (
-                        <span className="text-[9px] uppercase tracking-wider text-accent-light">
-                          ◆ {item.slot ? SLOT_LABELS[item.slot] : "eq"}
-                        </span>
-                      )}
-                      {item.qty > 1 && (
-                        <span className="tabular text-text">×{item.qty}</span>
-                      )}
-                    </span>
-                  }
-                />
-              ))}
+              {state.inventory.map((item) => {
+                const magic = magicFor(item.name, magicByName);
+                const isAttuned = attuned.has(item.name.toLowerCase());
+                return (
+                  <SrdEntryRow
+                    key={`${item.name}-${item.kind}`}
+                    name={item.name}
+                    kind="equipment"
+                    accent={item.kind === "POTION_HEALING"}
+                    meta={
+                      <span className="flex items-center gap-1.5">
+                        {isAttuned && (
+                          <span className="text-[9px] font-semibold uppercase tracking-wider text-gold">
+                            ✦ Attuned
+                          </span>
+                        )}
+                        {magic && (
+                          <span
+                            className={cn(
+                              "rounded border px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                              RARITY_BADGE[magic.rarity]
+                            )}
+                          >
+                            {RARITY_LABELS[magic.rarity]}
+                          </span>
+                        )}
+                        {(item.slot || item.equipped) && (
+                          <span className="text-[9px] uppercase tracking-wider text-accent-light">
+                            ◆ {item.slot ? SLOT_LABELS[item.slot] : "eq"}
+                          </span>
+                        )}
+                        {item.qty > 1 && (
+                          <span className="tabular text-text">×{item.qty}</span>
+                        )}
+                      </span>
+                    }
+                  />
+                );
+              })}
             </div>
           </section>
         )}
