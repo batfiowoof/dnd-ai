@@ -5,6 +5,7 @@ import { Modal, Button, Spinner, cn } from "@/components/ui";
 import { useSessionStore } from "@/store/sessionStore";
 import Die from "@/components/dice/Die";
 import type { CombatActionEvent, CombatTarget, RollSummary } from "@/types";
+import { isBossAction } from "@/types";
 import { conditionMeta } from "@/lib/conditions";
 import { bandMeta } from "@/lib/health";
 import { playSound, type SoundName } from "@/lib/sound";
@@ -62,6 +63,8 @@ function actionSound(evt: CombatActionEvent): SoundName {
   if (t.some((x) => x.attackRoll?.crit)) return "crit";
   if (t.some((x) => x.hit === true || x.saved === false)) return "hit";
   if (t.some((x) => x.hit === false || x.saved === true)) return "miss";
+  // A boss's flavour beat rolls nothing — cue it as a miss rather than a phantom hit.
+  if (isBossAction(evt.actionKind)) return "miss";
   return "hit";
 }
 

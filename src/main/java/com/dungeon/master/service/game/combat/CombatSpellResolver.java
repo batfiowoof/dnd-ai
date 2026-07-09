@@ -99,7 +99,7 @@ public class CombatSpellResolver {
      */
     public PendingSpell resolveSpellToHit(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
                                           SpellEffect effect, int spellLevel, List<UUID> targetIds,
-                                          List<CombatActionEvent.Target> results) {
+                                          List<CombatActionEvent.Target> results, List<String> beat) {
         List<Enemy> targets = enemyTargets(sessionId, targetIds, effect);
         String dice = CombatMath.scaledNotation(effect.damageDice(), effect, spellLevel, casterChar);
         int dc = SpellcastingRules.spellSaveDc(casterChar);
@@ -131,17 +131,12 @@ public class CombatSpellResolver {
                             atk, targetAc, hit, false, 0));
                 }
                 case SAVE -> {
-                    boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
-                    int saveMod = CombatMath.enemySaveMod(e, effect.saveAbility())
-                            + ConditionRules.saveModifier(e.getConditions());
-                    DiceRollResult save = diceService.roll(CombatMath.notation(saveMod),
-                            ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
-                    boolean saved = !autoFail && save.total() >= dc;
+                    EnemySave s = rollEnemySave(e, effect, dc, beat);
                     results.add(CombatActionEvent.Target.save(CombatantKind.ENEMY, e.getName(),
-                            RollSummary.of(save), dc, saved, null,
+                            RollSummary.of(s.roll()), dc, s.saved(), null,
                             e.getCurrentHp(), e.getMaxHp(), !e.isAlive()));
                     outcomes.add(new PendingSpellTarget(e.getId(), SpellResolution.SAVE,
-                            save, 0, false, saved, 0));
+                            s.roll(), 0, false, s.saved(), 0));
                 }
                 default -> { // AUTO — auto-hit; projectiles (darts) distributed across targets
                     results.add(CombatActionEvent.Target.autoDamage(CombatantKind.ENEMY, e.getName(),
@@ -226,6 +221,43 @@ public class CombatSpellResolver {
         return beat;
     }
 
+    /** The outcome of one enemy saving throw: the d20 that was rolled, and whether it succeeded. */
+    private record EnemySave(DiceRollResult roll, boolean saved) {}
+
+    /**
+     * Roll one enemy's saving throw against a spell, honouring conditions that auto-fail it or grant
+     * advantage/disadvantage — the single place enemies roll saves.
+     *
+     * <p>A legendary creature may spend a <b>Legendary Resistance</b> to turn a failure into a
+     * success, but only against an effect that would impose a condition. That keeps a boss from
+     * burning its charges soaking Fireball damage while still letting it shrug off the save-or-lose
+     * spells (Hold Monster, Banishment) that would otherwise end the fight before it acts.
+     *
+     * <p>Deliberately not applied to the "save ends" re-rolls in {@code expireEnemyConditions} — a
+     * boss spends its charges resisting the spell, not escaping it afterwards.
+     */
+    private EnemySave rollEnemySave(Enemy e, SpellEffect effect, int dc, List<String> beat) {
+        boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
+        int saveMod = CombatMath.enemySaveMod(e, effect.saveAbility())
+                + ConditionRules.saveModifier(e.getConditions());
+        DiceRollResult save = diceService.roll(CombatMath.notation(saveMod),
+                ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
+        boolean saved = !autoFail && save.total() >= dc;
+
+        if (!saved && effect.condition() != null && e.getLegendaryResistances() > 0) {
+            int left = e.getLegendaryResistances() - 1;
+            e.setLegendaryResistances(left);
+            enemyRepository.save(e);
+            saved = true;
+            if (beat != null) {
+                beat.add(e.getName() + " shrugs off " + effect.name()
+                        + " with Legendary Resistance (" + left + (left == 1 ? " use" : " uses")
+                        + " left).");
+            }
+        }
+        return new EnemySave(save, saved);
+    }
+
     /** BUFF / DEBUFF / CONTROL / UTILITY — tag a structured condition (save-gated for enemies) and narrate. */
     public void resolveSpellEffect(CombatEncounter enc, UUID sessionId, Player caster, Character casterChar,
                                    SpellEffect effect, List<UUID> targetIds,
@@ -240,13 +272,9 @@ public class CombatSpellResolver {
                 boolean applied = true;
                 RollSummary saveSummary = null;
                 if (effect.resolution() == SpellResolution.SAVE) {
-                    boolean autoFail = ConditionRules.autoFailsSave(e.getConditions(), effect.saveAbility());
-                    int saveMod = CombatMath.enemySaveMod(e, effect.saveAbility())
-                            + ConditionRules.saveModifier(e.getConditions());
-                    DiceRollResult save = diceService.roll(CombatMath.notation(saveMod),
-                            ConditionRules.saveMode(e.getConditions(), effect.saveAbility()));
-                    applied = autoFail || save.total() < dc;
-                    saveSummary = RollSummary.of(save);
+                    EnemySave s = rollEnemySave(e, effect, dc, beat);
+                    applied = !s.saved();
+                    saveSummary = RollSummary.of(s.roll());
                 }
                 if (applied && cond != null) {
                     applyEnemyCondition(enc, e, effect, caster, dc);

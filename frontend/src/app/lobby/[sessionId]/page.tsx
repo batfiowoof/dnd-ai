@@ -272,13 +272,13 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
   }
 
   /* ── combat handlers ────────────────────────────────────────── */
-  function handleStartEncounter(enemyKeys: string[]) {
+  function handleStartEncounter(enemyKeys: string[], lair: boolean) {
     if (!clientRef.current || !connected) return;
     // Show the "preparing the battlefield" loader until COMBAT_START arrives (the LLM
     // scene generation can take a couple seconds). Safety-clear it if nothing lands.
     setCombatInitializing(true);
     setTimeout(() => setCombatInitializing(false), 15000);
-    sendStartEncounter(clientRef.current, sessionId, enemyKeys);
+    sendStartEncounter(clientRef.current, sessionId, enemyKeys, lair);
   }
 
   // Hold combat actions back from the server until the player rolls/confirms (so DM narration

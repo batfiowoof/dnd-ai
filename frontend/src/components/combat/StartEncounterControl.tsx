@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Button, Modal } from "@/components/ui";
+import { useEffect, useMemo, useState } from "react";
+import { Button, Modal, Switch } from "@/components/ui";
 import { useCombatMonsters } from "@/hooks/useCombatReference";
 import type { MonsterSummary } from "@/types";
 
 interface StartEncounterControlProps {
   connected: boolean;
-  onStart: (enemyKeys: string[]) => void;
+  onStart: (enemyKeys: string[], lair: boolean) => void;
 }
 
 /** Total combatants a single encounter may spawn (matches the backend MAX_ENCOUNTER). */
@@ -32,6 +32,7 @@ export default function StartEncounterControl({
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
+  const [lair, setLair] = useState(false);
 
   const monstersQuery = useCombatMonsters(open);
   const monsters = useMemo(() => monstersQuery.data ?? [], [monstersQuery.data]);
@@ -60,6 +61,12 @@ export default function StartEncounterControl({
     [counts, byKey]
   );
 
+  // Only a lair-capable creature can be fought in its lair; if it's dropped, drop the choice too.
+  const lairMonster = useMemo(() => chosen.find((m) => m.hasLair), [chosen]);
+  useEffect(() => {
+    if (!lairMonster) setLair(false);
+  }, [lairMonster]);
+
   function adjust(key: string, delta: number) {
     setCounts((c) => {
       const cur = c[key] ?? 0;
@@ -76,9 +83,10 @@ export default function StartEncounterControl({
       for (let i = 0; i < n; i++) keys.push(key);
     }
     if (keys.length === 0) return;
-    onStart(keys.slice(0, MAX_TOTAL));
+    onStart(keys.slice(0, MAX_TOTAL), lair && !!lairMonster);
     setCounts({});
     setQuery("");
+    setLair(false);
     setOpen(false);
   }
 
@@ -152,6 +160,16 @@ export default function StartEncounterControl({
               .filter((m) => (counts[m.key] ?? 0) === 0)
               .map(row)}
           </div>
+
+          {lairMonster && (
+            <Switch
+              label="In its lair"
+              hint={`${lairMonster.name} takes a lair action on initiative 20.`}
+              checked={lair}
+              onChange={setLair}
+              className="border-gold/40"
+            />
+          )}
 
           <p className="text-right text-[10px] text-text-muted">
             {total}/{MAX_TOTAL} combatants

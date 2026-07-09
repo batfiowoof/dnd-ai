@@ -28,9 +28,13 @@ public record CustomMonster(
         List<MonsterAttack> attacks,
         MonsterTemplate.Multiattack multiattack
 ) {
-    /** Convert to the engine's {@link MonsterTemplate} so the combat path treats it like any SRD block. */
+    /**
+     * Convert to the engine's {@link MonsterTemplate} so the combat path treats it like any SRD block.
+     * Homebrew creatures carry no boss mechanics — legendary and lair actions are authored only for
+     * the curated SRD set in {@code resources/dnd5e/monster-actions.json}.
+     */
     public MonsterTemplate toTemplate() {
         return new MonsterTemplate(key, name, size, type, cr, ac, hp, hpDice, speed, dexMod,
-                abilities, attacks, multiattack);
+                abilities, attacks, multiattack, 0, List.of(), List.of(), 0);
     }
 }

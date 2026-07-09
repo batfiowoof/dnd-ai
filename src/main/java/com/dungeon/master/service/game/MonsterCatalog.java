@@ -1,7 +1,9 @@
 package com.dungeon.master.service.game;
 
+import com.dungeon.master.model.dto.MonsterAction;
 import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
+import com.dungeon.master.model.enums.MonsterActionKind;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -37,11 +39,20 @@ import java.util.Set;
 @Slf4j
 public class MonsterCatalog {
 
-    /** Lightweight view for the host's encounter picker (sorted by CR). */
+    /**
+     * Lightweight view for the host's encounter picker (sorted by CR). {@code hasLair} lets the
+     * picker offer the "In its lair" toggle only for monsters that have authored lair actions.
+     */
     public record MonsterSummary(String key, String name, Double cr, String type,
-                                 String size, Integer hp, Integer ac) {}
+                                 String size, Integer hp, Integer ac, boolean hasLair) {}
 
     private static final String RESOURCE = "dnd5e/monsters.json";
+
+    /**
+     * Hand-authored boss mechanics merged onto the generated stat blocks by key — the same curated
+     * overlay pattern as {@code MagicItemCatalog}'s {@code magic-item-effects.json}.
+     */
+    private static final String ACTIONS_RESOURCE = "dnd5e/monster-actions.json";
 
     // Self-instantiated Jackson 2 mapper (Spring Boot 4's bean is Jackson 3) — see SrdContent.
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -51,6 +62,7 @@ public class MonsterCatalog {
 
     @PostConstruct
     void load() {
+        Map<String, JsonNode> actions = loadActionOverlay();
         try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) {
             JsonNode arr = objectMapper.readTree(in);
             if (arr == null || !arr.isArray()) {
@@ -58,18 +70,39 @@ public class MonsterCatalog {
                 return;
             }
             for (JsonNode node : arr) {
-                MonsterTemplate t = parse(node);
+                MonsterTemplate t = parse(node, actions);
                 // require enough to fight with: a key, AC, HP, and at least one attack
                 if (t == null || t.ac() == null || t.hp() == null || t.attacks().isEmpty()) {
                     continue;
                 }
                 byKey.put(t.key().toUpperCase(Locale.ROOT), t);
             }
-            log.info("Loaded {} SRD 5.2.1 monster stat blocks from {}", byKey.size(), RESOURCE);
+            long legendary = byKey.values().stream().filter(MonsterTemplate::isLegendary).count();
+            log.info("Loaded {} SRD 5.2.1 monster stat blocks from {} ({} legendary)",
+                    byKey.size(), RESOURCE, legendary);
         } catch (Exception e) {
             log.warn("Failed to load monsters from {} — combat falls back to Bestiary: {}",
                     RESOURCE, e.getMessage());
         }
+    }
+
+    /**
+     * The curated legendary/lair overlay, keyed by uppercased monster key. A missing or malformed
+     * file only costs the bosses their legendary actions, so it degrades to a warning.
+     */
+    private Map<String, JsonNode> loadActionOverlay() {
+        Map<String, JsonNode> overlay = new LinkedHashMap<>();
+        try (InputStream in = new ClassPathResource(ACTIONS_RESOURCE).getInputStream()) {
+            JsonNode monsters = objectMapper.readTree(in).path("monsters");
+            if (monsters.isObject()) {
+                monsters.fields().forEachRemaining(
+                        e -> overlay.put(e.getKey().toUpperCase(Locale.ROOT), e.getValue()));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load legendary/lair overlay {} — bosses lose legendary actions: {}",
+                    ACTIONS_RESOURCE, e.getMessage());
+        }
+        return overlay;
     }
 
     /* ── public API ──────────────────────────────────────────────── */
@@ -101,7 +134,7 @@ public class MonsterCatalog {
         List<MonsterSummary> out = new ArrayList<>();
         for (MonsterTemplate t : byKey.values()) {
             out.add(new MonsterSummary(t.key(), t.name(), t.cr(), t.type(), t.size(),
-                    t.hp(), t.ac()));
+                    t.hp(), t.ac(), t.hasLair()));
         }
         out.sort((a, b) -> {
             double ca = a.cr() == null ? 99 : a.cr();
@@ -118,7 +151,7 @@ public class MonsterCatalog {
 
     /* ── parsing ─────────────────────────────────────────────────── */
 
-    private MonsterTemplate parse(JsonNode n) {
+    private MonsterTemplate parse(JsonNode n, Map<String, JsonNode> actionOverlay) {
         String key = text(n, "key");
         String name = text(n, "name");
         if (key.isBlank() || name.isBlank()) return null;
@@ -151,6 +184,13 @@ public class MonsterCatalog {
                     m.path("attack").asText(null));
         }
 
+        // Boss mechanics live only in the curated overlay — absent for the other ~297 monsters.
+        JsonNode boss = actionOverlay.get(key.toUpperCase(Locale.ROOT));
+        List<MonsterAction> legendary = parseActions(boss == null ? null : boss.get("legendaryActions"));
+        List<MonsterAction> lair = parseActions(boss == null ? null : boss.get("lairActions"));
+        int legendaryMax = boss == null ? 0 : boss.path("legendaryActionMax").asInt(0);
+        int legendaryResistances = boss == null ? 0 : boss.path("legendaryResistances").asInt(0);
+
         return new MonsterTemplate(
                 key, name,
                 nullable(n, "size"), nullable(n, "type"),
@@ -160,7 +200,39 @@ public class MonsterCatalog {
                 nullable(n, "hpDice"),
                 n.hasNonNull("speed") ? n.get("speed").asInt() : null,
                 n.path("dexMod").asInt(0),
-                abilities, attacks, multi);
+                abilities, attacks, multi,
+                legendaryMax, legendary, lair, legendaryResistances);
+    }
+
+    /** Parse a legendary/lair action array from the overlay; unknown kinds are dropped. */
+    private List<MonsterAction> parseActions(JsonNode arr) {
+        if (arr == null || !arr.isArray()) return List.of();
+        List<MonsterAction> out = new ArrayList<>();
+        for (JsonNode a : arr) {
+            MonsterActionKind kind;
+            try {
+                kind = MonsterActionKind.valueOf(a.path("kind").asText("").toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException ex) {
+                log.warn("Skipping monster action {} with unknown kind {}",
+                        text(a, "name"), a.path("kind").asText());
+                continue;
+            }
+            out.add(new MonsterAction(
+                    text(a, "name"),
+                    a.path("cost").asInt(1),
+                    kind,
+                    nullable(a, "attackName"),
+                    nullable(a, "saveAbility"),
+                    a.hasNonNull("saveDc") ? a.get("saveDc").asInt() : null,
+                    nullable(a, "damageDice"),
+                    nullable(a, "damageType"),
+                    a.path("halfOnSave").asBoolean(false),
+                    nullable(a, "condition"),
+                    a.hasNonNull("conditionRounds") ? a.get("conditionRounds").asInt() : null,
+                    a.hasNonNull("radiusFeet") ? a.get("radiusFeet").asInt() : null,
+                    nullable(a, "description")));
+        }
+        return List.copyOf(out);
     }
 
     private static String text(JsonNode node, String field) {

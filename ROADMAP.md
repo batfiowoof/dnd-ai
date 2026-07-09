@@ -12,11 +12,14 @@ resolution, exhaustion, rests, quests, shops/currency, NPCs, travel, world-build
 RAG-grounded DM). Each feature **reuses existing infrastructure** rather than adding a new
 subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
-> **Suggested build order (dependency-aware):** ~~1 → 2 → 3 → 4 → 5 → 6 → 7~~ (shipped) → 8.
+> **Suggested build order (dependency-aware):** ~~1 → 2 → 3 → 4 → 5 → 6 → 7 → 8~~ — **all shipped.**
 > Feature 1 (structured proficiency) was foundational — features 5 (feats) and 7 (spell prep) now
 > plug into its proficiency model; features 5–8 lean on the combat/roll hooks the earlier ones
 > establish. Features 5 (Lucky) and 6 (Heroic Inspiration) shipped together — they share one
 > interactive reroll window.
+>
+> **This batch is complete.** The project now moves to its last phase — QoL, bug fixes, and
+> stabilization.
 
 ---
 
@@ -24,6 +27,30 @@ subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
 Prior batches delivered the core loop. Most recently:
 
+- **Legendary & Lair actions (feature 8)** — boss drama for high-CR monsters. `MonsterActionKind`
+  enum {ATTACK,SAVE,NARRATIVE} + `MonsterAction` DTO; a hand-authored
+  `resources/dnd5e/monster-actions.json` overlay (analogue of `magic-item-effects.json`) merged by
+  key in `MonsterCatalog` — the generated `monsters.json` has no boss data, and the SRD prose is
+  truncated for legendary actions and silent on lair actions. **26 curated bosses**: all 20 Adult +
+  Ancient dragons (shared shape — Detect / Tail Attack / Wing Attack; DC = 8 + PB + STR mod, which
+  reproduces the published stat blocks) plus Lich, Vampire, Kraken, Tarrasque, Aboleth, Mummy Lord.
+  `Enemy` gains `legendaryActions`/`lairActions` (JSONB) + `legendaryActionMax`/
+  `legendaryActionsRemaining`/`legendaryResistances`; `CombatEncounter.lairActionRound` (`V35`).
+  **Legendary actions** fire from `CombatService.advanceTurn` at the end of each hero's turn
+  (priciest affordable option, budget refilled at the boss's own turn); **lair actions** fire once
+  per round from the `resolveUntilPlayerOrEnd` loop at `MonsterActionRules.lairSlot` — the
+  initiative-count-20 slot. SAVE actions are the first enemy→player saving throws in the engine
+  (`CheckModifierService.computeSaveModifier`, mirroring `CombatSpellResolver`'s player→enemy path).
+  **Legendary Resistance** hooks a new shared `rollEnemySave` helper that dedupes the resolver's two
+  save sites. Host toggles "In its lair" (`Switch`) in `StartEncounterControl`; gold-railed boss rows
+  in `CombatRollFeed`.
+  *Simplifications: legendary actions fire only at the end of player turns, not other monsters';
+  they resolve via `applySwing`, never `runMultiattack`, so no Shield/Absorb reaction window opens
+  against them (`ReactionPause` would escape `advanceTurn`'s try/catch and roll back the
+  transaction); Legendary Resistance is per-encounter, not per-day, and is spent only against
+  condition-imposing effects; `lairSlot` clamps to the last combatant when everyone rolls ≥ 20
+  initiative (otherwise the lair would never act); homebrew `CustomMonster`s get no boss mechanics;
+  lair actions rotate by round rather than being chosen tactically.*
 - **Ritual casting & spell preparation (feature 7)** — `preparedSpells`/`preparedMax` on
   `PlayerRuntimeState` (`V34`, backfills prepared = known so mid-session casters keep casting).
   `SpellSlotTable.preparedCount`/`isPreparedCaster` (cleric/druid/wizard/paladin; `castingMod + level`,
@@ -112,23 +139,14 @@ Prior batches delivered the core loop. Most recently:
 
 ---
 
-## 8. Legendary & Lair actions
+## No features remain in this batch
 
-**Goal:** Boss drama for high-CR monsters.
+Everything scoped above has shipped. New work belongs to the **QoL / bug-fix / stabilization**
+phase — add entries here only if a new mechanic is genuinely required.
 
-### What exists / why it's a gap
-`monsters.json` stat blocks have **no** legendary/lair data — this feature must author it.
-
-### Backend
-- Extend the `monsters.json` schema + `MonsterCatalog` / `Bestiary` with optional `legendaryActions`
-  (count + options) and `lairActions`.
-- Drive them in `CombatService`: legendary actions at the end of each hero's turn, lair actions on
-  initiative count 20, reusing enemy attack resolution and `EnemyTacticsService` for the choice.
-
-### Frontend
-- Surface legendary/lair beats in the combat log / roll feed (`components/combat/CombatRollFeed.tsx`).
-
-**Scope:** hand-author data for a curated set of iconic high-CR monsters, not all 323 stat blocks.
+Deliberately still deferred: **Encumbrance**, **Bastions**, out-of-combat action economy,
+charge/activated magic items, and legendary/lair data for the remaining ~297 stat blocks (the
+overlay in `resources/dnd5e/monster-actions.json` is the extension point — add a key, no code).
 
 ---
 

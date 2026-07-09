@@ -27,7 +27,7 @@ class EnemyFactoryCustomMonsterTest {
                 "CUSTOM_ASH_WRAITH", "Ash Wraith", "Medium", "Undead", 2.0, 13, 22, "5d8", 30, 2,
                 Map.of("STR", 8, "DEX", 14, "CON", 12, "INT", 10, "WIS", 10, "CHA", 10),
                 List.of(new MonsterAttack("Claw", "MELEE", 4, 5, null, "2d6", "Necrotic")),
-                null);
+                null, 0, List.of(), List.of(), 0);
     }
 
     @Test

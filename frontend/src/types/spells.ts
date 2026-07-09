@@ -49,4 +49,6 @@ export interface MonsterSummary {
   size: string | null;
   hp: number | null;
   ac: number | null;
+  /** The monster has authored lair actions, so the host may fight it in its lair. */
+  hasLair: boolean;
 }

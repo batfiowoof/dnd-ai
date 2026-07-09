@@ -114,7 +114,16 @@ export type CombatActionKind =
   | "SPELL_DAMAGE"
   | "SPELL_HEAL"
   | "SPELL_EFFECT"
-  | "ITEM";
+  | "ITEM"
+  /** A boss acting between the heroes' turns. */
+  | "LEGENDARY_ACTION"
+  /** The boss's lair acting on initiative count 20. */
+  | "LAIR_ACTION";
+
+/** Legendary and lair beats are the boss's, and read as one visual family in the feed. */
+export function isBossAction(kind: CombatActionKind): boolean {
+  return kind === "LEGENDARY_ACTION" || kind === "LAIR_ACTION";
+}
 
 /**
  * One actor's complete combat action (an attack, multiattack, AoE spell, or heal),

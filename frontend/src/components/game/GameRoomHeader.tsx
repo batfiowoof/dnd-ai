@@ -10,8 +10,8 @@ interface GameRoomHeaderProps {
   /** The local player's id (from session storage), or null. */
   playerId: string | null;
   isCreator: boolean;
-  /** Host-only: kick off an encounter (shown out of combat). */
-  onStartEncounter: (enemyKeys: string[]) => void;
+  /** Host-only: kick off an encounter (shown out of combat). {@code lair} enables lair actions. */
+  onStartEncounter: (enemyKeys: string[], lair: boolean) => void;
   /** Host-only: open the "end adventure?" confirmation. */
   onEndSession: () => void;
   /** Open the "leave session?" confirmation. */

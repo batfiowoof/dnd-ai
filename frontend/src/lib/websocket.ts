@@ -246,14 +246,16 @@ export function sendShortRest(client: Client, sessionId: string, hitDice: number
 
 /* ── Combat ───────────────────────────────────────────────────── */
 
+/** @param lair fight the monster in its lair, enabling lair actions on initiative count 20 */
 export function sendStartEncounter(
   client: Client,
   sessionId: string,
-  enemies: string[]
+  enemies: string[],
+  lair = false
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/combat/start`,
-    body: JSON.stringify({ enemies }),
+    body: JSON.stringify({ enemies, lair }),
   });
 }
 

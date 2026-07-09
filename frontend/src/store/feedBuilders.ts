@@ -1,4 +1,5 @@
 import type { CombatActionEvent, DiceRollEvent } from "@/types";
+import { isBossAction } from "@/types";
 import { conditionMeta } from "@/lib/conditions";
 import { bandMeta } from "@/lib/health";
 import { formatDamageRoll } from "@/lib/combat";
@@ -22,6 +23,11 @@ export interface FeedEntry {
   outcome: string | null;
   detail: string | null;
   tone: "good" | "bad" | "neutral";
+  /**
+   * A legendary or lair action — a boss acting outside its own turn. Rendered with a gold accent
+   * AND an explicit marker, so the distinction never rests on colour alone.
+   */
+  boss?: boolean;
 }
 
 /** Most recent entries kept in the feed (older ones scroll out; chat log keeps the full record). */
@@ -57,11 +63,15 @@ export function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
   const base = `caf-${evt.seq}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 6)}`;
+  const boss = isBossAction(evt.actionKind);
   return evt.targets.map((t, i) => {
     const r = t.attackRoll ?? t.saveRoll;
     const roll: FeedRoll | null = r
       ? { sides: 20, faces: r.faces, total: r.total, crit: r.crit, fumble: r.fumble }
       : null;
+    // A boss's flavour beat (Detect, Onslaught) targets the boss itself and rolls nothing —
+    // "Ancient Red Dragon · uses Detect", not "uses Detect Ancient Red Dragon".
+    const selfBeat = boss && t.targetName === evt.actorName;
 
     // Outcome + whether it benefits the party (drives colour from the players' POV).
     let outcome: string | null = null;
@@ -76,8 +86,9 @@ export function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
       outcome = "Heal";
       good = true;
     } else if (t.condition) {
-      outcome = conditionMeta(t.condition).label;
-      good = t.targetKind === "ENEMY";
+      // Self-beats carry the action's name, not a condition — and they favour nobody.
+      outcome = selfBeat ? t.condition : conditionMeta(t.condition).label;
+      good = selfBeat ? null : t.targetKind === "ENEMY";
     }
     if (t.defeated) {
       outcome = "Down!";
@@ -95,8 +106,10 @@ export function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
       );
     }
     if (t.heal !== null && t.heal > 0) bits.push(`+${t.heal}`);
-    // Enemy HP is hidden — show the band; players show exact HP.
-    bits.push(t.healthBand ? bandMeta(t.healthBand).label : `${Math.max(0, t.currentHp)}/${t.maxHp}`);
+    // Enemy HP is hidden — show the band; players show exact HP. A self-beat reports no HP at all.
+    if (!selfBeat) {
+      bits.push(t.healthBand ? bandMeta(t.healthBand).label : `${Math.max(0, t.currentHp)}/${t.maxHp}`);
+    }
 
     const tone: FeedEntry["tone"] =
       good === true ? "good" : good === false ? "bad" : "neutral";
@@ -105,11 +118,12 @@ export function feedFromAction(evt: CombatActionEvent): FeedEntry[] {
       id: `${base}-${i}`,
       actorName: evt.actorName,
       actorKind: evt.actorKind,
-      title: `${evt.label} ${t.targetName}`.trim(),
+      title: selfBeat ? evt.label : `${evt.label} ${t.targetName}`.trim(),
       roll,
       outcome,
-      detail: bits.join(" · "),
+      detail: bits.join(" · ") || null,
       tone,
+      boss,
     };
   });
 }

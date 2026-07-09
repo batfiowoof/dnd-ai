@@ -12,6 +12,7 @@ import com.dungeon.master.model.dto.DiceRollEvent;
 import com.dungeon.master.model.dto.DiceRollResult;
 import com.dungeon.master.model.dto.GridState;
 import com.dungeon.master.model.dto.InventoryItem;
+import com.dungeon.master.model.dto.MonsterAction;
 import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
@@ -51,6 +52,7 @@ import com.dungeon.master.service.game.combat.CombatSpellResolver;
 import com.dungeon.master.service.game.combat.CombatNarrationFormatter;
 import com.dungeon.master.service.game.combat.CombatTerrainService;
 import com.dungeon.master.service.game.combat.EnemyFactory;
+import com.dungeon.master.service.game.combat.MonsterActionRules;
 import com.dungeon.master.service.game.combat.WeaponMasteryRules;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -157,8 +159,18 @@ public class CombatService {
 
     /* ── start ───────────────────────────────────────────────────── */
 
+    /** Start an encounter that is not fought in any creature's lair. */
     @Transactional
     public void startEncounter(UUID sessionId, List<String> enemyKeys) {
+        startEncounter(sessionId, enemyKeys, false);
+    }
+
+    /**
+     * @param inLair the host fought this encounter in the monster's lair, so lair-capable enemies
+     *               carry their lair actions and the engine fires one each round on initiative 20
+     */
+    @Transactional
+    public void startEncounter(UUID sessionId, List<String> enemyKeys, boolean inLair) {
         if (encounterRepository.findBySessionIdAndStatus(sessionId, CombatStatus.ACTIVE).isPresent()) {
             throw new IllegalStateException("An encounter is already in progress");
         }
@@ -180,7 +192,7 @@ public class CombatService {
             long sameType = enemyKeys.stream().filter(k -> k.equalsIgnoreCase(key)).count();
             int n = counts.merge(key.toLowerCase(), 1, Integer::sum);
             enemies.add(EnemyFactory.buildEnemy(monsterCatalog, sessionCustom, diceService, sessionId,
-                    key, sameType > 1 ? n : 0, difficulty));
+                    key, sameType > 1 ? n : 0, difficulty, inLair));
         }
         enemyRepository.saveAll(enemies);
 
@@ -479,7 +491,7 @@ public class CombatService {
             }
             case DAMAGE -> {
                 pendingSpell = combatSpellResolver.resolveSpellToHit(enc, sessionId, player, caster, effect,
-                        spellLevel, effectiveTargets, results);
+                        spellLevel, effectiveTargets, results, beat);
                 yield "SPELL_DAMAGE";
             }
             default -> {
@@ -915,7 +927,14 @@ public class CombatService {
 
     /* ── turn engine ─────────────────────────────────────────────── */
 
+    /**
+     * End the active player's turn. Legendary creatures spend legendary actions here — at the end of
+     * a hero's turn, before the initiative pointer moves — which is the only place a monster acts
+     * outside its own slot. Every caller of this method is downstream of {@link #requireCombatTurn},
+     * so the combatant at {@code activeIndex} is always the player whose turn is ending.
+     */
     private void advanceTurn(CombatEncounter enc, List<String> beat) {
+        runLegendaryActions(enc, beat);
         advanceIndex(enc);
         resolveUntilPlayerOrEnd(enc, beat);
     }
@@ -929,8 +948,15 @@ public class CombatService {
         UUID sessionId = enc.getSessionId();
         int order = enc.getInitiativeOrder().size();
         // Generous cap: besides enemy/player turns, a dying player rolls a death save each round and
-        // resolves (3 successes/failures, or a nat-20 revive) within a handful of rounds.
-        int maxSteps = Math.max(1, order) * 8 + 16;
+        // resolves (3 successes/failures, or a nat-20 revive) within a handful of rounds. The lair
+        // action costs at most one extra step per round.
+        int maxSteps = Math.max(1, order) * 8 + 24;
+
+        // Where a lair action resolves in the order (initiative count 20), and whether this fight has
+        // a lair at all — enemies only carry lair actions when the host started the encounter in one.
+        int lairSlot = MonsterActionRules.lairSlot(enc.getInitiativeOrder());
+        boolean lairPossible = lairSlot >= 0
+                && enemyRepository.findBySessionId(sessionId).stream().anyMatch(Enemy::hasLair);
 
         for (int step = 0; step < maxSteps; step++) {
             expireTerrainZones(enc);                    // drop timed spell terrain whose duration lapsed
@@ -943,6 +969,16 @@ public class CombatService {
                 return;
             }
 
+            // Lair action on initiative count 20, once per round. Stamping the round BEFORE resolving
+            // makes this idempotent across the reaction-window pause/resume cycle (which re-enters
+            // this loop), and `continue` re-checks the guards in case the lair just wiped the party.
+            if (lairPossible && enc.getRound() > enc.getLairActionRound()
+                    && enc.getActiveIndex() >= lairSlot) {
+                enc.setLairActionRound(enc.getRound());
+                runLairAction(enc, beat);
+                continue;
+            }
+
             Combatant active = enc.getInitiativeOrder().get(enc.getActiveIndex());
 
             if (active.kind() == CombatantKind.ENEMY) {
@@ -953,6 +989,7 @@ public class CombatService {
                 }
                 expireEnemyConditions(enc, e, beat);          // timer + "save ends" at turn start
                 resetTurnFlags(enc, e.getId().toString());
+                refillLegendaryActions(e);                    // a legendary creature regains its budget
                 if (ConditionRules.incapacitated(e.getConditions())) {
                     beat.add(e.getName() + " is " + CombatNarrationFormatter.incapacitatingLabel(e.getConditions()) + " and can't act.");
                     broadcastAction(enc, CombatantKind.ENEMY, e.getName(), "HOLD", "is incapacitated", List.of());
@@ -1642,6 +1679,239 @@ public class CombatService {
                                  String actionKind, String label, List<CombatActionEvent.Target> targets,
                                  boolean awaitingDamage) {
         combatBroadcaster.broadcastAction(enc, actorKind, actorName, actionKind, label, targets, awaitingDamage);
+    }
+
+    /* ── legendary & lair actions ────────────────────────────────── */
+
+    /**
+     * At the end of a hero's turn, every conscious legendary creature spends one legendary action.
+     *
+     * <p><b>Must never throw {@link ReactionPause}.</b> This runs from {@link #advanceTurn}, outside
+     * the try/catch in {@link #resolveUntilPlayerOrEnd} that unwinds a paused enemy turn — so
+     * legendary attacks resolve straight through {@link #applySwing} rather than
+     * {@link #runMultiattack}, and never open a reaction window.
+     */
+    private void runLegendaryActions(CombatEncounter enc, List<String> beat) {
+        List<Combatant> order = enc.getInitiativeOrder();
+        if (order.isEmpty() || order.get(enc.getActiveIndex()).kind() != CombatantKind.PLAYER) {
+            return;                                    // only at the end of a hero's turn
+        }
+        // Find the bosses first: the overwhelming majority of fights have none, and this spares
+        // every ordinary turn-end the cost of a target lookup.
+        List<Enemy> bosses = enemyRepository.findBySessionId(enc.getSessionId()).stream()
+                .filter(e -> e.isAlive() && e.isLegendary() && e.getLegendaryActionsRemaining() > 0)
+                .filter(e -> !ConditionRules.incapacitated(e.getConditions()))
+                .toList();
+        if (bosses.isEmpty() || pickTarget(enc.getSessionId()) == null) {
+            return;                                    // no boss to act, or no conscious hero left
+        }
+        for (Enemy e : bosses) {
+            MonsterAction action = MonsterActionRules.chooseLegendary(
+                    e.getLegendaryActions(), e.getLegendaryActionsRemaining());
+            if (action == null) {
+                continue;                              // nothing affordable — the points go unspent
+            }
+            e.setLegendaryActionsRemaining(e.getLegendaryActionsRemaining() - action.pointCost());
+            enemyRepository.save(e);
+            resolveMonsterAction(enc, e, action, "LEGENDARY_ACTION", "uses " + action.name(), beat);
+            if (partyFullyDown(enc.getSessionId())) {
+                return;                                // resolveUntilPlayerOrEnd will end the fight
+            }
+        }
+    }
+
+    /** A legendary creature regains its full budget at the start of its own turn. */
+    private void refillLegendaryActions(Enemy e) {
+        if (e.isLegendary() && e.getLegendaryActionsRemaining() != e.getLegendaryActionMax()) {
+            e.setLegendaryActionsRemaining(e.getLegendaryActionMax());
+            enemyRepository.save(e);
+        }
+    }
+
+    /**
+     * Resolve this round's lair action on initiative count 20. Attributed to the toughest living
+     * lair-holder, so the client sees the boss as the actor. Like {@link #runLegendaryActions}, this
+     * must never throw {@link ReactionPause}.
+     */
+    private void runLairAction(CombatEncounter enc, List<String> beat) {
+        Enemy owner = enemyRepository.findBySessionId(enc.getSessionId()).stream()
+                .filter(Enemy::isAlive)
+                .filter(Enemy::hasLair)
+                .max(Comparator.comparingInt(Enemy::getMaxHp))
+                .orElse(null);
+        if (owner == null || pickTarget(enc.getSessionId()) == null) {
+            return;                                    // the lair-holder fell, or nobody is left
+        }
+        MonsterAction action = MonsterActionRules.chooseLair(owner.getLairActions(), enc.getRound());
+        if (action != null) {
+            resolveMonsterAction(enc, owner, action, "LAIR_ACTION", "lair action: " + action.name(), beat);
+        }
+    }
+
+    /** Resolve one legendary/lair action and broadcast it as a single combat action. */
+    private void resolveMonsterAction(CombatEncounter enc, Enemy enemy, MonsterAction action,
+                                      String actionKind, String label, List<String> beat) {
+        List<CombatActionEvent.Target> results = new ArrayList<>();
+        switch (action.kind()) {
+            case ATTACK -> resolveMonsterAttackAction(enc, enemy, action, results, beat);
+            case SAVE -> resolveMonsterSaveAction(enc, enemy, action, results, beat);
+            case NARRATIVE -> {
+                // The client builds one feed row per target, so a flavour beat still needs a row.
+                results.add(CombatActionEvent.Target.effect(CombatantKind.ENEMY, enemy.getName(),
+                        action.name(), enemy.getCurrentHp(), enemy.getMaxHp()));
+                beat.add(monsterActionFlavour(enemy, action));
+            }
+        }
+        if (!results.isEmpty()) {
+            broadcastAction(enc, CombatantKind.ENEMY, enemy.getName(), actionKind, label, results);
+        }
+    }
+
+    /**
+     * An ATTACK-kind action swings one of the monster's own stat-block attacks at the most wounded
+     * hero. Resolved through {@link #applySwing} directly — no reaction window (see
+     * {@link #runLegendaryActions}).
+     */
+    private void resolveMonsterAttackAction(CombatEncounter enc, Enemy enemy, MonsterAction action,
+                                            List<CombatActionEvent.Target> results, List<String> beat) {
+        MonsterAttack atk = enemy.getAttacks().stream()
+                .filter(a -> a.name() != null && a.name().equalsIgnoreCase(action.attackName()))
+                .findFirst()
+                .orElse(null);
+        TargetPlayer target = pickTarget(enc.getSessionId());
+        if (atk == null || target == null) {
+            if (atk == null) {
+                log.warn("Monster action {} on {} references unknown attack {}",
+                        action.name(), enemy.getName(), action.attackName());
+            }
+            return;
+        }
+        Player victim = target.player();
+        Token enemyTok = tokenFor(enc, enemy.getId().toString());
+        Token victimTok = tokenFor(enc, victim.getId().toString());
+        boolean melee = isMelee(enemyTok, victimTok, enc.getGridState());
+        RollMode mode = enemyVsPlayerMode(enemy, victim.getId(), victimTok, melee);
+        int attackBonus = atk.toHit() + ConditionRules.attackModifier(enemy.getConditions());
+        DiceRollResult roll = rollAttack(attackBonus, mode);
+        int targetAc = effectiveAc(armorClass(victim), enemyTok, victimTok, enc.getGridState());
+        boolean hit = roll.crit() || (!roll.fumble() && roll.total() >= targetAc);
+        boolean crit = roll.crit() || (hit && ConditionRules.autoCritMelee(playerConds(victim.getId()), melee));
+        applySwing(enc, enemy, victim, target.state(), roll, targetAc, hit, crit,
+                atk.damageDice(), atk.damageType(), null, results, beat);
+    }
+
+    /**
+     * A SAVE-kind action forces every hero in the emanation (or the most wounded hero when the action
+     * has no radius) to roll a saving throw: a failure takes full damage and gains the condition, a
+     * success takes half when {@code halfOnSave} and nothing otherwise. The mirror image of
+     * {@code CombatSpellResolver}'s player→enemy save path.
+     */
+    private void resolveMonsterSaveAction(CombatEncounter enc, Enemy enemy, MonsterAction action,
+                                          List<CombatActionEvent.Target> results, List<String> beat) {
+        UUID sessionId = enc.getSessionId();
+        String ability = action.saveAbility();
+        int dc = action.saveDc() != null ? action.saveDc() : 13;
+
+        for (TargetPlayer target : monsterSaveTargets(enc, enemy, action)) {
+            Player victim = target.player();
+            List<ActiveCondition> conds = playerConds(victim.getId());
+            boolean autoFail = ConditionRules.autoFailsSave(conds, ability);
+            int saveMod = checkModifierService.computeSaveModifier(victim, ability)
+                    + ConditionRules.saveModifier(conds);
+            DiceRollResult save = diceService.roll(notation(saveMod),
+                    ConditionRules.saveMode(conds, ability));
+            boolean saved = !autoFail && save.total() >= dc;
+
+            PlayerRuntimeStateDto post = target.state();
+            RollSummary damageSummary = null;
+            int applied = 0;
+            if (action.damageDice() != null) {
+                DiceRollResult dmg = rollExpr(action.damageDice());
+                int raw = saved ? (action.halfOnSave() ? dmg.total() / 2 : 0) : dmg.total();
+                if (raw > 0) {
+                    // The event carries the full roll (as save spells do); the beat states what landed.
+                    damageSummary = RollSummary.of(dmg);
+                    applied = resisted(raw, action.damageType(), post);
+                    if (applied < raw) {
+                        beat.add(victim.getCharacterName() + " resists " + action.damageType()
+                                + " damage (halved to " + applied + ").");
+                    }
+                    post = playerStateService.applyHpDelta(victim.getId(), -applied, false);
+                    broadcast(sessionId, PlayerStateEvent.of(sessionId, post));
+                    concentrationCheckOnDamage(enc, victim.getId(), applied, post, beat);
+                }
+            }
+            // A downed hero is already unconscious — don't stack a condition on top.
+            if (!saved && action.condition() != null && post.currentHp() > 0) {
+                ActiveCondition c = ActiveCondition.fromSpell(
+                        action.condition(), null, action.name(), false);
+                if (action.conditionRounds() != null) {
+                    // expireConditions drops it once the round passes, so it lapses on their next turn.
+                    c = c.expiringAt(enc.getRound() + Math.max(0, action.conditionRounds() - 1));
+                }
+                post = playerStateService.applyCondition(victim.getId(), c);
+                broadcast(sessionId, PlayerStateEvent.of(sessionId, post));
+            }
+
+            results.add(CombatActionEvent.Target.save(CombatantKind.PLAYER, victim.getCharacterName(),
+                    RollSummary.of(save), dc, saved, damageSummary,
+                    post.currentHp(), post.maxHp(), post.currentHp() <= 0));
+            beat.add(monsterSaveBeat(enemy, action, victim, save, dc, saved, applied, post));
+        }
+    }
+
+    /** Heroes a SAVE-kind action reaches: everyone inside the emanation, else the most wounded one. */
+    private List<TargetPlayer> monsterSaveTargets(CombatEncounter enc, Enemy enemy, MonsterAction action) {
+        if (action.radiusFeet() == null) {
+            TargetPlayer single = pickTarget(enc.getSessionId());
+            return single == null ? List.of() : List.of(single);
+        }
+        Token source = tokenFor(enc, enemy.getId().toString());
+        List<TargetPlayer> out = new ArrayList<>();
+        for (TargetInfo info : consciousTargets(enc)) {
+            // Off-grid (legacy) encounters have no geometry, so an emanation reaches the whole party.
+            if (source != null && enc.getGridState() != null) {
+                Token t = tokenFor(enc, info.playerId().toString());
+                if (t == null || gridService.distanceFeet(source.getX(), source.getY(),
+                        t.getX(), t.getY()) > action.radiusFeet()) {
+                    continue;
+                }
+            }
+            Player p = playerRepository.findById(info.playerId()).orElse(null);
+            PlayerRuntimeStateDto st = safeState(info.playerId());
+            if (p != null && st != null) {
+                out.add(new TargetPlayer(p, st));
+            }
+        }
+        return out;
+    }
+
+    private String monsterActionFlavour(Enemy enemy, MonsterAction action) {
+        return action.description() != null && !action.description().isBlank()
+                ? action.description()
+                : enemy.getName() + " uses " + action.name() + ".";
+    }
+
+    private String monsterSaveBeat(Enemy enemy, MonsterAction action, Player victim,
+                                   DiceRollResult save, int dc, boolean saved,
+                                   int damageTaken, PlayerRuntimeStateDto post) {
+        StringBuilder sb = new StringBuilder(enemy.getName())
+                .append(" — ").append(action.name()).append(": ")
+                .append(victim.getCharacterName()).append(" rolls ").append(save.total())
+                .append(" vs DC ").append(dc)
+                .append(saved ? " and resists" : " and is caught");
+        if (damageTaken > 0) {
+            sb.append(", taking ").append(damageTaken).append(' ')
+                    .append(action.damageType() == null ? "damage"
+                            : action.damageType().toLowerCase(Locale.ROOT) + " damage");
+        }
+        if (!saved && action.condition() != null && post.currentHp() > 0) {
+            sb.append(" and is ").append(action.condition());
+        }
+        if (post.currentHp() <= 0) {
+            sb.append(" and goes down");
+        }
+        return sb.append('.').toString();
     }
 
     /* ── target selection / predicates ───────────────────────────── */

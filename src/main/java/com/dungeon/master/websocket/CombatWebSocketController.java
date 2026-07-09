@@ -40,7 +40,7 @@ public class CombatWebSocketController extends AbstractGameWebSocketController {
         String username = principal.getName();
         try {
             gameSessionService.requireHost(sessionId, username, "start an encounter");
-            combatService.startEncounter(sessionId, request.enemies());
+            combatService.startEncounter(sessionId, request.enemies(), request.lair());
         } catch (Exception e) {
             log.error("Error starting combat: session={}, host={}", sessionId, username, e);
             sendError(username, e);

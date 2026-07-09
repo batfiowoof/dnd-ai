@@ -57,6 +57,15 @@ public class CombatEncounter {
     @Builder.Default
     private int round = 1;
 
+    /**
+     * The last round whose lair action has already fired. Guards the initiative-count-20 hook so it
+     * fires exactly once per round, and stays correct across the reaction-window pause/resume cycle
+     * (which re-enters the turn loop). 0 = none yet; combat rounds are 1-based.
+     */
+    @Column(name = "lair_action_round", nullable = false)
+    @Builder.Default
+    private int lairActionRound = 0;
+
     /** Spatial state for tactical grid combat (nullable for legacy/non-grid encounters). */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "grid_state", columnDefinition = "jsonb")

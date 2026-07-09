@@ -41,7 +41,10 @@ function FeedCard({ entry, reduced }: { entry: FeedEntry; reduced: boolean }) {
     <div
       className={cn(
         "flex items-center gap-2 rounded-lg border bg-bg-elevated/85 px-2 py-1.5 shadow-sm backdrop-blur-sm",
-        TONE_BORDER[entry.tone],
+        // A boss acting out of turn is its own visual family: gold rail instead of the tone border.
+        entry.boss
+          ? "border-gold/50 border-l-2 border-l-gold bg-gold/5"
+          : TONE_BORDER[entry.tone],
         !reduced && "animate-rise"
       )}
     >
@@ -55,19 +58,30 @@ function FeedCard({ entry, reduced }: { entry: FeedEntry; reduced: boolean }) {
           size={26}
         />
       ) : (
-        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center text-gold">
-          ✦
+        <span
+          aria-hidden
+          className="grid h-[26px] w-[26px] shrink-0 place-items-center text-gold"
+        >
+          {entry.boss ? "⚜" : "✦"}
         </span>
       )}
 
       <div className="min-w-0 flex-1 leading-tight">
         <div className="truncate text-[11px]">
-          <span className="font-semibold text-text">{entry.actorName}</span>{" "}
+          <span className={cn("font-semibold", entry.boss ? "text-gold" : "text-text")}>
+            {entry.actorName}
+          </span>{" "}
           <span className="text-text-muted">{entry.title}</span>
         </div>
         <div className="flex items-center gap-1.5">
           {entry.outcome && (
-            <span className={cn("text-[10px] font-bold uppercase tracking-wide", TONE_TEXT[entry.tone])}>
+            <span
+              className={cn(
+                "text-[10px] font-bold uppercase tracking-wide",
+                // The outcome still reads from the party's POV; only a toneless beat goes gold.
+                entry.boss && entry.tone === "neutral" ? "text-gold" : TONE_TEXT[entry.tone]
+              )}
+            >
               {entry.outcome}
             </span>
           )}

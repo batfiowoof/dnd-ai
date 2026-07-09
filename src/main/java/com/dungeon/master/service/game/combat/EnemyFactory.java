@@ -1,5 +1,6 @@
 package com.dungeon.master.service.game.combat;
 
+import com.dungeon.master.model.dto.MonsterAction;
 import com.dungeon.master.model.dto.MonsterAttack;
 import com.dungeon.master.model.dto.MonsterTemplate;
 import com.dungeon.master.model.entity.Enemy;
@@ -29,22 +30,35 @@ public final class EnemyFactory {
      * stat blocks first (copied from the world it was started from), then the {@link MonsterCatalog},
      * and finally the legacy hardcoded {@link Bestiary}. {@code index} numbers duplicates ("Goblin 2");
      * 0 means it is the only one of its type.
+     *
+     * <p>{@code inLair} carries the host's "In its lair" choice: only then are the monster's lair
+     * actions copied onto the enemy, so a non-empty {@link Enemy#getLairActions()} means "this fight
+     * happens in this creature's lair".
      */
     public static Enemy buildEnemy(MonsterCatalog monsterCatalog, List<MonsterTemplate> sessionCustom,
                                    DiceService diceService, UUID sessionId, String key, int index,
-                                   Difficulty difficulty) {
+                                   Difficulty difficulty, boolean inLair) {
         Optional<MonsterTemplate> tmpl = findCustom(sessionCustom, key)
                 .or(() -> monsterCatalog.get(key));
         if (tmpl.isPresent()) {
-            return fromTemplate(tmpl.get(), diceService, sessionId, key, index, difficulty);
+            return fromTemplate(tmpl.get(), diceService, sessionId, key, index, difficulty, inLair);
         }
         return fromBestiary(diceService, sessionId, key, index, difficulty);
+    }
+
+    /** Overload for encounters that are not fought in a lair. */
+    public static Enemy buildEnemy(MonsterCatalog monsterCatalog, List<MonsterTemplate> sessionCustom,
+                                   DiceService diceService, UUID sessionId, String key, int index,
+                                   Difficulty difficulty) {
+        return buildEnemy(monsterCatalog, sessionCustom, diceService, sessionId, key, index,
+                difficulty, false);
     }
 
     /** Backward-compatible overload with no session overlay (used by tests / catalog-only callers). */
     public static Enemy buildEnemy(MonsterCatalog monsterCatalog, DiceService diceService,
                                    UUID sessionId, String key, int index, Difficulty difficulty) {
-        return buildEnemy(monsterCatalog, List.of(), diceService, sessionId, key, index, difficulty);
+        return buildEnemy(monsterCatalog, List.of(), diceService, sessionId, key, index, difficulty,
+                false);
     }
 
     private static Optional<MonsterTemplate> findCustom(List<MonsterTemplate> sessionCustom, String key) {
@@ -55,7 +69,7 @@ public final class EnemyFactory {
     }
 
     private static Enemy fromTemplate(MonsterTemplate t, DiceService diceService, UUID sessionId,
-                                      String key, int index, Difficulty difficulty) {
+                                      String key, int index, Difficulty difficulty, boolean inLair) {
         int atkDelta = attackBonusDelta(difficulty);
         int d20 = diceService.roll("1d20").total();
         String name = index > 0 ? t.name() + " " + index : t.name();
@@ -67,6 +81,10 @@ public final class EnemyFactory {
         }
         MonsterAttack primary = scaled.isEmpty() ? null : scaled.get(0);
         int perTurn = t.multiattack() != null ? Math.max(1, t.multiattack().count()) : 1;
+        // Legendary actions ride along by value; lair actions only when fought in the lair, so a
+        // non-empty lairActions on the Enemy is the engine's "this fight has a lair" marker.
+        List<MonsterAction> legendary = new ArrayList<>(t.legendaryActions());
+        List<MonsterAction> lair = inLair ? new ArrayList<>(t.lairActions()) : new ArrayList<>();
         return Enemy.builder()
                 .id(UUID.randomUUID()).sessionId(sessionId).name(name)
                 .maxHp(hp).currentHp(hp).armorClass(t.ac())
@@ -77,6 +95,11 @@ public final class EnemyFactory {
                         : new LinkedHashMap<>())
                 .speed(t.speed() != null ? t.speed() : 30)
                 .initiative(d20 + t.dexMod()).dexMod(t.dexMod()).alive(true)
+                .legendaryActions(legendary).lairActions(lair)
+                .legendaryActionMax(t.legendaryActionMax())
+                // Seed a full budget so the boss can act before its own first turn refills it.
+                .legendaryActionsRemaining(t.legendaryActionMax())
+                .legendaryResistances(t.legendaryResistances())
                 .build();
     }
 
