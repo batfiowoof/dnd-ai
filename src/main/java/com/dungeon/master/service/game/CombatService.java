@@ -432,7 +432,7 @@ public class CombatService {
 
         PlayerRuntimeStateDto state = playerStateService.getState(player.getId());
         if (!containsIgnoreCase(state.cantrips(), spellName)
-                && !containsIgnoreCase(state.knownSpells(), spellName)) {
+                && !containsIgnoreCase(state.preparedSpells(), spellName)) {
             throw new IllegalStateException("You don't have " + spellName + " prepared");
         }
 

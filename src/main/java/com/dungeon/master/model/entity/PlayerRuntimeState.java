@@ -130,6 +130,17 @@ public class PlayerRuntimeState {
     @Builder.Default
     private List<String> knownSpells = new ArrayList<>();
 
+    /** Leveled spells currently prepared (a subset of {@link #knownSpells}); only these can be cast. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "prepared_spells", columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> preparedSpells = new ArrayList<>();
+
+    /** Preparation cap for this character (spellcasting mod + level); 0 for classes that don't prepare. */
+    @Column(name = "prepared_max", nullable = false)
+    @Builder.Default
+    private int preparedMax = 0;
+
     /** Death saving throw successes (0–3) while at 0 HP. Foundation for Phase C. */
     @Column(name = "death_save_successes", nullable = false)
     @Builder.Default

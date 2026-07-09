@@ -123,11 +123,28 @@ export function sendRoll(
 export function sendCast(
   client: Client,
   sessionId: string,
-  payload: { spellLevel: number; spellName?: string; attackNotation?: string }
+  payload: {
+    spellLevel: number;
+    spellName?: string;
+    attackNotation?: string;
+    ritual?: boolean;
+  }
 ) {
   client.publish({
     destination: `/app/game/${sessionId}/cast`,
     body: JSON.stringify(payload),
+  });
+}
+
+/** Set the caster's prepared leveled spells (a subset of their known spells). */
+export function sendPrepareSpells(
+  client: Client,
+  sessionId: string,
+  spells: string[]
+) {
+  client.publish({
+    destination: `/app/game/${sessionId}/prepare`,
+    body: JSON.stringify({ spells }),
   });
 }
 

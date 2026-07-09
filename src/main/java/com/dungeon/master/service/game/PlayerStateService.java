@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -135,6 +136,12 @@ public class PlayerStateService {
         s.setSpellSlots(rebuildSlotsPreservingUsed(s.getSpellSlots(),
                 SpellSlotTable.forClass(c.getCharacterClass(), c.getLevel())));
         s.setAbilities(abilitiesOf(c));
+        // A higher level (and any ability bump) can raise the preparation cap.
+        int cap = SpellSlotTable.preparedCount(
+                c.getCharacterClass(), SpellcastingRules.castingMod(c), c.getLevel());
+        if (cap > 0) {
+            s.setPreparedMax(cap);
+        }
         return toDto(repository.save(s));
     }
 
@@ -474,6 +481,37 @@ public class PlayerStateService {
     }
 
     /**
+     * Set a prepared caster's prepared leveled spells (a subset of their known spells, capped by
+     * spellcasting modifier + level). Only classes that prepare (cleric/druid/wizard/paladin) may
+     * call this; requested names are matched case-insensitively against {@code knownSpells}, deduped,
+     * and rejected if they exceed the cap. Cantrips and unknown spells are ignored.
+     */
+    @Transactional
+    public PlayerRuntimeStateDto setPreparedSpells(UUID playerId, List<String> requested) {
+        PlayerRuntimeState s = require(playerId);
+        Character c = characterFor(playerId);
+        if (c == null || !SpellSlotTable.isPreparedCaster(c.getCharacterClass())) {
+            throw new IllegalStateException("Your class doesn't prepare spells.");
+        }
+        int cap = SpellSlotTable.preparedCount(
+                c.getCharacterClass(), SpellcastingRules.castingMod(c), Math.max(1, c.getLevel()));
+        List<String> known = s.getKnownSpells() == null ? List.of() : s.getKnownSpells();
+        LinkedHashSet<String> chosen = new LinkedHashSet<>();
+        if (requested != null) {
+            for (String name : requested) {
+                known.stream().filter(k -> k.equalsIgnoreCase(name)).findFirst().ifPresent(chosen::add);
+            }
+        }
+        if (chosen.size() > cap) {
+            throw new IllegalStateException("You can prepare at most " + cap + " spell"
+                    + (cap == 1 ? "" : "s") + ".");
+        }
+        s.setPreparedSpells(new ArrayList<>(chosen));
+        s.setPreparedMax(cap);
+        return toDto(repository.save(s));
+    }
+
+    /**
      * Short rest ({@code diceToSpend} Hit Dice, at least 1 hour of in-game time — the clock is advanced
      * by the caller): spend up to the requested number of remaining Hit Dice, each healing
      * {@code roll(1d hitDie) + CON modifier} (minimum 1 per die). Does not touch spell slots, conditions,
@@ -718,6 +756,8 @@ public class PlayerStateService {
                 s.getConditions().stream().map(ActiveCondition::name).toList(),
                 s.getCantrips(),
                 s.getKnownSpells(),
+                s.getPreparedSpells(),
+                s.getPreparedMax(),
                 s.isInspiration(),
                 s.getLuckPoints(),
                 s.getDeathSaveSuccesses(),

@@ -67,6 +67,10 @@ export interface PlayerRuntimeState {
   conditions: string[];
   cantrips: string[];
   knownSpells: string[];
+  /** Leveled spells currently prepared (a subset of knownSpells); only these can be cast. */
+  preparedSpells: string[];
+  /** Preparation cap (spellcasting mod + level); 0 for classes that don't prepare. */
+  preparedMax: number;
   /** Whether the player currently holds Heroic Inspiration (spendable to reroll a failed roll). */
   inspiration: boolean;
   /** Lucky feat: remaining Luck Points (0 without the feat); spendable to reroll, restored on a long rest. */

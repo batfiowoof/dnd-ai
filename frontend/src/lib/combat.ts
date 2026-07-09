@@ -17,8 +17,9 @@ export interface Castable extends SpellSummary {
 }
 
 /**
- * Resolve the player's known spells (cantrips + leveled) to catalog metadata, keeping
- * only those they can pay for right now (cantrips are free; leveled need a matching slot).
+ * Resolve the player's castable spells (cantrips + prepared leveled) to catalog metadata, keeping
+ * only those they can pay for right now (cantrips are free; leveled need a matching slot). Only
+ * PREPARED leveled spells are castable — known-but-unprepared spells are excluded.
  */
 export function resolveCastable(
   state: PlayerRuntimeState | null,
@@ -28,7 +29,7 @@ export function resolveCastable(
   const byName = new Map(spells.map((s) => [s.name.toLowerCase(), s]));
   const hasSlot = (level: number) =>
     state.spellSlots.some((s) => s.level === level && s.used < s.max);
-  const known = [...(state.cantrips ?? []), ...(state.knownSpells ?? [])];
+  const known = [...(state.cantrips ?? []), ...(state.preparedSpells ?? [])];
   const seen = new Set<string>();
   const out: Castable[] = [];
   for (const name of known) {

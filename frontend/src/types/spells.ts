@@ -37,6 +37,8 @@ export interface SpellSummary {
   terrain: string | null;
   /** Temp-HP granted to ally/self (e.g. "1d4+4"), else null. */
   tempHpDice: string | null;
+  /** Whether the spell carries the Ritual tag (castable without a slot, out of combat). */
+  ritual: boolean;
 }
 
 export interface MonsterSummary {

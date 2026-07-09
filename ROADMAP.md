@@ -12,7 +12,7 @@ resolution, exhaustion, rests, quests, shops/currency, NPCs, travel, world-build
 RAG-grounded DM). Each feature **reuses existing infrastructure** rather than adding a new
 subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
-> **Suggested build order (dependency-aware):** ~~1 → 2 → 3 → 4 → 5 → 6~~ (shipped) → 7 → 8.
+> **Suggested build order (dependency-aware):** ~~1 → 2 → 3 → 4 → 5 → 6 → 7~~ (shipped) → 8.
 > Feature 1 (structured proficiency) was foundational — features 5 (feats) and 7 (spell prep) now
 > plug into its proficiency model; features 5–8 lean on the combat/roll hooks the earlier ones
 > establish. Features 5 (Lucky) and 6 (Heroic Inspiration) shipped together — they share one
@@ -24,6 +24,18 @@ subsystem. **Encumbrance** and **Bastions** were considered and deferred.
 
 Prior batches delivered the core loop. Most recently:
 
+- **Ritual casting & spell preparation (feature 7)** — `preparedSpells`/`preparedMax` on
+  `PlayerRuntimeState` (`V34`, backfills prepared = known so mid-session casters keep casting).
+  `SpellSlotTable.preparedCount`/`isPreparedCaster` (cleric/druid/wizard/paladin; `castingMod + level`,
+  paladin off half level) sizes the cap; `PlayerStateSeeder` seeds a capped prepared subset (known
+  casters keep all known prepared). Both cast paths now gate leveled casts on `preparedSpells`
+  (`CombatService.playerCastSpell` + `GameWebSocketController.handleCast`). `ritual` parsed into
+  `SpellEffect`/`SpellCatalog`/`SpellSummary`; `handleCast` casts a known Ritual-tagged spell with no
+  slot. `/prepare` WS verb + `PlayerStateService.setPreparedSpells` (cap-validated). Frontend:
+  `PrepareSpellsDialog` (reuses `SpellPicker`) behind a "Prepare" button, a "Rituals (no slot)"
+  section + prepared-only slot casts in `ActionBar`, prepared/unprepared badges on the sheet.
+  *Simplifications: prepared = subset of `knownSpells` (not the full class list); prepare is available
+  any time out of combat (not strictly post-long-rest); no material-component tracking.*
 - **Feats with mechanical effects (feature 5)** — `FeatKey` enum + `FeatEffects` bean (analogue of
   `MagicItemEffects`) resolving a character's origin feat from its background via `Dnd5eReferenceService`.
   **Alert** adds proficiency bonus to initiative (`CombatService.startCombat`); **Tough** adds a derived
@@ -97,24 +109,6 @@ Prior batches delivered the core loop. Most recently:
 - **Engine owns all math/randomness; the LLM never rolls** (`DiceService`, `RollMode`). Rules
   math is stateless in `service/game/*Rules.java` + `service/game/combat/CombatMath.java`, mirrored
   client-side in `frontend/src/lib/{dnd5e,combat}.ts`.
-
----
-
-## 7. Ritual casting & spell preparation
-
-**Goal:** Prepared-caster rules + ritual casting without a slot.
-
-### Backend
-- Prepared-spell tracking (a prepared subset of `knownSpells`) for cleric / druid / wizard / paladin,
-  sized by `castingMod` + level. Extend `SpellcastingRules` / `SpellSlotTable`.
-- Ritual-tag casting in the out-of-combat path (no slot consumed) using the `ritual` flag already
-  present on spells in `srd-5.2.1-structured.json`.
-
-### Frontend
-- A "prepare spells" step (extend `components/character/SpellPicker.tsx`) available after a long rest;
-  a ritual affordance in the cast UI.
-
-**Scope:** preparation counts + ritual tag; no material-component tracking.
 
 ---
 

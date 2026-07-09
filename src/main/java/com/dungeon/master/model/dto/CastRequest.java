@@ -4,6 +4,7 @@ package com.dungeon.master.model.dto;
 public record CastRequest(
         int spellLevel,
         String spellName,
-        String attackNotation
+        String attackNotation,
+        boolean ritual
 ) {
 }

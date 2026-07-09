@@ -25,6 +25,36 @@ final class SpellSlotTable {
     private static final Set<String> PACT_CASTERS =
             Set.of("warlock");
 
+    /**
+     * Classes that PREPARE spells each day (2024): they cast only a chosen subset of their known
+     * leveled spells. Everyone else (bard, sorcerer, ranger, warlock) is a "known" caster — every
+     * known spell is always castable, so they don't prepare. Paladin is a half caster and prepares
+     * off half its level.
+     */
+    private static final Set<String> PREPARED_CASTERS =
+            Set.of("cleric", "druid", "wizard", "paladin");
+
+    /** True when this class prepares a subset of its known spells (vs. a known caster). */
+    static boolean isPreparedCaster(String characterClass) {
+        return characterClass != null
+                && PREPARED_CASTERS.contains(characterClass.toLowerCase(Locale.ROOT).trim());
+    }
+
+    /**
+     * How many leveled spells a prepared caster may have prepared at once: spellcasting modifier +
+     * (effective) level, minimum 1. Full prepared casters use full level; the paladin (a half caster)
+     * uses half level. Returns 0 for classes that don't prepare — a documented simplification of the
+     * 2024 per-class tables, matching the roadmap's {@code castingMod + level}.
+     */
+    static int preparedCount(String characterClass, int castingMod, int level) {
+        if (!isPreparedCaster(characterClass)) {
+            return 0;
+        }
+        String c = characterClass.toLowerCase(Locale.ROOT).trim();
+        int effectiveLevel = HALF_CASTERS.contains(c) ? level / 2 : level;
+        return Math.max(1, castingMod + effectiveLevel);
+    }
+
     /** Standard full-caster slots[characterLevel 1..20][spellLevel 1..9]. */
     private static final int[][] FULL = {
             {2, 0, 0, 0, 0, 0, 0, 0, 0}, // 1

@@ -217,11 +217,42 @@ export default function CharacterSheetDialog({
             <SectionHeading>Spells</SectionHeading>
             <div className="space-y-1.5">
               {cantrips.map((name) => (
-                <SrdEntryRow key={`c-${name}`} name={name} kind="spell" />
+                <SrdEntryRow
+                  key={`c-${name}`}
+                  name={name}
+                  kind="spell"
+                  meta={
+                    <span className="text-[10px] uppercase tracking-wider">
+                      cantrip
+                    </span>
+                  }
+                />
               ))}
-              {knownSpells.map((name) => (
-                <SrdEntryRow key={`s-${name}`} name={name} kind="spell" />
-              ))}
+              {knownSpells.map((name) => {
+                // Prepared casters (preparedMax > 0) mark which known spells are ready to cast.
+                const prepared = (state.preparedSpells ?? []).some(
+                  (p) => p.toLowerCase() === name.toLowerCase()
+                );
+                return (
+                  <SrdEntryRow
+                    key={`s-${name}`}
+                    name={name}
+                    kind="spell"
+                    meta={
+                      (state.preparedMax ?? 0) > 0 ? (
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold uppercase tracking-wider",
+                            prepared ? "text-gold" : "text-text-muted opacity-60"
+                          )}
+                        >
+                          {prepared ? "✦ prepared" : "unprepared"}
+                        </span>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
             </div>
           </section>
         )}

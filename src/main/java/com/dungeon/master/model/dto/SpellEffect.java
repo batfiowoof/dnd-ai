@@ -33,6 +33,7 @@ import com.dungeon.master.model.enums.SpellTargetType;
  * @param range         the spell's range, e.g. "Touch", "60 feet", "Self" (drives melee spell attacks)
  * @param terrain       terrain the spell creates over its area for the duration ("DIFFICULT"), else null
  * @param tempHpDice    temporary-HP granted to ally/self targets (e.g. "1d4+4"), else null
+ * @param ritual        whether the spell carries the Ritual tag (castable without a slot, out of combat)
  */
 public record SpellEffect(
         String name,
@@ -58,7 +59,8 @@ public record SpellEffect(
         String castingTime,
         String range,
         String terrain,
-        String tempHpDice
+        String tempHpDice,
+        boolean ritual
 ) {
 
     /** True when this spell is cast as a Bonus Action (so it doesn't consume the action). */

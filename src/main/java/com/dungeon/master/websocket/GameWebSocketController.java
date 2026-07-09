@@ -14,8 +14,10 @@ import com.dungeon.master.model.dto.JoinSessionRequest;
 import com.dungeon.master.model.dto.PlayerActionRequest;
 import com.dungeon.master.model.dto.PlayerDto;
 import com.dungeon.master.model.dto.PlayerRuntimeStateDto;
+import com.dungeon.master.model.dto.PreparedSpellsRequest;
 import com.dungeon.master.model.dto.RerollChoiceRequest;
 import com.dungeon.master.model.dto.RollRequest;
+import com.dungeon.master.model.dto.SpellEffect;
 import com.dungeon.master.model.dto.ShopBuyRequest;
 import com.dungeon.master.model.dto.ShopSellRequest;
 import com.dungeon.master.model.dto.ShortRestRequest;
@@ -30,6 +32,7 @@ import com.dungeon.master.service.game.PlayerService;
 import com.dungeon.master.service.game.SessionMembershipService;
 import com.dungeon.master.service.game.GameClockService;
 import com.dungeon.master.service.game.MoneyUtil;
+import com.dungeon.master.service.ai.SpellCatalog;
 import com.dungeon.master.service.game.PlayerStateService;
 import com.dungeon.master.service.game.RerollWindow;
 import com.dungeon.master.service.game.ShopService;
@@ -63,6 +66,7 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
     private final TravelService travelService;
     private final GameClockService gameClockService;
     private final RerollWindow rerollWindow;
+    private final SpellCatalog spellCatalog;
 
     @MessageMapping("/game/{sessionId}/roll/reroll")
     public void handleReroll(@DestinationVariable UUID sessionId,
@@ -147,12 +151,34 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
         String username = principal.getName();
         try {
             Player player = turnService.requireActiveTurn(sessionId, username);
+            PlayerRuntimeStateDto st = playerStateService.getState(player.getId());
+            String name = request.spellName();
+            boolean ritual = request.ritual();
 
-            // Level 0 = cantrip: no slot consumed.
-            if (request.spellLevel() >= 1) {
-                PlayerRuntimeStateDto state =
-                        playerStateService.useSpellSlot(player.getId(), request.spellLevel());
-                broadcastState(sessionId, state);
+            if (ritual) {
+                // Ritual cast: a known, Ritual-tagged spell, cast without expending a slot.
+                SpellEffect eff = name == null ? null : spellCatalog.effect(name).orElse(null);
+                if (eff == null || !eff.ritual()) {
+                    throw new IllegalStateException(
+                            (name == null || name.isBlank() ? "That spell" : name) + " can't be cast as a ritual.");
+                }
+                if (!containsIgnoreCase(st.knownSpells(), name)) {
+                    throw new IllegalStateException("You don't know " + name + ".");
+                }
+            } else {
+                // A named leveled cast must be prepared (cantrips are always available); a generic
+                // "cast at slot level" with no name stays lenient for free-form narration.
+                if (request.spellLevel() >= 1 && name != null && !name.isBlank()
+                        && !containsIgnoreCase(st.cantrips(), name)
+                        && !containsIgnoreCase(st.preparedSpells(), name)) {
+                    throw new IllegalStateException("You don't have " + name + " prepared.");
+                }
+                // Level 0 = cantrip: no slot consumed.
+                if (request.spellLevel() >= 1) {
+                    PlayerRuntimeStateDto state =
+                            playerStateService.useSpellSlot(player.getId(), request.spellLevel());
+                    broadcastState(sessionId, state);
+                }
             }
 
             String spell = request.spellName() == null || request.spellName().isBlank()
@@ -167,8 +193,9 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
                                 "Spell Attack", attack));
             }
 
-            String summary = player.getCharacterName() + " casts " + spell
-                    + (request.spellLevel() >= 1 ? " (level-" + request.spellLevel() + " slot)" : "")
+            String castNote = ritual ? " as a ritual (no slot)"
+                    : (request.spellLevel() >= 1 ? " (level-" + request.spellLevel() + " slot)" : "");
+            String summary = player.getCharacterName() + " casts " + spell + castNote
                     + (attack != null ? " — attack roll " + attack.notation() + " = " + attack.total() : "")
                     + ".";
             turnService.submitAction(sessionId, username, summary);
@@ -176,6 +203,31 @@ public class GameWebSocketController extends AbstractGameWebSocketController {
             log.error("Error casting spell: session={}, player={}", sessionId, username, e);
             sendError(username, e);
         }
+    }
+
+    @MessageMapping("/game/{sessionId}/prepare")
+    public void handlePrepareSpells(@DestinationVariable UUID sessionId,
+                                    @Payload PreparedSpellsRequest request,
+                                    Principal principal) {
+        String username = principal.getName();
+        try {
+            PlayerDto player = playerService.getPlayerInSession(sessionId, username);
+            PlayerRuntimeStateDto state = playerStateService.setPreparedSpells(
+                    player.id(), request == null ? null : request.spells());
+            broadcastState(sessionId, state);
+        } catch (Exception e) {
+            log.error("Error preparing spells: session={}, player={}", sessionId, username, e);
+            sendError(username, e);
+        }
+    }
+
+    /** Case-insensitive membership test for a spell name in a name list. */
+    private static boolean containsIgnoreCase(java.util.List<String> names, String name) {
+        if (names == null || name == null) return false;
+        for (String n : names) {
+            if (name.equalsIgnoreCase(n)) return true;
+        }
+        return false;
     }
 
     @MessageMapping("/game/{sessionId}/use-item")

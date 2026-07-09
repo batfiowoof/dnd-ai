@@ -36,6 +36,7 @@ import {
   sendCombatHoldReaction,
   sendCombatReady,
   sendReroll,
+  sendPrepareSpells,
   sendEndCombat,
 } from "@/lib/websocket";
 
@@ -81,8 +82,11 @@ export function useGameActions(
       attack: run((c) =>
         sendRoll(c, sessionId, { label: "Attack", notation: "1d20" })
       ),
-      cast: run((c, spellLevel: number, spellName?: string) =>
-        sendCast(c, sessionId, { spellLevel, spellName })
+      cast: run((c, spellLevel: number, spellName?: string, ritual?: boolean) =>
+        sendCast(c, sessionId, { spellLevel, spellName, ritual })
+      ),
+      prepareSpells: run((c, spells: string[]) =>
+        sendPrepareSpells(c, sessionId, spells)
       ),
       useItem: run((c, itemName: string) =>
         sendUseItem(c, sessionId, itemName)

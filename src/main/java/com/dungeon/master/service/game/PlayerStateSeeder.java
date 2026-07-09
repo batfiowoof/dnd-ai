@@ -138,6 +138,16 @@ public class PlayerStateSeeder {
         abilities.put("WIS", character.getWisdom());
         abilities.put("CHA", character.getCharisma());
 
+        // Spell preparation: prepared casters start with a capped subset of their known spells;
+        // known casters (and non-casters) keep every known spell "prepared" (no cap, no prepare UI).
+        List<String> known = character.getKnownSpells() != null
+                ? new ArrayList<>(character.getKnownSpells()) : new ArrayList<>();
+        int preparedMax = SpellSlotTable.preparedCount(
+                character.getCharacterClass(), SpellcastingRules.castingMod(character), level);
+        List<String> prepared = preparedMax > 0
+                ? new ArrayList<>(known.subList(0, Math.min(preparedMax, known.size())))
+                : new ArrayList<>(known);
+
         PlayerRuntimeState state = PlayerRuntimeState.builder()
                 .playerId(player.getId())
                 .sessionId(player.getSessionId())
@@ -150,7 +160,9 @@ public class PlayerStateSeeder {
                 .inventory(inventory)
                 .conditions(new ArrayList<>())
                 .cantrips(character.getCantrips() != null ? new ArrayList<>(character.getCantrips()) : new ArrayList<>())
-                .knownSpells(character.getKnownSpells() != null ? new ArrayList<>(character.getKnownSpells()) : new ArrayList<>())
+                .knownSpells(known)
+                .preparedSpells(prepared)
+                .preparedMax(preparedMax)
                 .skillProficiencies(character.getSkillProficiencies() != null
                         ? new LinkedHashMap<>(character.getSkillProficiencies()) : new LinkedHashMap<>())
                 .savingThrowProficiencies(character.getSavingThrowProficiencies() != null

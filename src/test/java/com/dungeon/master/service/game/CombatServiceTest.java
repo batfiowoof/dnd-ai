@@ -188,17 +188,17 @@ class CombatServiceTest {
     }
 
     private PlayerRuntimeStateDto stateFor(UUID playerId, int hp) {
-        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+        return new PlayerRuntimeStateDto(playerId, hp, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), 0, false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     /** 0 HP, not dead, not stable — actively dying (rolling death saves). */
     private PlayerRuntimeStateDto dyingState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), 0, false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     /** 0 HP, dead (three failures). */
     private PlayerRuntimeStateDto deadState(UUID playerId) {
-        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), false, 0, 0, 3, false, true, null, 0, 0, 0, 0, List.of());
+        return new PlayerRuntimeStateDto(playerId, 0, 20, 0, 10, java.util.Map.of(), java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), 0, false, 0, 0, 3, false, true, null, 0, 0, 0, 0, List.of());
     }
 
     @Test
@@ -574,7 +574,7 @@ class CombatServiceTest {
     /** Runtime state granting the player a cantrip (for the cast guard); conscious at 20 HP. */
     private PlayerRuntimeStateDto stateWithCantrip(UUID playerId, String spell) {
         return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
-                java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(spell), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+                java.util.Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(spell), List.of(), List.of(), 0, false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     /** An AUTO-resolution DAMAGE spell — optionally an AoE template (shape != null). */
@@ -582,7 +582,7 @@ class CombatServiceTest {
         SpellTargetType target = aoeShape != null ? SpellTargetType.AREA : SpellTargetType.ENEMY;
         return new SpellEffect(name, 0, SpellEffectType.DAMAGE, target, SpellResolution.AUTO,
                 null, "2d6", "Fire", null, false, false, null, null,
-                aoeShape, aoeSize, null, 1, null, false, true, "Action", "120 feet", null, null);
+                aoeShape, aoeSize, null, 1, null, false, true, "Action", "120 feet", null, null, false);
     }
 
     private Enemy enemyAt(UUID id, String name) {
@@ -688,7 +688,7 @@ class CombatServiceTest {
     private SpellEffect controlSpell(String name, String saveAbility, String condition) {
         return new SpellEffect(name, 1, SpellEffectType.CONTROL, SpellTargetType.ENEMY,
                 SpellResolution.SAVE, saveAbility, null, null, null, false, false, null, null,
-                null, 0, null, 1, condition, true, true, "Action", "60 feet", null, null);
+                null, 0, null, 1, condition, true, true, "Action", "60 feet", null, null, false);
     }
 
     @Test
@@ -732,7 +732,7 @@ class CombatServiceTest {
     private SpellEffect terrainSpell(String name) {
         return new SpellEffect(name, 1, SpellEffectType.CONTROL, SpellTargetType.AREA,
                 SpellResolution.SAVE, "STR", null, null, null, false, false, null, null,
-                "cube", 10, null, 1, "restrained", true, true, "Action", "90 feet", "DIFFICULT", null);
+                "cube", 10, null, 1, "restrained", true, true, "Action", "90 feet", "DIFFICULT", null, false);
     }
 
     @Test
@@ -795,14 +795,14 @@ class CombatServiceTest {
     private SpellEffect bonusSelfBuff(String name) {
         return new SpellEffect(name, 1, SpellEffectType.BUFF, SpellTargetType.SELF,
                 SpellResolution.AUTO, null, null, null, null, false, false, null, null,
-                null, 0, null, 1, "blessed", false, true, "Bonus Action", "Self", null, null);
+                null, 0, null, 1, "blessed", false, true, "Bonus Action", "Self", null, null, false);
     }
 
     /** Runtime state carrying a single named weapon (drives attack-range inference). */
     private PlayerRuntimeStateDto stateWithWeapon(UUID playerId, String weapon) {
         return new PlayerRuntimeStateDto(playerId, 20, 20, 0, 10, java.util.Map.of(),
                 java.util.Map.of(), List.of(), List.of(), List.of(new InventoryItem(weapon, 1, ItemKind.WEAPON)),
-                List.of(), List.of(), List.of(), false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
+                List.of(), List.of(), List.of(), List.of(), 0, false, 0, 0, 0, false, false, null, 0, 0, 0, 0, List.of());
     }
 
     @Test

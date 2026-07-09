@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { PlayerRuntimeState } from "@/types";
+import type { PlayerRuntimeState, SpellSummary } from "@/types";
 import { cn } from "@/components/ui";
 
 interface ActionBarProps {
@@ -9,8 +9,12 @@ interface ActionBarProps {
   isMyTurn: boolean;
   connected: boolean;
   onAttack: () => void;
-  onCast: (spellLevel: number, spellName?: string) => void;
+  onCast: (spellLevel: number, spellName?: string, ritual?: boolean) => void;
   onUseItem: (itemName: string) => void;
+  /** Spell catalog (level + ritual flags) — drives the ritual cast section. */
+  spellCatalog?: SpellSummary[];
+  /** Open the spell-preparation dialog — only when the class prepares (preparedMax > 0). */
+  onPrepare?: () => void;
   /** Open the shop panel — only provided when a shop is reachable at the party's current location. */
   onShop?: () => void;
   /** Management actions — available regardless of whose turn it is. */
@@ -30,6 +34,8 @@ export default function ActionBar({
   onAttack,
   onCast,
   onUseItem,
+  spellCatalog,
+  onPrepare,
   onLongRest,
   onShortRest,
   onManage,
@@ -42,9 +48,18 @@ export default function ActionBar({
     state?.spellSlots.filter((s) => s.used < s.max) ?? [];
   const usableItems = state?.inventory.filter((i) => i.qty > 0) ?? [];
   const cantrips = state?.cantrips ?? [];
-  const knownSpells = state?.knownSpells ?? [];
+  // Only PREPARED leveled spells can be cast from a slot.
+  const preparedSpells = state?.preparedSpells ?? [];
   // Leveled spells are cast from the lowest slot still available.
   const lowestSlot = availableSlots.length > 0 ? availableSlots[0].level : null;
+
+  // Ritual-tagged known spells can be cast with no slot (out of combat). Keyed by lowercased name.
+  const ritualByName = new Map(
+    (spellCatalog ?? []).filter((s) => s.ritual).map((s) => [s.name.toLowerCase(), s])
+  );
+  const ritualSpells = (state?.knownSpells ?? []).filter((n) =>
+    ritualByName.has(n.toLowerCase())
+  );
 
   function close() {
     setOpenMenu(null);
@@ -112,8 +127,8 @@ export default function ActionBar({
                 ))
               )}
 
-              {/* Known leveled spells — consume the lowest available slot */}
-              {knownSpells.length > 0 && (
+              {/* Prepared leveled spells — consume the lowest available slot */}
+              {preparedSpells.length > 0 && (
                 <>
                   <SectionLabel>
                     Spells{" "}
@@ -121,7 +136,7 @@ export default function ActionBar({
                       (uses a slot)
                     </span>
                   </SectionLabel>
-                  {knownSpells.map((name) => (
+                  {preparedSpells.map((name) => (
                     <MenuItem
                       key={name}
                       disabled={lowestSlot === null}
@@ -140,6 +155,31 @@ export default function ActionBar({
                       )}
                     </MenuItem>
                   ))}
+                </>
+              )}
+
+              {/* Ritual-tagged spells — cast with no slot (works even with no slots left) */}
+              {ritualSpells.length > 0 && (
+                <>
+                  <SectionLabel>
+                    Rituals{" "}
+                    <span className="text-text-muted normal-case">(no slot)</span>
+                  </SectionLabel>
+                  {ritualSpells.map((name) => {
+                    const meta = ritualByName.get(name.toLowerCase());
+                    return (
+                      <MenuItem
+                        key={`ritual-${name}`}
+                        onClick={() => {
+                          close();
+                          onCast(meta?.level ?? 1, name, true);
+                        }}
+                      >
+                        {name}
+                        <span className="text-text-muted"> · ⟳ ritual</span>
+                      </MenuItem>
+                    );
+                  })}
                 </>
               )}
 
@@ -232,6 +272,23 @@ export default function ActionBar({
           className={cn(btn, "border-gold/40 text-gold hover:bg-gold hover:text-bg")}
         >
           🪙 Shop
+        </button>
+      )}
+      {onPrepare && (state?.preparedMax ?? 0) > 0 && (
+        <button
+          type="button"
+          disabled={!connected}
+          title="Choose which leveled spells you have prepared today."
+          onClick={() => {
+            close();
+            onPrepare();
+          }}
+          className={cn(btn, "border-gold/40 text-gold hover:bg-gold hover:text-bg")}
+        >
+          ✦ Prepare
+          <span className="ml-1 tabular opacity-80">
+            {preparedSpells.length}/{state?.preparedMax ?? 0}
+          </span>
         </button>
       )}
       {onShortRest && (

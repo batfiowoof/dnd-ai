@@ -21,6 +21,8 @@ public record PlayerRuntimeStateDto(
         List<String> conditions,
         List<String> cantrips,
         List<String> knownSpells,
+        List<String> preparedSpells,
+        int preparedMax,
         boolean inspiration,
         int luckPoints,
         int deathSaveSuccesses,

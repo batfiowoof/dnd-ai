@@ -5,6 +5,8 @@ import { useSessionStore } from "@/store/sessionStore";
 import { Button, D20Mark } from "@/components/ui";
 import QuickRollBar from "@/components/dice/QuickRollBar";
 import ActionBar from "@/components/game/ActionBar";
+import PrepareSpellsDialog from "@/components/game/PrepareSpellsDialog";
+import { useCombatSpells } from "@/hooks/useCombatReference";
 
 interface GameInputBarProps {
   /** The local player's id (from session storage), or null. */
@@ -16,11 +18,13 @@ interface GameInputBarProps {
   onPass: () => void;
   onRoll: (notation: string, label: string) => void;
   onAttack: () => void;
-  onCast: (spellLevel: number, spellName?: string) => void;
+  onCast: (spellLevel: number, spellName?: string, ritual?: boolean) => void;
   onUseItem: (itemName: string) => void;
   onLongRest: () => void;
   onShortRest: (hitDice: number) => void;
   onManage: () => void;
+  /** Persist the caster's prepared leveled spells. */
+  onPrepareSpells: (spells: string[]) => void;
   /** Open the shop panel — only provided when a shop is reachable at the party's current location. */
   onShop?: () => void;
 }
@@ -45,6 +49,7 @@ export default function GameInputBar({
   onLongRest,
   onShortRest,
   onManage,
+  onPrepareSpells,
   onShop,
 }: GameInputBarProps) {
   const status = useSessionStore((s) => s.status);
@@ -59,6 +64,12 @@ export default function GameInputBar({
   const inCombat = combat?.status === "ACTIVE";
   const isMyTurn = currentTurnPlayerId === playerId;
   const myState = playerId ? runtimeByPlayerId[playerId] ?? null : null;
+
+  // Spell metadata (level + ritual flags) drives the ritual cast section; fetch it only for casters.
+  const isCaster =
+    (myState?.cantrips?.length ?? 0) > 0 || (myState?.knownSpells?.length ?? 0) > 0;
+  const spellsQuery = useCombatSpells(isCaster);
+  const [prepareOpen, setPrepareOpen] = useState(false);
 
   // Narrative input permission, branched by mode (combat uses combat actions).
   const canType =
@@ -105,6 +116,8 @@ export default function GameInputBar({
             onAttack={onAttack}
             onCast={onCast}
             onUseItem={onUseItem}
+            spellCatalog={spellsQuery.data}
+            onPrepare={() => setPrepareOpen(true)}
             onLongRest={onLongRest}
             onShortRest={onShortRest}
             onManage={onManage}
@@ -179,6 +192,17 @@ export default function GameInputBar({
         <p className="mt-1.5 text-xs font-medium text-gold">
           It&apos;s your turn!
         </p>
+      )}
+
+      {myState && (myState.preparedMax ?? 0) > 0 && (
+        <PrepareSpellsDialog
+          open={prepareOpen}
+          onClose={() => setPrepareOpen(false)}
+          knownSpells={myState.knownSpells ?? []}
+          preparedSpells={myState.preparedSpells ?? []}
+          preparedMax={myState.preparedMax}
+          onSave={onPrepareSpells}
+        />
       )}
     </form>
   );

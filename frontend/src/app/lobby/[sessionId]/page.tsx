@@ -540,6 +540,7 @@ function LobbyContent({ sessionId }: { sessionId: string }) {
                     onLongRest={actions.longRest}
                     onShortRest={actions.shortRest}
                     onManage={() => setManageOpen(true)}
+                    onPrepareSpells={actions.prepareSpells}
                     onShop={availableShops.length > 0 ? () => setShopOpen(true) : undefined}
                   />
                 )}
